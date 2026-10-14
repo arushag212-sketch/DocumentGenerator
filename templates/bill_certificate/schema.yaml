@@ -1,0 +1,105 @@
+id: bill_certificate
+name: Bill Certificate (Form BC-R)
+description: Bill certificate for vendor payments, Form BC-R format
+stage: post_event
+triggers: [bill certificate, form bc-r, vendor payment, purchase, invoice]
+letterhead: svnit
+numbering: null
+depends_on: [approval_note]
+repeat_per: bills
+fields:
+  - key: event_name
+    type: text
+    required: true
+  - key: ref_no
+    type: text
+    required: true
+    ask: "Bill number?"
+  - key: document_date
+    type: date
+    required: true
+    ask: "Bill date?"
+  - key: approval_note_no
+    type: text
+    required: true
+    ask: "Approval Note number (from the approved Approval Note)?"
+  - key: approval_note_date
+    type: date
+    required: true
+    ask: "Approval Note date?"
+  - key: bill_amount
+    type: money
+    required: true
+    ask: "Bill amount?"
+  - key: supplier_name
+    type: text
+    required: true
+    ask: "Supplier/vendor name (M/s)?"
+  - key: supplier_gst
+    type: text
+    required: true
+    mask: true
+    ask: "Supplier GST number?"
+    defer_ok: true
+  - key: invoice_no
+    type: text
+    required: true
+    ask: "Invoice number?"
+  - key: invoice_date
+    type: date
+    required: true
+    ask: "Invoice date?"
+  - key: bill_items
+    type: table
+    required: true
+    ask: "Items purchased (name, qty, unit cost)?"
+  - key: tax_type
+    type: text
+    required: false
+    ask: "Tax type (GST, etc.)?"
+  - key: tax_amount
+    type: money
+    required: false
+    ask: "Tax amount?"
+  - key: certifier_name
+    type: text
+    required: true
+    defer_ok: true
+    ask: "Name of the certifying person ('I, am ____')?"
+  - key: payment_party
+    type: text
+    required: true
+    mask: true
+    ask: "Payment party name?"
+    defer_ok: true
+  - key: payment_account_no
+    type: text
+    required: true
+    mask: true
+    ask: "Payment account number?"
+    defer_ok: true
+  - key: payment_holder
+    type: text
+    required: true
+    mask: true
+    ask: "Account holder name?"
+    defer_ok: true
+  - key: payment_bank
+    type: text
+    required: true
+    mask: true
+    ask: "Bank name?"
+    defer_ok: true
+  - key: payment_branch
+    type: text
+    required: true
+    mask: true
+    ask: "Bank branch?"
+    defer_ok: true
+  - key: payment_ifsc
+    type: text
+    required: true
+    mask: true
+    ask: "IFSC code?"
+    defer_ok: true
+sections: []

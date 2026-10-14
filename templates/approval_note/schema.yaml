@@ -1,0 +1,80 @@
+id: approval_note
+name: Event Approval Note
+description: Event approval note submitted to Dean (Students Welfare)
+stage: pre_event
+triggers: [approval, dean, budget, funding, financial, proposal, permission dean]
+letterhead: svnit
+numbering:
+  series: null
+  format: "ACM/{academic_year}/{event_code}"
+  confirm: true
+depends_on: []
+repeat_per: null
+fields:
+  - key: event_name
+    type: text
+    required: true
+    ask: "What is the event title?"
+  - key: ref_no
+    type: text
+    required: true
+    ask: "Approval Note number?"
+  - key: document_date
+    type: date
+    required: true
+    ask: "Date for the approval note?"
+  - key: event_code
+    type: text
+    required: true
+    ask: "Short event code (e.g., SIH, WDW)?"
+  - key: category
+    type: text
+    required: true
+    ask: "Event category (Workshop, Hackathon, Seminar, Competition, etc.)?"
+  - key: dates
+    type: date_range
+    required: true
+    ask: "Event schedule dates?"
+  - key: date_start
+    type: date
+    required: true
+  - key: date_end
+    type: date
+    required: true
+  - key: venue
+    type: text
+    required: true
+    ask: "Event venue?"
+  - key: description
+    type: longtext
+    required: true
+    source_allowed: [user, llm_draft]
+    ask: "Describe the event?"
+  - key: objectives
+    type: longtext
+    required: true
+    source_allowed: [user, llm_draft]
+    ask: "What are the event objectives?"
+  - key: target_audience
+    type: text
+    required: true
+    ask: "Target audience?"
+  - key: expected_participants
+    type: int
+    required: true
+    ask: "Expected number of participants?"
+  - key: judges
+    type: table
+    required: false
+    ask: "Names of judges (if any)?"
+  - key: budget_items
+    type: table
+    required: true
+    ask: "Budget items and amounts?"
+  - key: mode
+    type: enum
+    values: [Offline, Online, Hybrid]
+    default_from: config.defaults.mode
+sections:
+  - id: judges_section
+    show_if: "judges"

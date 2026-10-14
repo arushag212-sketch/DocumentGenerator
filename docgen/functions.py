@@ -1,0 +1,237 @@
+"""Computed-function registry for template schemas.
+
+Every function here is pure (no side-effects), operates on Decimal where
+money is involved, and is referenced by name in schema.yaml files.
+"""
+
+from __future__ import annotations
+
+import re
+from datetime import date, datetime
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Any, Callable
+
+from num2words import num2words
+
+
+# ---------------------------------------------------------------------------
+# Registry
+# ---------------------------------------------------------------------------
+
+_REGISTRY: dict[str, Callable] = {}
+
+
+def register(name: str):
+    """Decorator to register a computed function."""
+    def decorator(fn: Callable):
+        _REGISTRY[name] = fn
+        return fn
+    return decorator
+
+
+def get_function(name: str) -> Callable:
+    if name not in _REGISTRY:
+        raise KeyError(f"Unknown computed function: {name!r}. "
+                       f"Available: {sorted(_REGISTRY)}")
+    return _REGISTRY[name]
+
+
+def list_functions() -> list[str]:
+    return sorted(_REGISTRY.keys())
+
+
+# ---------------------------------------------------------------------------
+# Math helpers
+# ---------------------------------------------------------------------------
+
+@register("sum")
+def fn_sum(items: list[Any], field: str = "amount") -> Decimal:
+    """Sum a numeric field across a list of dicts or objects."""
+    total = Decimal("0")
+    for item in items:
+        if isinstance(item, dict):
+            val = item.get(field, 0)
+        else:
+            val = getattr(item, field, 0)
+        total += Decimal(str(val))
+    return total
+
+
+@register("line_total")
+def fn_line_total(qty: int, unit_cost: Any) -> Decimal:
+    """qty × unit_cost, both converted to Decimal."""
+    return Decimal(str(qty)) * Decimal(str(unit_cost))
+
+
+@register("tax_amount")
+def fn_tax_amount(subtotal: Any, rate: Any) -> Decimal:
+    """Compute tax = subtotal × rate / 100."""
+    return (Decimal(str(subtotal)) * Decimal(str(rate)) / Decimal("100")).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+
+@register("total_with_tax")
+def fn_total_with_tax(subtotal: Any, tax: Any) -> Decimal:
+    return Decimal(str(subtotal)) + Decimal(str(tax))
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
+
+@register("format_inr")
+def fn_format_inr(amount: Any) -> str:
+    """Format a number in Indian grouping: 1,00,000.00"""
+    d = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    sign = "-" if d < 0 else ""
+    d = abs(d)
+    int_part, dec_part = str(d).split(".")
+
+    if len(int_part) <= 3:
+        formatted = int_part
+    else:
+        # Last 3 digits, then groups of 2
+        last3 = int_part[-3:]
+        rest = int_part[:-3]
+        groups = []
+        while rest:
+            groups.append(rest[-2:])
+            rest = rest[:-2]
+        groups.reverse()
+        formatted = ",".join(groups) + "," + last3
+
+    return f"{sign}{formatted}.{dec_part}"
+
+
+@register("amount_in_words_inr")
+def fn_amount_in_words_inr(amount: Any) -> str:
+    """Convert amount to Indian English words with Rupees/Paise."""
+    d = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    int_part = int(d)
+    paise = int((d - int_part) * 100)
+
+    words = _indian_number_to_words(int_part)
+    result = f"Rupees {words.title()}"
+    if paise:
+        paise_words = num2words(paise, lang="en")
+        result += f" and {paise_words.title()} Paise"
+    result += " Only"
+    return result
+
+
+def _indian_number_to_words(n: int) -> str:
+    """Convert integer to Indian English words (Lakh, Crore system)."""
+    if n == 0:
+        return "zero"
+
+    crore = n // 10000000
+    n %= 10000000
+    lakh = n // 100000
+    n %= 100000
+    thousand = n // 1000
+    n %= 1000
+    hundred = n // 100
+    remainder = n % 100
+
+    parts = []
+    if crore:
+        parts.append(f"{num2words(crore, lang='en')} crore")
+    if lakh:
+        parts.append(f"{num2words(lakh, lang='en')} lakh")
+    if thousand:
+        parts.append(f"{num2words(thousand, lang='en')} thousand")
+    if hundred:
+        parts.append(f"{num2words(hundred, lang='en')} hundred")
+    if remainder:
+        parts.append(num2words(remainder, lang="en"))
+
+    return " ".join(parts)
+
+
+@register("ordinal")
+def fn_ordinal(n: int) -> str:
+    """1 -> '1st', 2 -> '2nd', etc."""
+    if 11 <= (n % 100) <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+@register("format_date")
+def fn_format_date(d: Any, fmt: str = "%d/%m/%Y") -> str:
+    """Format a date object or string to standardized format (default: DD/MM/YYYY)."""
+    if not d:
+        return ""
+    if isinstance(d, str):
+        import re
+        if re.match(r'^\d{2}/\d{2}/\d{4}$', d):
+            return d
+        import dateparser
+        parsed = dateparser.parse(d, settings={'DATE_ORDER': 'DMY'})
+        if parsed:
+            d = parsed.date()
+        else:
+            return d
+    if isinstance(d, datetime):
+        d = d.date()
+    if isinstance(d, date):
+        return d.strftime(fmt)
+    return str(d)
+
+
+@register("format_date_range")
+def fn_format_date_range(start: Any, end: Any) -> str:
+    """Format a date range intelligently with DD/MM/YYYY consistency."""
+    if not start and not end:
+        return ""
+    if start and not end:
+        return fn_format_date(start)
+    if end and not start:
+        return fn_format_date(end)
+
+    import dateparser
+    d_start = dateparser.parse(str(start), settings={'DATE_ORDER': 'DMY'}) if isinstance(start, str) else start
+    d_end = dateparser.parse(str(end), settings={'DATE_ORDER': 'DMY'}) if isinstance(end, str) else end
+
+    if isinstance(d_start, datetime):
+        d_start = d_start.date()
+    if isinstance(d_end, datetime):
+        d_end = d_end.date()
+
+    if isinstance(d_start, date) and isinstance(d_end, date):
+        if d_start == d_end:
+            return d_start.strftime("%d/%m/%Y")
+        return f"{d_start.strftime('%d/%m/%Y')} - {d_end.strftime('%d/%m/%Y')}"
+
+    return f"{start} - {end}" if start != end else str(start)
+
+
+@register("short_year")
+def fn_short_year(academic_year: str) -> str:
+    """'2026-27' -> '26-27'"""
+    parts = academic_year.split("-")
+    if len(parts) == 2:
+        return f"{parts[0][-2:]}-{parts[1][-2:]}"
+    return academic_year
+
+
+@register("format_ref_no")
+def fn_format_ref_no(fmt: str, **kwargs) -> str:
+    """Format a reference number from a format string.
+    
+    Example: 'ACM/{short_year}/{series}/{seq:03d}'
+    """
+    return fmt.format(**kwargs)
+
+
+@register("today")
+def fn_today(fmt: str = "%d/%m/%Y") -> str:
+    return date.today().strftime(fmt)
+
+
+@register("sr_no")
+def fn_sr_no(index: int) -> int:
+    """1-based serial number from 0-based index."""
+    return index + 1

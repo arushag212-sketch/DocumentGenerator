@@ -1,0 +1,74 @@
+id: mom
+name: Minutes of Meeting
+description: Minutes of Meeting (MoM) for club meetings
+stage: meeting
+triggers: [meeting, mom, minutes, agenda, discussion, action items]
+letterhead: acm
+numbering:
+  series: MOM
+  format: "ACM/{short_year}/{series}/{seq:03d}"
+  confirm: false
+depends_on: []
+repeat_per: null
+fields:
+  - key: meeting_title
+    type: text
+    required: true
+    ask: "What is the meeting title?"
+  - key: ref_no
+    type: text
+    required: false
+    ask: "Reference number for MoM?"
+  - key: meeting_date
+    type: date
+    required: true
+    ask: "Meeting date?"
+  - key: meeting_start_time
+    type: text
+    required: true
+    ask: "Meeting start time?"
+  - key: meeting_end_time
+    type: text
+    required: true
+    ask: "Meeting end time?"
+  - key: venue
+    type: text
+    required: true
+    ask: "Meeting venue?"
+  - key: mode
+    type: enum
+    values: [Offline, Online, Hybrid]
+    default_from: config.defaults.mode
+  - key: chaired_by
+    type: text
+    required: true
+    ask: "Who chaired the meeting?"
+  - key: attendees
+    type: table
+    required: true
+    ask: "List of attendees?"
+  - key: absentees
+    type: table
+    required: false
+    ask: "List of absentees (if any)?"
+  - key: agenda_items
+    type: table
+    required: true
+    ask: "Agenda items and discussions?"
+  - key: action_items
+    type: table
+    required: false
+    ask: "Action items (task, owner, deadline)?"
+  - key: next_meeting_date
+    type: date
+    required: false
+    ask: "Date of next meeting?"
+  - key: prepared_by
+    type: text
+    required: true
+    ask: "Who prepared these minutes?"
+  - key: approved_by
+    type: text
+    required: true
+    ask: "Who approved these minutes?"
+sections: []

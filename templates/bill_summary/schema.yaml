@@ -1,0 +1,27 @@
+id: bill_summary
+name: Bill Summary
+description: Reimbursement summary for costs incurred in an event
+stage: post_event
+triggers: [reimbursement, bill summary, payment summary, cost, expenses]
+letterhead: acm
+numbering: null
+depends_on: []
+repeat_per: null
+fields:
+  - key: event_name
+    type: text
+    required: true
+    ask: "What event is this reimbursement for?"
+  - key: document_date
+    type: date
+    required: true
+    ask: "Date for the bill summary?"
+  - key: winners
+    type: table
+    required: false
+    ask: "Winners and prize amounts?"
+  - key: other_reimbursements
+    type: table
+    required: false
+    ask: "Other payees and amounts?"
+sections: []

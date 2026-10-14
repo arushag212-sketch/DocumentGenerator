@@ -1,0 +1,153 @@
+# Club Configuration for ACM SVNIT
+club_name: "ACM Student Chapter, SVNIT"
+club_short: "ACM"
+institute_name: "Sardar Vallabhbhai National Institute of Technology, Surat (SVNIT)"
+institute_short: "SVNIT"
+chapter_code: "6/52"
+head_of_account: "6/52"
+academic_year: "2026-27"
+
+affiliating_institute_text: "Sardar Vallabhbhai National Institute of Technology, Surat (SVNIT)"
+
+letterheads:
+  acm:
+    name: "ACM Letterhead"
+    logo_path: "assets/permission_page1_img2.png"
+    crest_path: "assets/permission_page1_img1.png"
+    header_img: "assets/acm_permission_header.png"
+    header_text: "ASSOCIATION for COMPUTING MACHINERY\nSARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT"
+    font: "Times New Roman"
+    color: "#1E5B94"
+  svnit:
+    name: "SVNIT Letterhead"
+    header_img: "assets/svnit_bilingual_header.png"
+    logo_path: "assets/permission_page1_img2.png"
+    crest_path: "assets/approval_page1_img1.png"
+    font: "Times New Roman"
+    color: "#000000"
+
+# Office Bearers - Seeded from official sample PDFs
+student_head:
+  name: "Ansh Gupta"
+  admission_no: "I24AI005"
+  branch: "Artificial Intelligence"
+  mobile: ""
+  email: ""
+  roles:
+    permission_letter: "Chairperson , ACM"
+    approval_note: "Student Head"
+    bill_summary: "Student Head"
+    bill_certificate: "Student Head"
+    mom: "Chairperson"
+
+student_secretary:
+  name: "Arshad Khatib"
+  admission_no: "U24AI112"
+  branch: "Artificial Intelligence"
+  mobile: ""
+  email: ""
+  roles:
+    approval_note: "Student Secretary"
+    bill_summary: "Student Secretary"
+
+chairperson:
+  name: "Ansh Gupta"
+  admission_no: "I24AI005"
+  branch: "Artificial Intelligence"
+  mobile: ""
+  email: ""
+  roles:
+    permission_letter: "Chairperson , ACM"
+    approval_note: "Student Head"
+
+faculty_chairman:
+  name: "Dr. Sankita Patel"
+  designation: "Chairman, ACM Student Chapter SVNIT"
+  department: "Computer Science & Engineering"
+  mobile: ""
+  roles:
+    permission_letter: "Chairman , ACM"
+    approval_note: "Faculty Chairman"
+    bill_summary: "Faculty Chairman"
+    bill_certificate: "Faculty Chairman"
+
+faculty_co_chairman:
+  name: "Dr. Balu Parne"
+  designation: "Co-Chairman, ACM Student Chapter SVNIT"
+  department: "Computer Science & Engineering"
+  mobile: ""
+  roles:
+    approval_note: "Faculty Co-Chairman"
+
+approval_chain:
+  - "Dr. Rakesh Maurya\nChairman F&SW"
+  - "Dr. Manish K Rathod\nAssociate Dean SW"
+  - "Dr. Sanjay R. Patel\nDean SW"
+
+venues:
+  "Seminar Hall":
+    full_name: "Seminar Hall 402, Department of Computer Science & Engineering"
+    short_name: "Seminar Hall 402"
+    default_addressee: "HoD(CSE Dept.)"
+    tech_assistant:
+      name: "Sunny Bodiwala"
+      admission_no: ""
+      branch: "Computer Science & Engineering"
+      mobile: ""
+      roles:
+        permission_letter: "Tech Assistant , Seminar Hall"
+    faculty_in_charge:
+      name: "Shri Rakesh P. Gohil"
+      admission_no: ""
+      branch: "Computer Science & Engineering"
+      mobile: ""
+      roles:
+        permission_letter: "Faculty In-charge , Seminar Hall"
+  "Seminar Hall 402":
+    full_name: "Seminar Hall 402, Department of Computer Science & Engineering"
+    short_name: "Seminar Hall 402"
+    default_addressee: "HoD(CSE Dept.)"
+    tech_assistant:
+      name: "Sunny Bodiwala"
+      admission_no: ""
+      branch: "Computer Science & Engineering"
+      mobile: ""
+      roles:
+        permission_letter: "Tech Assistant , Seminar Hall"
+    faculty_in_charge:
+      name: "Shri Rakesh P. Gohil"
+      admission_no: ""
+      branch: "Computer Science & Engineering"
+      mobile: ""
+      roles:
+        permission_letter: "Faculty In-charge , Seminar Hall"
+  "CSE Department":
+    full_name: "Department of Computer Science & Engineering"
+    short_name: "CSE Dept."
+    default_addressee: "HoD(CSE Dept.)"
+    tech_assistant:
+      name: "Sunny Bodiwala"
+      branch: "Computer Science & Engineering"
+      roles:
+        permission_letter: "Tech Assistant , Seminar Hall"
+    faculty_in_charge:
+      name: "Shri Rakesh P. Gohil"
+      branch: "Computer Science & Engineering"
+      roles:
+        permission_letter: "Faculty In-charge , Seminar Hall"
+
+defaults:
+  purchase_order: "NiL"
+  advance: "NiL"
+  laboratory_office: "Student Council"
+  mode: "Offline"
+
+numbering:
+  ROOM:
+    last_used: 9
+  SIH:
+    last_used: 1
+  MOM:
+    last_used: 0
+  PRIZE:
+    last_used: 0

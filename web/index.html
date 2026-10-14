@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClubDocs — SVNIT Surat Smart Document Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --svnit-navy: #0e2a47;
+      --svnit-blue: #1a4f8b;
+      --svnit-light-blue: #e8f0fe;
+      --svnit-gold: #c28b1e;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --radius: 8px;
+      --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Fixed Top App Shell Header */
+    .top-shell {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: #ffffff;
+      border-bottom: 2px solid var(--svnit-navy);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 1.5rem;
+      height: 64px;
+    }
+
+    .shell-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--svnit-navy);
+    }
+
+    .svnit-logo-locked {
+      height: 44px;
+      width: auto;
+      object-fit: contain;
+      pointer-events: none; /* Locked institute asset */
+      user-select: none;
+    }
+
+    .brand-titles {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand-main {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--svnit-navy);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .brand-badge {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      background: var(--svnit-light-blue);
+      color: var(--svnit-blue);
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .brand-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .shell-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Club Switcher */
+    .club-switcher-wrapper {
+      position: relative;
+    }
+
+    .club-select-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--svnit-navy);
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .club-select-btn:hover {
+      background: #e2e8f0;
+    }
+
+    .club-badge {
+      background: var(--svnit-blue);
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.725rem;
+      font-weight: 600;
+    }
+
+    /* User Profile */
+    .user-profile-menu {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .user-name-role {
+      text-align: right;
+    }
+
+    .user-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .user-role-tag {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .role-owner { color: #b45309; }
+    .role-admin { color: #1d4ed8; }
+    .role-editor { color: #047857; }
+    .role-viewer { color: #64748b; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 14px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-radius: var(--radius);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+
+    .btn-outline {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text-main);
+    }
+    .btn-outline:hover { background: #f1f5f9; }
+
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 0.775rem;
+    }
+
+    .btn-danger {
+      background: #fee2e2;
+      color: var(--danger);
+      border-color: #fca5a5;
+    }
+    .btn-danger:hover { background: #fecaca; }
+
+    /* Layout Container */
+    .main-container {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      width: 100%;
+      flex: 1;
+    }
+
+    /* Auth Card */
+    .auth-card {
+      max-width: 440px;
+      margin: 3rem auto;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 2.25rem;
+    }
+
+    .auth-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .auth-header img {
+      height: 56px;
+      margin-bottom: 0.75rem;
+    }
+
+    .auth-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+
+    .auth-tab {
+      flex: 1;
+      text-align: center;
+      padding: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+
+    .auth-tab.active {
+      color: var(--svnit-blue);
+      border-bottom-color: var(--svnit-blue);
+    }
+
+    .form-group {
+      margin-bottom: 1.1rem;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.825rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #334155;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 0.875rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      outline: none;
+    }
+    .form-control:focus {
+      border-color: var(--svnit-blue);
+      box-shadow: 0 0 0 3px rgba(26, 79, 139, 0.15);
+    }
+
+    /* Dashboard Header */
+    .dashboard-header {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .club-title-area {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .club-avatar {
+      width: 48px;
+      height: 48px;
+      background: var(--svnit-light-blue);
+      color: var(--svnit-navy);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.2rem;
+      border: 1px solid #bfdbfe;
+    }
+
+    .dashboard-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .dash-tab {
+      padding: 8px 16px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: var(--radius);
+      transition: all 0.15s ease;
+    }
+
+    .dash-tab:hover {
+      background: #f1f5f9;
+      color: var(--text-main);
+    }
+
+    .dash-tab.active {
+      background: var(--svnit-light-blue);
+      color: var(--svnit-blue);
+    }
+
+    /* Content Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: var(--svnit-navy);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Tables */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .data-table th {
+      text-align: left;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border-bottom: 2px solid var(--border);
+      font-weight: 600;
+      color: #475569;
+    }
+
+    .data-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
+    .data-table tr:hover {
+      background: #f8fafc;
+    }
+
+    .role-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+    .badge-owner { background: #fef3c7; color: #92400e; }
+    .badge-admin { background: #dbeafe; color: #1e40af; }
+    .badge-editor { background: #d1fae5; color: #065f46; }
+    .badge-viewer { background: #f1f5f9; color: #475569; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+    }
+    .modal {
+      background: #fff;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 480px;
+      padding: 1.75rem;
+      box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+    }
+
+    .alert {
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+    }
+    .alert-danger { background: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+    .alert-success { background: #dcfce7; color: #166534; border: 1px solid #4ade80; }
+    .alert-info { background: #e0f2fe; color: #075985; border: 1px solid #7dd3fc; }
+
+    .disabled-action {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- FIXED TOP SHELL HEADER: Locked SVNIT Logo + App Brand + Club Switcher + User Profile -->
+  <header class="top-shell">
+    <a href="/" class="shell-brand">
+      <img src="/assets/permission_page1_img1.png" alt="SVNIT Crest" class="svnit-logo-locked" id="top-shell-svnit-logo">
+      <div class="brand-titles">
+        <div class="brand-main">
+          ClubDocs
+          <span class="brand-badge">SVNIT Surat</span>
+        </div>
+        <div class="brand-sub">Smart Document Generator • Verified Official Platform</div>
+      </div>
+    </a>
+
+    <div class="shell-controls" id="shell-controls" style="display: none;">
+      <!-- Club Switcher -->
+      <div class="club-switcher-wrapper">
+        <select id="club-switcher-select" class="club-select-btn" onchange="handleClubSwitch(this.value)">
+          <!-- Populated dynamically -->
+        </select>
+      </div>
+
+      <button class="btn btn-outline btn-sm" onclick="openCreateClubModal()">+ New Club</button>
+
+      <!-- User Menu -->
+      <div class="user-profile-menu">
+        <div class="user-name-role">
+          <div class="user-name" id="shell-user-name">User Name</div>
+          <div class="user-role-tag" id="shell-user-role">Role</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="handleLogout()">Sign Out</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN APP CONTAINER -->
+  <main class="main-container" id="main-content">
+    <!-- Content injected via JavaScript based on auth and current club state -->
+  </main>
+
+  <!-- MODAL CONTAINER -->
+  <div id="modal-container" style="display: none;"></div>
+
+  <script>
+    // State management
+    const state = {
+      token: localStorage.getItem('clubdocs_token') || '',
+      currentUser: null,
+      clubs: [],
+      activeClubId: localStorage.getItem('clubdocs_active_club') || '',
+      activeClub: null,
+      activeTab: 'overview',
+      members: [],
+      auditLogs: []
+    };
+
+    // Helper: API Fetcher
+    async function api(endpoint, options = {}) {
+      options.headers = options.headers || {};
+      options.headers['Content-Type'] = 'application/json';
+      if (state.token) {
+        options.headers['Authorization'] = `Bearer ${state.token}`;
+      }
+      try {
+        const res = await fetch(`/api/v1${endpoint}`, options);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail?.message || data.message || `Request failed with status ${res.status}`);
+        }
+        return data;
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    // Initialize application
+    async function init() {
+      if (!state.token) {
+        renderAuthCard();
+        return;
+      }
+
+      try {
+        // Fetch current authenticated user
+        state.currentUser = await api('/auth/me');
+        document.getElementById('shell-controls').style.display = 'flex';
+        document.getElementById('shell-user-name').innerText = state.currentUser.name;
+
+        // Fetch clubs
+        state.clubs = await api('/clubs/');
+        populateClubSwitcher();
+
+        if (state.clubs.length === 0) {
+          renderNoClubsState();
+          return;
+        }
+
+        // Determine active club
+        if (!state.activeClubId || !state.clubs.some(c => c.id === state.activeClubId)) {
+          state.activeClubId = state.clubs[0].id;
+          localStorage.setItem('clubdocs_active_club', state.activeClubId);
+        }
+
+        state.activeClub = state.clubs.find(c => c.id === state.activeClubId);
+        document.getElementById('club-switcher-select').value = state.activeClubId;
+        updateRoleDisplay();
+
+        await renderDashboard();
+      } catch (err) {
+        console.error('Initialization failed', err);
+        localStorage.removeItem('clubdocs_token');
+        state.token = '';
+        renderAuthCard();
+      }
+    }
+
+    function updateRoleDisplay() {
+      if (!state.activeClub) return;
+      const role = state.activeClub.my_role || 'viewer';
+      const el = document.getElementById('shell-user-role');
+      el.innerText = role;
+      el.className = `user-role-tag role-${role.toLowerCase()}`;
+    }
+
+    function populateClubSwitcher() {
+      const select = document.getElementById('club-switcher-select');
+      select.innerHTML = '';
+      state.clubs.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.innerText = `${c.short_name} — ${c.name} (${c.my_role})`;
+        select.appendChild(opt);
+      });
+    }
+
+    function handleClubSwitch(clubId) {
+      state.activeClubId = clubId;
+      localStorage.setItem('clubdocs_active_club', clubId);
+      state.activeClub = state.clubs.find(c => c.id === clubId);
+      updateRoleDisplay();
+      renderDashboard();
+    }
+
+    // ---------------- AUTH VIEWS ----------------
+
+    function renderAuthCard(activeMode = 'login') {
+      document.getElementById('shell-controls').style.display = 'none';
+      const container = document.getElementById('main-content');
+      container.innerHTML = `
+        <div class="auth-card">
+          <div class="auth-header">
+            <img src="/assets/permission_page1_img1.png" alt="SVNIT Emblem">
+            <h2 style="color: var(--svnit-navy); font-size: 1.4rem;">Sign in to ClubDocs</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Official SVNIT Surat Document & Approval Platform</p>
+          </div>
+
+          <div class="auth-tabs">
+            <div class="auth-tab ${activeMode === 'login' ? 'active' : ''}" onclick="renderAuthCard('login')">Sign In</div>
+            <div class="auth-tab ${activeMode === 'register' ? 'active' : ''}" onclick="renderAuthCard('register')">Create Account</div>
+          </div>
+
+          <div id="auth-alert"></div>
+
+          ${activeMode === 'login' ? `
+            <form onsubmit="handleLoginSubmit(event)">
+              <div class="form-group">
+                <label>SVNIT Email</label>
+                <input type="email" id="login-email" class="form-control" placeholder="user@svnit.ac.in" required>
+              </div>
+              <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="login-password" class="form-control" placeholder="••••••••" required>
+              </div>
+              <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">Sign In</button>
+            </form>
+          ` : `
+            <form onsubmit="handleRegisterSubmit(event)">
+              <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="reg-name" class="form-control" placeholder="Ansh Gupta" required>
+              </div>
+              <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" id="reg-email" class="form-control" placeholder="ansh@svnit.ac.in" required>
+              </div>
+              <div class="form-group">
+                <label>Password (min 6 characters)</label>
+                <input type="password" id="reg-password" class="form-control" placeholder="••••••••" minlength="6" required>
+              </div>
+              <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">Create Account</button>
+            </form>
+          `}
+        </div>
+      `;
+    }
+
+    async function handleLoginSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      const alertEl = document.getElementById('auth-alert');
+      alertEl.innerHTML = '';
+
+      try {
+        const res = await api('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password })
+        });
+        state.token = res.access_token;
+        localStorage.setItem('clubdocs_token', res.access_token);
+        await init();
+      } catch (err) {
+        alertEl.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+      }
+    }
+
+    async function handleRegisterSubmit(e) {
+      e.preventDefault();
+      const name = document.getElementById('reg-name').value;
+      const email = document.getElementById('reg-email').value;
+      const password = document.getElementById('reg-password').value;
+      const alertEl = document.getElementById('auth-alert');
+      alertEl.innerHTML = '';
+
+      try {
+        const res = await api('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ name, email, password })
+        });
+        state.token = res.access_token;
+        localStorage.setItem('clubdocs_token', res.access_token);
+        await init();
+      } catch (err) {
+        alertEl.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+      }
+    }
+
+    async function handleLogout() {
+      try {
+        await api('/auth/logout', { method: 'POST' });
+      } catch (_) {}
+      localStorage.removeItem('clubdocs_token');
+      localStorage.removeItem('clubdocs_active_club');
+      state.token = '';
+      state.currentUser = null;
+      renderAuthCard();
+    }
+
+    // ---------------- NO CLUBS STATE ----------------
+
+    function renderNoClubsState() {
+      const container = document.getElementById('main-content');
+      container.innerHTML = `
+        <div class="card" style="max-width: 600px; margin: 3rem auto; text-align: center; padding: 3rem 2rem;">
+          <h2 style="color: var(--svnit-navy); margin-bottom: 0.75rem;">Welcome to ClubDocs, ${state.currentUser.name}!</h2>
+          <p style="color: var(--text-muted); margin-bottom: 1.5rem;">You are not yet a member of any student chapter or departmental club at SVNIT.</p>
+          <button class="btn btn-primary" onclick="openCreateClubModal()">+ Create New Club</button>
+        </div>
+      `;
+    }
+
+    // ---------------- DASHBOARD VIEW ----------------
+
+    async function renderDashboard() {
+      const club = state.activeClub;
+      if (!club) return;
+
+      const myRole = (club.my_role || 'viewer').toLowerCase();
+      const canManageMembers = ['owner', 'admin'].includes(myRole);
+
+      const container = document.getElementById('main-content');
+      container.innerHTML = `
+        <!-- Dashboard Header -->
+        <div class="dashboard-header">
+          <div class="club-title-area">
+            <div class="club-avatar">${club.short_name.substring(0, 3)}</div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <h1 style="font-size: 1.35rem; font-weight: 700; color: var(--svnit-navy);">${club.name}</h1>
+                <span class="role-badge badge-${myRole}">${myRole}</span>
+              </div>
+              <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+                Code: <strong>${club.slug}</strong> • Chapter No: <strong>${club.chapter_code || 'N/A'}</strong> • Academic Year: <strong>${club.academic_year_default}</strong>
+              </div>
+            </div>
+          </div>
+          <div>
+            ${canManageMembers ? `<button class="btn btn-outline btn-sm" onclick="openEditClubModal()">Edit Club Settings</button>` : ''}
+          </div>
+        </div>
+
+        <!-- Dashboard Navigation Tabs -->
+        <div class="dashboard-tabs">
+          <div class="dash-tab ${state.activeTab === 'overview' ? 'active' : ''}" onclick="switchTab('overview')">Overview</div>
+          <div class="dash-tab ${state.activeTab === 'members' ? 'active' : ''}" onclick="switchTab('members')">Members & Roles (${club.members_count || 1})</div>
+          <div class="dash-tab ${state.activeTab === 'audit' ? 'active' : ''}" onclick="switchTab('audit')">Audit Trail</div>
+        </div>
+
+        <div id="tab-content">
+          <!-- Content rendered by tab handlers -->
+        </div>
+      `;
+
+      if (state.activeTab === 'overview') renderOverviewTab();
+      else if (state.activeTab === 'members') renderMembersTab();
+      else if (state.activeTab === 'audit') renderAuditTab();
+    }
+
+    function switchTab(tab) {
+      state.activeTab = tab;
+      renderDashboard();
+    }
+
+    // ---------------- TAB: OVERVIEW ----------------
+
+    function renderOverviewTab() {
+      const club = state.activeClub;
+      const el = document.getElementById('tab-content');
+      el.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+          <div class="card">
+            <div class="card-title">Club Information</div>
+            <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><strong>Short Acronym:</strong> ${club.short_name}</p>
+            <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><strong>Slug Identifier:</strong> ${club.slug}</p>
+            <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><strong>Head of Account:</strong> ${club.head_of_account || 'Not set'}</p>
+            <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><strong>Active Members:</strong> ${club.members_count}</p>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Institutional Affiliation</div>
+            <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><strong>Institute:</strong> Sardar Vallabhbhai National Institute of Technology</p>
+            <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><strong>Campus:</strong> Ichchhanath, Surat - 395007, Gujarat</p>
+            <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><strong>Institute Logo Status:</strong> <span style="color: var(--success); font-weight: 600;">Locked & Verified</span></p>
+            <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><strong>Renderer:</strong> LibreOffice Official Engine</p>
+          </div>
+        </div>
+      `;
+    }
+
+    // ---------------- TAB: MEMBERS & ROLES ----------------
+
+    async function renderMembersTab() {
+      const el = document.getElementById('tab-content');
+      const myRole = (state.activeClub.my_role || 'viewer').toLowerCase();
+      const canManage = ['owner', 'admin'].includes(myRole);
+
+      el.innerHTML = `<div class="card"><p style="color: var(--text-muted);">Loading members list...</p></div>`;
+
+      try {
+        state.members = await api(`/clubs/${state.activeClub.id}/members`);
+        el.innerHTML = `
+          <div class="card">
+            <div class="card-title">
+              <span>Club Members & Role Permissions</span>
+              ${canManage ? `<button class="btn btn-primary btn-sm" onclick="openAddMemberModal()">+ Add Member</button>` : `<span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">(Viewer mode: Read only)</span>`}
+            </div>
+
+            <div style="margin-bottom: 1rem; font-size: 0.8rem; background: var(--svnit-light-blue); padding: 8px 12px; border-radius: var(--radius); color: var(--svnit-navy);">
+              <strong>Role Permissions:</strong> Owner (Full Control) &gt; Admin (Manage Members & Settings) &gt; Editor (Create/Edit Documents) &gt; Viewer (Read & Download)
+            </div>
+
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Member Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Joined Date</th>
+                  ${canManage ? `<th style="text-align: right;">Actions</th>` : ''}
+                </tr>
+              </thead>
+              <tbody>
+                ${state.members.map(m => `
+                  <tr>
+                    <td><strong>${m.name}</strong></td>
+                    <td style="color: var(--text-muted);">${m.email}</td>
+                    <td><span class="role-badge badge-${m.role}">${m.role}</span></td>
+                    <td style="color: var(--text-muted);">${new Date(m.joined_at).toLocaleDateString()}</td>
+                    ${canManage ? `
+                      <td style="text-align: right;">
+                        <button class="btn btn-outline btn-sm" onclick="openChangeRoleModal('${m.user_id}', '${m.name}', '${m.role}')">Change Role</button>
+                        ${m.role !== 'owner' ? `<button class="btn btn-danger btn-sm" onclick="handleRemoveMember('${m.user_id}', '${m.name}')">Remove</button>` : ''}
+                      </td>
+                    ` : ''}
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } catch (err) {
+        el.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+      }
+    }
+
+    // ---------------- TAB: AUDIT LOG ----------------
+
+    async function renderAuditTab() {
+      const el = document.getElementById('tab-content');
+      const myRole = (state.activeClub.my_role || 'viewer').toLowerCase();
+      if (!['owner', 'admin'].includes(myRole)) {
+        el.innerHTML = `
+          <div class="card" style="text-align: center; padding: 2rem;">
+            <p style="color: var(--text-muted);">Access to the Club Audit Trail requires Admin or Owner role.</p>
+          </div>
+        `;
+        return;
+      }
+
+      el.innerHTML = `<div class="card"><p style="color: var(--text-muted);">Loading audit trail...</p></div>`;
+
+      try {
+        state.auditLogs = await api(`/clubs/${state.activeClub.id}/audit-log`);
+        el.innerHTML = `
+          <div class="card">
+            <div class="card-title">Club Security Audit Trail</div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Complete chronological log of administrative and membership actions for compliance and provenance.</p>
+
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Action</th>
+                  <th>Entity</th>
+                  <th>Details</th>
+                  <th>IP</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.auditLogs.length === 0 ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No audit events recorded yet.</td></tr>` : ''}
+                ${state.auditLogs.map(log => `
+                  <tr>
+                    <td style="white-space: nowrap; font-size: 0.8rem; color: var(--text-muted);">${new Date(log.created_at).toLocaleString()}</td>
+                    <td><code>${log.action}</code></td>
+                    <td>${log.entity_type}</td>
+                    <td style="font-size: 0.8rem; font-family: monospace;">${JSON.stringify(log.meta)}</td>
+                    <td style="color: var(--text-muted); font-size: 0.8rem;">${log.ip || '—'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } catch (err) {
+        el.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+      }
+    }
+
+    // ---------------- MODALS ----------------
+
+    function openModal(contentHtml) {
+      const mc = document.getElementById('modal-container');
+      mc.innerHTML = `
+        <div class="modal-backdrop" onclick="closeModal(event)">
+          <div class="modal" onclick="event.stopPropagation()">
+            ${contentHtml}
+          </div>
+        </div>
+      `;
+      mc.style.display = 'block';
+    }
+
+    function closeModal(e) {
+      if (e) e.stopPropagation();
+      document.getElementById('modal-container').style.display = 'none';
+      document.getElementById('modal-container').innerHTML = '';
+    }
+
+    function openCreateClubModal() {
+      openModal(`
+        <h3 style="color: var(--svnit-navy); margin-bottom: 1rem;">Create New Club</h3>
+        <form onsubmit="handleCreateClubSubmit(event)">
+          <div class="form-group">
+            <label>Club Name</label>
+            <input type="text" id="club-new-name" class="form-control" placeholder="ACM Student Chapter" required>
+          </div>
+          <div class="form-group">
+            <label>Short Name / Acronym</label>
+            <input type="text" id="club-new-short" class="form-control" placeholder="ACM" required>
+          </div>
+          <div class="form-group">
+            <label>Unique Slug (lowercase alphanumeric)</label>
+            <input type="text" id="club-new-slug" class="form-control" placeholder="acm" pattern="^[a-z0-9-]+$" required>
+          </div>
+          <div class="form-group">
+            <label>Chapter Code (optional)</label>
+            <input type="text" id="club-new-chapter" class="form-control" placeholder="6/52">
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.5rem;">
+            <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create Club</button>
+          </div>
+        </form>
+      `);
+    }
+
+    async function handleCreateClubSubmit(e) {
+      e.preventDefault();
+      const name = document.getElementById('club-new-name').value;
+      const short_name = document.getElementById('club-new-short').value;
+      const slug = document.getElementById('club-new-slug').value;
+      const chapter_code = document.getElementById('club-new-chapter').value;
+
+      try {
+        const newClub = await api('/clubs/', {
+          method: 'POST',
+          body: JSON.stringify({ name, short_name, slug, chapter_code })
+        });
+        closeModal();
+        await init();
+        handleClubSwitch(newClub.id);
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    function openAddMemberModal() {
+      openModal(`
+        <h3 style="color: var(--svnit-navy); margin-bottom: 1rem;">Add Club Member</h3>
+        <form onsubmit="handleAddMemberSubmit(event)">
+          <div class="form-group">
+            <label>Registered User Email</label>
+            <input type="email" id="member-new-email" class="form-control" placeholder="user@svnit.ac.in" required>
+          </div>
+          <div class="form-group">
+            <label>Role</label>
+            <select id="member-new-role" class="form-control">
+              <option value="editor">Editor (Create & edit documents)</option>
+              <option value="viewer">Viewer (Read-only & download)</option>
+              <option value="admin">Admin (Manage members & templates)</option>
+            </select>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.5rem;">
+            <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Add Member</button>
+          </div>
+        </form>
+      `);
+    }
+
+    async function handleAddMemberSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById('member-new-email').value;
+      const role = document.getElementById('member-new-role').value;
+
+      try {
+        await api(`/clubs/${state.activeClub.id}/members`, {
+          method: 'POST',
+          body: JSON.stringify({ email, role })
+        });
+        closeModal();
+        await renderMembersTab();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    function openChangeRoleModal(userId, userName, currentRole) {
+      openModal(`
+        <h3 style="color: var(--svnit-navy); margin-bottom: 1rem;">Update Role for ${userName}</h3>
+        <form onsubmit="handleUpdateRoleSubmit(event, '${userId}')">
+          <div class="form-group">
+            <label>Select New Role</label>
+            <select id="role-update-select" class="form-control">
+              <option value="viewer" ${currentRole === 'viewer' ? 'selected' : ''}>Viewer</option>
+              <option value="editor" ${currentRole === 'editor' ? 'selected' : ''}>Editor</option>
+              <option value="admin" ${currentRole === 'admin' ? 'selected' : ''}>Admin</option>
+              ${state.activeClub.my_role === 'owner' ? `<option value="owner" ${currentRole === 'owner' ? 'selected' : ''}>Owner</option>` : ''}
+            </select>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.5rem;">
+            <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Role</button>
+          </div>
+        </form>
+      `);
+    }
+
+    async function handleUpdateRoleSubmit(e, userId) {
+      e.preventDefault();
+      const role = document.getElementById('role-update-select').value;
+      try {
+        await api(`/clubs/${state.activeClub.id}/members/${userId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ role })
+        });
+        closeModal();
+        await renderMembersTab();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function handleRemoveMember(userId, userName) {
+      if (!confirm(`Are you sure you want to remove ${userName} from ${state.activeClub.name}?`)) return;
+      try {
+        await api(`/clubs/${state.activeClub.id}/members/${userId}`, {
+          method: 'DELETE'
+        });
+        await renderMembersTab();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // Start App
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

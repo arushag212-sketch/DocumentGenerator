@@ -1,0 +1,93 @@
+"""Scoped repository enforcing strict club_id isolation on all database queries."""
+
+from __future__ import annotations
+
+from typing import Any, Generic, Optional, Type, TypeVar
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+T = TypeVar("T")
+
+
+class ScopedRepository(Generic[T]):
+    """Repository enforcing that all queries and writes require and check club_id."""
+
+    def __init__(self, db: Session, model_cls: Type[T], club_id: str):
+        if not club_id:
+            raise ValueError("club_id is required for ScopedRepository to prevent cross-club leakage")
+        self.db = db
+        self.model_cls = model_cls
+        self.club_id = club_id
+
+    def get(self, entity_id: str) -> Optional[T]:
+        """Fetch an entity strictly scoped to the repository's club_id."""
+        stmt = select(self.model_cls).where(
+            self.model_cls.id == entity_id,  # type: ignore[attr-defined]
+            self.model_cls.club_id == self.club_id,  # type: ignore[attr-defined]
+        )
+        return self.db.scalars(stmt).first()
+
+    def list(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        filters: Optional[list[Any]] = None,
+        order_by: Optional[Any] = None,
+    ) -> list[T]:
+        """List entities strictly scoped to the repository's club_id."""
+        stmt = select(self.model_cls).where(
+            self.model_cls.club_id == self.club_id  # type: ignore[attr-defined]
+        )
+        if filters:
+            for f in filters:
+                stmt = stmt.where(f)
+        if order_by is not None:
+            stmt = stmt.order_by(order_by)
+        else:
+            if hasattr(self.model_cls, "created_at"):
+                stmt = stmt.order_by(self.model_cls.created_at.desc())  # type: ignore[attr-defined]
+        stmt = stmt.offset(skip).limit(limit)
+        return list(self.db.scalars(stmt).all())
+
+    def count(self, filters: Optional[list[Any]] = None) -> int:
+        """Count entities strictly scoped to this club_id."""
+        from sqlalchemy import func
+        stmt = select(func.count(self.model_cls.id)).where(  # type: ignore[attr-defined]
+            self.model_cls.club_id == self.club_id  # type: ignore[attr-defined]
+        )
+        if filters:
+            for f in filters:
+                stmt = stmt.where(f)
+        return self.db.scalar(stmt) or 0
+
+    def create(self, **kwargs: Any) -> T:
+        """Create a new entity, guaranteeing club_id is set to this repository's club_id."""
+        kwargs["club_id"] = self.club_id
+        entity = self.model_cls(**kwargs)
+        self.db.add(entity)
+        self.db.commit()
+        self.db.refresh(entity)
+        return entity
+
+    def update(self, entity_id: str, **kwargs: Any) -> Optional[T]:
+        """Update an entity only if it belongs to this club_id."""
+        entity = self.get(entity_id)
+        if not entity:
+            return None
+        # Disallow tampering with club_id
+        kwargs.pop("club_id", None)
+        for key, value in kwargs.items():
+            if hasattr(entity, key):
+                setattr(entity, key, value)
+        self.db.commit()
+        self.db.refresh(entity)
+        return entity
+
+    def delete(self, entity_id: str) -> bool:
+        """Delete an entity only if it belongs to this club_id."""
+        entity = self.get(entity_id)
+        if not entity:
+            return False
+        self.db.delete(entity)
+        self.db.commit()
+        return True

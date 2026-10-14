@@ -1,0 +1,105 @@
+id: prize_money_receipt
+name: Prize Money Receipt
+description: Prize money receipt for individual winners
+stage: post_event
+triggers: [prize, winner, award, prize money, receipt]
+letterhead: svnit
+numbering:
+  series: PRIZE
+  format: "ACM/{short_year}/{series}/{seq:03d}"
+  confirm: false
+depends_on: []
+repeat_per: winners
+fields:
+  - key: event_name
+    type: text
+    required: true
+    ask: "What is the event title?"
+  - key: sr_no
+    type: int
+    required: true
+    computed:
+      function: sr_no
+      args: {index: "$_repeat_index"}
+  - key: document_date
+    type: date
+    required: true
+    ask: "Date for the receipt?"
+  - key: dates
+    type: date_range
+    required: true
+    ask: "When was the event held?"
+  - key: venue
+    type: text
+    required: true
+    ask: "Where was the event held?"
+  - key: winner_name
+    type: text
+    required: true
+    ask: "Winner's full name?"
+  - key: winner_position
+    type: text
+    required: true
+    ask: "Position (1st, 2nd, 3rd)?"
+  - key: winner_amount
+    type: money
+    required: true
+    ask: "Prize amount in INR?"
+  - key: winner_amount_words
+    type: text
+    computed:
+      function: amount_in_words_inr
+      args: {amount: "$winner_amount"}
+  - key: winner_roll_no
+    type: text
+    required: true
+    ask: "Winner's roll number?"
+    defer_ok: true
+  - key: winner_course_semester
+    type: text
+    required: true
+    ask: "Winner's course and semester?"
+    defer_ok: true
+  - key: winner_mobile
+    type: text
+    required: true
+    mask: true
+    ask: "Winner's mobile number?"
+    defer_ok: true
+  - key: winner_bank_name_as_per_bank
+    type: text
+    required: true
+    mask: true
+    ask: "Name as per bank account?"
+    defer_ok: true
+  - key: winner_bank_name
+    type: text
+    required: true
+    mask: true
+    ask: "Bank name?"
+    defer_ok: true
+  - key: winner_bank_branch
+    type: text
+    required: true
+    mask: true
+    ask: "Bank branch?"
+    defer_ok: true
+  - key: winner_account_no
+    type: text
+    required: true
+    mask: true
+    ask: "Bank account number?"
+    defer_ok: true
+  - key: winner_ifsc
+    type: text
+    required: true
+    mask: true
+    ask: "IFSC code?"
+    defer_ok: true
+  - key: winner_pan
+    type: text
+    required: true
+    mask: true
+    ask: "PAN number?"
+    defer_ok: true
+sections: []

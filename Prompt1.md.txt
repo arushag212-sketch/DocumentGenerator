@@ -1,0 +1,163 @@
+# PROJECT: Smart Document Generator for ACM SVNIT Surat
+
+You are building a reusable, template-driven document automation system for a student club (ACM SVNIT). Read this whole file, then start at Phase 0. Do not skip the phase gates.
+
+## 1. Goal
+Convert event/activity requirements (a form or a natural-language sentence) into standardized, editable club documents (DOCX and PDF) using real DOCX templates, with consistent branding. The LLM is only ONE step (extraction and narrative drafting). Documents come from DOCX templates filled by code.
+
+Example input the system must handle:
+"We are conducting a two-day Web Development Workshop on 14–15 October in Seminar Hall for around 120 students."
+Expected: extract event name, type=workshop, dates, venue, participant count; recommend Permission Letter + Event Approval Note; list what is missing (see section 8); never invent it.
+
+## 2. Input files (in /samples)
+Study these first. They are the ground truth for layout, wording and fields.
+- Permission_public.pdf: Room/venue permission letter to HoD (CSE). ACM letterhead (SVNIT crest + ACM logo, blue serif title). Ref format `ACM/26-27/ROOM/009`. Sections: Submitted To, Subject, Schedule, About the Event table (Brief Description, Objective, Number of Participants, Mode, Event Organizers), then a 2x2 grid of signature/contact blocks (Chairperson, venue Tech Assistant, venue Faculty in-charge, Club Chairman).
+- Prize_Money_Format_2026.pdf: Prize Money Receipt, ONE PER WINNER. SVNIT letterhead + "ACM". Sr. No., Date, amount, Position, event name, organized by, held on/at, account-detail table (Affiliating Institute fixed text, name as per bank, bank, branch, account no, IFSC, PAN), student details (name, roll no, course and semester, mobile), signature, chairman signature.
+- ACM_Sample_Submitted.pdf: Event Approval Note to Dean (Students Welfare). SVNIT letterhead. No. `ACM/2026-27/SIH/001`, Date, subject table (chapter name, chapter code 6/52, schedule, venue), About the Event table (title, category, description, objectives, target audience, expected participants, judges), Financial Proposal (item rows + computed total), "Office Use" block (left blank), recommendation chain (Chairman F&SW, Associate Dean SW, Dean SW), and 4 signature blocks (Student Head, Student Secretary, Faculty Co-Chairman, Faculty Chairman). The sample has a trailing blank letterhead page; do NOT emit blank pages unless content overflows.
+- BIll_summary_public.pdf: Bill Summary / reimbursement sheet. ACM header. Title "Reimbursement for Cost incurred in <event>". Table 1: Sr. No., Name, Account Details, To Be Paid to, Prize Money (INR), Other, Grand Total. Signatures: Student Head, Student Secretary, Faculty Chairman. Table 2: "Other Bank Account Details" (Sr., Name, Account No., IFSC, Amount, Total) with Faculty Chairman signature.
+- Bill_Certificate_public.pdf: Form BC-R, 2 pages. Page 1: chapter name/code, Approval Note No. and Date (comes from the Approval Note), bill no/date/amount/M/s, Purchase Order (default NiL), Head of Account (6/52), Advance (default NiL), certification sentence "I, am ____", item table (qty, unit cost, line total), total, taxes, total incl. taxes, Supplier Details (name, GST no, other taxes, invoice no/date, amount), Payment Details (party, account no, holder, bank, branch, IFSC). Page 2: Stock Entry Details (laboratory/office default "Student Council", register checkboxes, clerk fields), Indenter Details (faculty name, designation, department), HoD recommendation, Dean approval, Accounts section (all blank, office use).
+- NOTE: values like amounts, supplier, bank details are redacted (black boxes) in samples. Never try to recover them. Use obviously fake fixtures in tests.
+- MoM: No sample was provided (check /samples for one). See section 7.6.
+
+## 3. Non-negotiable rules
+1. NEVER fabricate official details: reference/approval numbers, amounts, bill/invoice numbers, GST numbers, bank/PAN details, supplier names, sanction numbers, names of judges/signatories, roll numbers, mobile numbers. If missing, ask the user. Anything an LLM guessed is flagged "unconfirmed" and blocks finalization until the user confirms it.
+2. All arithmetic (line totals, totals, GST, grand totals, amount in words in Indian numbering) is done in code with Decimal. Never by the LLM.
+3. One canonical Event Record is the single source of truth. Every document reads from it, so event name, dates, venue and amounts are identical everywhere. Changing a field and re-rendering updates all documents.
+4. Templates are real DOCX files plus a schema, in folders. Adding or editing a template must need NO code change (except registering a brand-new computed function, see 6.3).
+5. Do not hardcode documents, events or event/document combinations. Hardcode nothing club-specific in Python; it lives in `club_config.yaml` and template folders.
+6. Preserve source wording faithfully, including known typos in official forms ("NATIOINAL", "Moblie"). List them in `docs/TEMPLATE_NOTES.md` for the club to decide. Do not silently "fix" official form text.
+7. Output must be consistent: fonts, spacing, headers/footers and branding come from the DOCX templates, never from ad-hoc code formatting.
+8. Personal data (bank accounts, PAN, mobiles) is sensitive: store minimally, mask in UI and logs (show last 4 digits), keep real config files out of git (`.gitignore`), commit only `*.example.yaml` with placeholders.
+9. The workflow must be automated end to end. The user must never copy AI output into Word manually.
+
+## 4. Architecture
+```
+Input (form | natural language | pasted notes)
+  -> Extractor: rules + dateparser + regex first; LLM (strict JSON schema) as fallback
+  -> Canonical Event Record (validated, each field tagged with its source)
+  -> Doc-type recommender (event type + lifecycle stage -> templates)
+  -> Missing-field detector (per selected template schema) -> asks user
+  -> Renderer: docxtpl (DOCX template + data) -> .docx -> PDF (LibreOffice headless)
+  -> Review/edit UI -> edit fields -> re-render -> new version saved -> download
+```
+- Core logic lives in an importable Python package `docgen/` with a CLI. UI and API are thin layers over it.
+- Stack: Python 3.11+, docxtpl (+ python-docx for bootstrap/inspection), dateparser, pydantic, PyYAML, SQLite (SQLAlchemy or sqlite3), FastAPI for the API, Streamlit for the UI (fast to ship, easy for the club to run), PyMuPDF to rasterize PDFs for preview and visual tests.
+- LLM provider must be pluggable behind an interface (`LLMClient`), configured by env vars (Gemini default, others swappable). The system MUST still work with no API key (form input + rules extraction only).
+- Check the environment first: is LibreOffice (`soffice`) installed? Which OS? Are the fonts used by the samples available (Times New Roman, the Georgia-like serif on the ACM header)? If not, use metric-compatible fonts (e.g., Liberation Serif) and document it, so PDF output does not reflow. Tell me what I must install if anything is missing.
+
+## 5. Canonical Event Record
+Pydantic model, JSON-serializable, stored in SQLite. Every field is `{value, source, confirmed}` where source is one of `user | config | extracted_rule | extracted_llm | computed | default`.
+Fields (extend as templates demand):
+- `record_type`: event | meeting
+- `event_name`, `event_code` (short code used in reference numbers, e.g., SIH; suggest, user confirms), `category`/`event_type`, `description`, `objectives`, `target_audience`
+- `dates` (single or range), `time_range`, `venue`, `mode` (Offline/Online/Hybrid), `expected_participants`, `judges[]`
+- `organizers` (from config, overridable)
+- `budget_items[]` {item, amount}, `winners[]` {position, name, roll_no, course_semester, mobile, amount, bank{name_as_per_bank, bank_name, branch, account_no, ifsc, pan}}
+- `bills[]` {supplier{name, gst_no}, invoice_no, invoice_date, items[] {name, qty, unit_cost}, tax {type, rate_or_amount}, payment{party, account_no, holder, bank, branch, ifsc}}
+- `other_reimbursements[]` {name, account_no, ifsc, amount}
+- `approval_note` {no, date} (produced by the Approval Note, consumed by the Bill Certificate)
+- `meeting` block for MoM (see 7.6)
+- `academic_year` (from config, e.g., 2026-27)
+
+## 6. Template system
+### 6.1 Folder layout
+```
+templates/
+  permission_letter/  template.docx  schema.yaml
+  prize_money_receipt/
+  approval_note/
+  bill_summary/
+  bill_certificate/
+  mom/
+  _clauses/           reusable snippets (YAML/Jinja), e.g. venue_request_clause.yaml
+config/
+  club_config.yaml          (real, gitignored)
+  club_config.example.yaml  (committed)
+assets/  logos, letterhead images, fonts
+```
+### 6.2 schema.yaml spec (design a clean, documented format; this is the minimum)
+```yaml
+id: permission_letter
+name: Permission Letter
+description: Request to HoD for venue/room use
+stage: pre_event                  # pre_event | post_event | meeting
+triggers: [event, workshop, hall booking, room, seminar hall]
+letterhead: acm                   # key into club_config.letterheads
+numbering: {series: ROOM, format: "ACM/{short_year}/{series}/{seq:03d}", confirm: true}
+depends_on: []                    # e.g. bill_certificate depends on approval_note.approval_no
+repeat_per: null                  # e.g. winners -> one document per winner (batch)
+fields:
+  - {key: event_name, type: text, required: true, ask: "What is the event title?"}
+  - {key: dates, type: date_range, required: true}
+  - {key: venue, type: text, required: true}
+  - {key: expected_participants, type: int, required: false}
+  - {key: mode, type: enum, values: [Offline, Online, Hybrid], default_from: config.defaults.mode}
+  - {key: brief_description, type: longtext, source_allowed: [user, llm_draft], required: true}
+sections:
+  - {id: venue_contacts, show_if: "venue_registry[venue].tech_assistant"}
+```
+Field attributes to support: `type` (text, longtext, int, money, date, date_range, time_range, enum, person_ref, table), `required` (true | false | conditional expression), `ask` prompt, `defer_ok` (see 8), `source_allowed`, `default_from`, `computed` (named function + args), `validate` (regex/range), `mask` (for sensitive fields).
+### 6.3 Computed functions
+A small registry in `docgen/functions.py` (sum, line_total, tax_amount, amount_in_words_inr, ordinal, format_inr (Indian grouping 1,00,000), format_date_range, short_year, etc.). Schemas reference them by name. Adding a new template normally needs none. Never use `eval` on user input; expression conditions use a safe evaluator.
+### 6.4 DOCX templates
+- Jinja tags live inside the DOCX (`{{ event_name }}`, `{% if %}`, table-row loops via `{%tr for %}`), so layout, tables, headers and footers (logo, letterhead, "Page X of Y" fields) are preserved.
+- IMPORTANT: Word splits tags across runs. Write `scripts/build_templates.py` that GENERATES each initial `template.docx` programmatically with python-docx (letterhead images extracted from the sample PDFs via PyMuPDF placed in the header, tables with tags in single runs, correct fonts/borders/column widths), reproducing each sample PDF's layout as closely as possible. After that bootstrap, the club edits the DOCX in Word directly. Provide `docs/TEMPLATE_AUTHORING.md` explaining how (including the "type each tag in one go, paste as plain text" tip).
+- Two letterheads exist: SVNIT (Approval Note, Prize Money Receipt, Bill Certificate with Form BC-R block) and ACM (Permission Letter, Bill Summary, MoM). Letterhead per template is selected by `letterhead:` and defined in club_config.
+- Template validator (`docgen validate-template <folder>`): every tag in the DOCX must exist in the schema, every required schema field must be used in the DOCX, loops are well-formed, and a dry-render with dummy data succeeds. Run it automatically on startup and in tests.
+### 6.5 club_config.yaml
+Club name, chapter code (6/52), head of account, academic year, letterheads/logos/colors/fonts, office bearers (people stored once with roles, so the same person appears as "Student Head" in one document and "Chairperson, ACM" in another via per-template designation labels), faculty (Chairman, Co-Chairman), approval chain (Chairman F&SW, Associate Dean SW, Dean SW), venue registry (e.g., Seminar Hall 402: tech assistant, faculty in-charge, default addressee HoD CSE), standing defaults (Purchase Order = NiL, Advance = NiL, Laboratory/Office = Student Council), and numbering series with last-used counters. Seed names and designations from the sample PDFs. Leave mobile numbers and all bank details as placeholders for me to fill locally. Values coming from config defaults are shown in review as "defaulted from config".
+
+## 7. Per-document specs (build in this priority order)
+### 7.1 Permission Letter (priority 1; build end-to-end first)
+ACM letterhead. Ref no (series ROOM, suggested next number, user confirms), Date (default today, editable, flagged), Submitted To (venue registry default, e.g., HoD (CSE Dept.)), Subject auto-built "Requesting Permission to Conduct {event} in {venue}", Schedule of event. About table: Brief Description (uses reusable clause: "We request permission to use {venue} on {dates} from {start} to {end} for conducting the {event}."), Objective, Number of Participants, Mode, Event Organizers. 2x2 signature grid: Chairperson (name, designation, admission no, branch, mobile), venue Tech Assistant, venue Faculty in-charge, Club Chairman. Venue contact blocks are conditional on the venue registry. Multi-day events must render date ranges correctly.
+### 7.2 Prize Money Receipt (priority 2)
+SVNIT letterhead + "ACM". One document per winner (batch from `winners[]`). Fields per sample. "held on" year must be derived (the sample hardcodes 2026; do not hardcode). Fixed text "Affiliating Institute: Sardar Vallabhbhai National Institute of Technology, Surat (SVNIT)" comes from config. Provide `amount_in_words` as an available variable but only render it if the template contains it. Signature lines and Chairman signature stay blank.
+### 7.3 Event Approval Note, "Submitted" (priority 3)
+SVNIT letterhead. No. format `ACM/{academic_year}/{event_code}/{seq:03d}` (confirm with user), Date, "Submitted to Dean (Students Welfare)". Subject table, About the Event table (Name of Judges row conditional: hide if no judges), Financial Proposal with item rows from `budget_items` and a computed Total, Office Use block blank, recommendation chain from config, 4 signature blocks. Store `approval_note.no/date` back into the Event Record.
+### 7.4 Bill Summary (priority 4)
+ACM header, Date, title "Reimbursement for Cost incurred in {event}". Table 1 per sample columns; rows from winners (prize money) and other payees; Grand Total computed. Table 2 "Other Bank Account Details" with computed Total. Three signatures plus Faculty Chairman signature under table 2. Cross-checks: sum of prize amounts equals the prize column total and equals the sum of the prize receipts. I am not sure how the "Account Details" and "To Be Paid to" columns are meant to be filled. Preserve the headers, make the cell mapping configurable in the schema, and record this as an open question in `docs/OPEN_QUESTIONS.md` for me to answer.
+### 7.5 Bill Certificate (priority 5), Form BC-R
+Two pages, per sample. One certificate per bill (batch if several vendors). Pulls Approval Note No./Date from `approval_note`. Items table with computed line totals, Total Amount, taxes, Total incl. taxes. Supplier and Payment details must come from the user (ask). "I, am ____" certifier name: ask, never assume. Page 2: stock entry, indenter details (faculty from config), HoD/Dean/Accounts sections blank. Warning (not blocker) if actual bill total exceeds the approval note's proposed total.
+### 7.6 MoM (Minutes of Meeting)
+No sample was provided. If a sample exists in /samples, replicate it. Otherwise build a clean placeholder template on the ACM letterhead and mark it "PLACEHOLDER: replace with the club's official MoM format" in `docs/OPEN_QUESTIONS.md`. Fields: meeting title, ref no (optional series MOM), date, start/end time, venue/mode, chaired by, attendees, absentees, agenda items, discussion summary per item, decisions, action items (task, owner, deadline), next meeting date, prepared by, approved by. Natural-language path: the user pastes rough notes or a transcript, and the LLM structures them into the schema using ONLY what is in the notes. Do not invent attendees, decisions, owners or deadlines; missing ones go to the missing-info panel. Optionally link a MoM to an existing event/meeting record.
+
+## 8. Extraction, recommendation, missing info
+- Extraction order: (1) regex/dateparser rules (date ranges like "14–15 October", durations like "two-day", counts like "around 120 students", known venues from the registry); (2) LLM with strict JSON schema output for what rules could not parse. Year inference uses the academic year but is flagged unconfirmed. Everything LLM-derived is tagged `extracted_llm, confirmed=false`.
+- Recommender: use event type plus lifecycle stage. Pre-event: Permission Letter (+ Approval Note when budget or Dean-level approval applies). Post-event: Prize Money Receipts (if winners), Bill Summary, Bill Certificate (if bills). Meeting: Permission Letter + MoM. Explain WHY each document is recommended; allow the user to override.
+- Missing-field detector: runs against the selected templates' schemas and returns a grouped checklist (field, which documents need it, a friendly question from `ask`). For the example sentence, it must flag at least: start/end time, event short code/ref number, faculty/venue permissions contact, mode, description/objectives (offer an AI draft clearly labeled "AI-drafted, review"), budget items (if an Approval Note is selected), and signatory confirmation.
+- Fields marked `defer_ok` (bank details, PAN, signatures, winner roll no/mobile) can be explicitly "left blank for hand-filling" by the user. This is a deliberate choice, never a silent fallback.
+- Narrative fields (description, objectives) are the only place LLM drafting is allowed, always labeled and always editable.
+
+## 9. UI (Streamlit v1)
+1. Input: form tab and "describe your event" tab (plus "paste meeting notes" for MoM).
+2. Extracted data panel with source badges (confirmed / unconfirmed / from config).
+3. Recommended documents (checkboxes with reasons).
+4. Missing-info panel that asks questions inline.
+5. Generate: DOCX + PDF.
+6. Review: PDF page preview, editable field form (grouped by section), "Re-render" button, download DOCX/PDF, and an "upload my manually edited DOCX as a new version" option (flagged `manually_edited`; warn that re-rendering from data will overwrite manual edits).
+7. Version history per document (timestamp, who, what changed, restore).
+8. Batch: generate all recommended documents, or all winners' receipts, as a ZIP.
+9. Template page: list templates, validator status, upload a new template folder (stretch).
+Sensitive fields are masked by default with a reveal toggle.
+
+## 10. Storage and versions
+SQLite tables: events, documents, versions (store the full Event Record snapshot + file paths + diff summary), numbering counters. Every render creates a version. Output files in `outputs/<event_slug>/<doc>_v<N>.docx|pdf`.
+
+## 11. Tests and acceptance
+- Fixtures: a fake "SIH Internal Hackathon" event reproducing the sample PDFs' non-redacted data (Approval No. ACM/2026-27/SIH/001, venue CSE Department, 12 Sep 2026, Banner 800 + Miscellaneous 300 = 1100, judge Dr. Alok Kumar, etc.) and fake values for everything redacted.
+- Golden tests: render each template and rasterize to PNG; produce side-by-side comparison images against the sample PDFs in `tests/visual/` for me to inspect; assert key text appears.
+- Unit tests: date/range extraction, amount-in-words, Indian number formatting, Decimal totals, missing-field detection (including that no field is ever auto-filled for official data), cross-document consistency (change venue -> all documents update), template validator, numbering.
+- End-to-end test: the example sentence -> extraction -> recommendation -> missing questions -> answers -> DOCX+PDF for Permission Letter.
+- Acceptance: no blank trailing pages, no overflowing tables, fonts/logos/headers identical across regenerated versions, DOCX opens cleanly in Word, PDF matches DOCX.
+
+## 12. Phases (STOP at each gate and show me results)
+- Phase 0: Inspect environment and samples. Write `docs/SAMPLE_ANALYSIS.md` (fields per document, shared fields across documents, typos found, layout notes), `docs/OPEN_QUESTIONS.md`, and an implementation plan. WAIT for my approval.
+- Phase 1: Project skeleton, config, Event Record, renderer for ONLY the Permission Letter via CLI: dict -> DOCX -> PDF, plus visual comparison with the sample. Gate.
+- Phase 2: Schema loader, template validator, missing-field detector, numbering, recommender. Gate.
+- Phase 3: Prize Money Receipt, Approval Note, Bill Summary, Bill Certificate (in this order). These should be new folders plus schemas, not new engine code. Anything that forced engine changes must be documented as a lesson. Gate.
+- Phase 4: Natural-language extractor (rules + LLM fallback) and the MoM template/notes path. Gate.
+- Phase 5: Streamlit UI, review/edit/re-render, versions. Gate.
+- Phase 6: Batch generation, template upload page, README, TEMPLATE_AUTHORING.md, demo script. Stretch (only after all above): approval workflow, Google Drive/Sheets, email distribution, usage analytics, role-based access.
+
+## 13. Deliverables
+Working repo with `README.md` (install, run, configure, add a template in 5 minutes), `docs/`, `tests/`, example config, sample outputs, and a short demo script that runs the example sentence end to end. If you hit ambiguity that affects official content, ask me instead of guessing.
