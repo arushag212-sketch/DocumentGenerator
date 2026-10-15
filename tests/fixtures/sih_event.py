@@ -75,7 +75,7 @@ def get_sih_fixture() -> EventRecord:
     event.submitted_to = tf("HoD(CSE Dept.)", FieldSource.config, confirmed=True)
 
     # Judges
-    event.judges = tf(["Dr. Alok Kumar"], FieldSource.user, confirmed=True)
+    event.judges = tf(["Demo Guest Judge"], FieldSource.user, confirmed=True)
 
     # Financial Proposal: Banner (8*6) 800 + Miscellaneous 300 = 1100 (exactly matching sample)
     event.budget_items = [
@@ -167,8 +167,8 @@ def get_sih_fixture() -> EventRecord:
         end_time="05:30 PM",
         venue="Seminar Hall 402, CSE Department",
         mode="Offline",
-        chaired_by="Dr. Sankita Patel",
-        attendees=["Dr. Sankita Patel", "Dr. Balu Parne", "Ansh Gupta", "Arshad Khatib"],
+        chaired_by="Demo Faculty Chairman",
+        attendees=["Demo Faculty Chairman", "Demo Faculty Co-Chairman", "Demo Student Head", "Demo Student Secretary"],
         absentees=["None"],
         agenda_items=[
             AgendaItem(
@@ -178,16 +178,16 @@ def get_sih_fixture() -> EventRecord:
             ),
             AgendaItem(
                 topic="Jury Coordination",
-                discussion="Confirmed Dr. Alok Kumar as guest evaluator.",
+                discussion="Confirmed Demo Guest Judge as guest evaluator.",
                 decision="Travel honorarium and memento arranged.",
             ),
         ],
         action_items=[
-            ActionItem(task="Print banners and signage", owner="Sunny Bodiwala", deadline="11/09/2026"),
-            ActionItem(task="Prepare winner certificates and receipts", owner="Arshad Khatib", deadline="12/09/2026"),
+            ActionItem(task="Print banners and signage", owner="Demo Tech Assistant", deadline="11/09/2026"),
+            ActionItem(task="Prepare winner certificates and receipts", owner="Demo Student Secretary", deadline="12/09/2026"),
         ],
-        prepared_by="Ansh Gupta",
-        approved_by="Dr. Sankita Patel",
+        prepared_by="Demo Student Head",
+        approved_by="Demo Faculty Chairman",
     )
 
     return event

@@ -159,6 +159,29 @@ def fn_ordinal(n: int) -> str:
     return f"{n}{suffix}"
 
 
+def _parse_date(val: Any) -> date | None:
+    if not val:
+        return None
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    s = str(val).strip()
+    try:
+        from dateutil.parser import parse as parse_date
+        return parse_date(s, dayfirst=True).date()
+    except Exception:
+        pass
+    try:
+        import dateparser
+        parsed = dateparser.parse(s)
+        if parsed:
+            return parsed.date()
+    except Exception:
+        pass
+    return None
+
+
 @register("format_date")
 def fn_format_date(d: Any, fmt: str = "%d/%m/%Y") -> str:
     """Format a date object or string to standardized format (default: DD/MM/YYYY)."""
@@ -168,16 +191,9 @@ def fn_format_date(d: Any, fmt: str = "%d/%m/%Y") -> str:
         import re
         if re.match(r'^\d{2}/\d{2}/\d{4}$', d):
             return d
-        import dateparser
-        parsed = dateparser.parse(d, settings={'DATE_ORDER': 'DMY'})
-        if parsed:
-            d = parsed.date()
-        else:
-            return d
-    if isinstance(d, datetime):
-        d = d.date()
-    if isinstance(d, date):
-        return d.strftime(fmt)
+    parsed = _parse_date(d)
+    if parsed:
+        return parsed.strftime(fmt)
     return str(d)
 
 
@@ -191,19 +207,18 @@ def fn_format_date_range(start: Any, end: Any) -> str:
     if end and not start:
         return fn_format_date(end)
 
-    import dateparser
-    d_start = dateparser.parse(str(start), settings={'DATE_ORDER': 'DMY'}) if isinstance(start, str) else start
-    d_end = dateparser.parse(str(end), settings={'DATE_ORDER': 'DMY'}) if isinstance(end, str) else end
-
-    if isinstance(d_start, datetime):
-        d_start = d_start.date()
-    if isinstance(d_end, datetime):
-        d_end = d_end.date()
+    d_start = _parse_date(start)
+    d_end = _parse_date(end)
 
     if isinstance(d_start, date) and isinstance(d_end, date):
         if d_start == d_end:
             return d_start.strftime("%d/%m/%Y")
-        return f"{d_start.strftime('%d/%m/%Y')} - {d_end.strftime('%d/%m/%Y')}"
+        if d_start.month == d_end.month and d_start.year == d_end.year:
+            return f"{d_start.day}-{d_end.day} {d_start.strftime('%B %Y')}"
+        elif d_start.year == d_end.year:
+            return f"{d_start.day} {d_start.strftime('%B')} - {d_end.day} {d_end.strftime('%B %Y')}"
+        else:
+            return f"{d_start.day} {d_start.strftime('%B %Y')} - {d_end.day} {d_end.strftime('%B %Y')}"
 
     return f"{start} - {end}" if start != end else str(start)
 
@@ -232,6 +247,11 @@ def fn_today(fmt: str = "%d/%m/%Y") -> str:
 
 
 @register("sr_no")
-def fn_sr_no(index: int) -> int:
+def fn_sr_no(index: Any = 0) -> int:
     """1-based serial number from 0-based index."""
-    return index + 1
+    if index is None:
+        return 1
+    try:
+        return int(index) + 1
+    except (ValueError, TypeError):
+        return 1

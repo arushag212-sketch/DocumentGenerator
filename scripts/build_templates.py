@@ -323,8 +323,8 @@ def build_permission_letter():
     # Cell (0,1): Venue Tech Assistant
     c01 = sig_table.cell(0, 1)
     p = c01.paragraphs[0]
-    p.add_run("Name: {% if venue_tech_assistant %}{{ venue_tech_assistant.name }}{% else %}Sunny Bodiwala{% endif %}\n").font.name = "Times New Roman"
-    p.add_run("Designation: Tech Assistant , Seminar Hall\n").font.name = "Times New Roman"
+    p.add_run("Name: {% if venue_tech_assistant %}{{ venue_tech_assistant.name }}{% else %}{{ tech_assistant_name | default('') }}{% endif %}\n").font.name = "Times New Roman"
+    p.add_run("Designation: {% if venue_tech_assistant and venue_tech_assistant.roles and venue_tech_assistant.roles.permission_letter %}{{ venue_tech_assistant.roles.permission_letter }}{% else %}Tech Assistant , {{ venue }}{% endif %}\n").font.name = "Times New Roman"
     p.add_run("Branch: Computer Science & Engineering\n").font.name = "Times New Roman"
     p.add_run("Mobile No.: {% if venue_tech_assistant and venue_tech_assistant.mobile %}{{ venue_tech_assistant.mobile }}{% endif %}").font.name = "Times New Roman"
 
@@ -339,8 +339,8 @@ def build_permission_letter():
     # Cell (1,1): Venue Faculty In-Charge
     c11 = sig_table.cell(1, 1)
     p = c11.paragraphs[0]
-    p.add_run("Name: {% if venue_faculty_in_charge %}{{ venue_faculty_in_charge.name }}{% else %}Shri Rakesh P. Gohil{% endif %}\n").font.name = "Times New Roman"
-    p.add_run("Designation: Faculty In-charge , Seminar Hall\n").font.name = "Times New Roman"
+    p.add_run("Name: {% if venue_faculty_in_charge %}{{ venue_faculty_in_charge.name }}{% else %}{{ faculty_in_charge_name | default('') }}{% endif %}\n").font.name = "Times New Roman"
+    p.add_run("Designation: {% if venue_faculty_in_charge and venue_faculty_in_charge.roles and venue_faculty_in_charge.roles.permission_letter %}{{ venue_faculty_in_charge.roles.permission_letter }}{% else %}Faculty In-charge , {{ venue }}{% endif %}\n").font.name = "Times New Roman"
     p.add_run("Department: Computer Science & Engineering\n").font.name = "Times New Roman"
     p.add_run("Mobile No.: {% if venue_faculty_in_charge and venue_faculty_in_charge.mobile %}{{ venue_faculty_in_charge.mobile }}{% endif %}").font.name = "Times New Roman"
 
@@ -979,7 +979,7 @@ def build_bill_certificate():
         "Chapter Name:                                      {{ club_name }}                                       Code No .        {{ chapter_code }}\n"
         "Approval Note No.:  {{ approval_note_no }}                  Date:   {{ approval_note_date }}\n"
         "Original Approval Note/Comparative Statement attached herewith/sent with bill No. {{ invoice_no }}\n"
-        "dtd.: {{ invoice_date }}                                   for Rs. {{ bill_total }}                          of M/s. {{ supplier_name }}\n"
+        "dtd.: {{ invoice_date }}                                   for Rs. {{ bill_total_with_tax }}                          of M/s. {{ supplier_name }}\n"
         "Purchase Order No. and date : {{ purchase_order }}\n"
         "Head of Account (Code No.) : {{ head_of_account }}\n"
         "Advance drawn in Rs. (if any) : {{ advance }}"

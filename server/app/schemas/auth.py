@@ -18,7 +18,7 @@ class ClubMembershipSummary(BaseModel):
 
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=6, description="Password must be at least 6 characters")
+    password: str = Field(..., min_length=10, description="Password must be at least 10 characters")
     name: str = Field(..., min_length=2, max_length=100)
 
 
@@ -38,9 +38,10 @@ class UserOut(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
     user: UserOut
+    csrf_token: str
+    token_type: str = "bearer"
+    access_token: Optional[str] = None
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -49,10 +50,15 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=10)
 
 
 class UpdateProfileRequest(BaseModel):
     name: Optional[str] = None
     current_password: Optional[str] = None
-    new_password: Optional[str] = Field(None, min_length=6)
+    new_password: Optional[str] = Field(None, min_length=10)
+
+
+class SensitiveFieldOut(BaseModel):
+    masked: str
+    revealed: Optional[str] = None

@@ -57,3 +57,14 @@
   - Student leader: `Chairperson , ACM` (Permission), `Student Head` (Bill Summary), `Signature of Student Head` (Event Approval).
   - Faculty head: `Chairman , ACM` (Permission), `Faculty Chairman` (Bill Summary), `Signature of Faculty Chairman` (Event Approval), `Faculty Chairman/Co-Chairman` (Form BC-R).
 - **Question**: Should the system define a canonical role enumeration (`STUDENT_HEAD`, `STUDENT_SECRETARY`, `FACULTY_CHAIRMAN`, `FACULTY_CO_CHAIRMAN`, `HOD_CSE`, `DEAN_SW`) with template-specific title rendering mappings?
+
+---
+
+### 8. Bill Certificate 'for Rs.' Line: Subtotal vs. Total Including Tax
+- **Background**: On Form BC-R Page 1, the meta line reads:
+  `Original Approval Note/Comparative Statement attached herewith/sent with bill No. {invoice_no} dtd.: {invoice_date} for Rs. {amount} of M/s. {supplier_name}`
+  Later on the same page, under `SUPPLIER DETAILS`, the table lists:
+  `Amount (Rs.): {bill_total_with_tax}`
+- **Question**: Should the top meta line `for Rs.` always reflect the final invoice total including taxes (e.g. ₹944.00, matching `SUPPLIER DETAILS Amount`), or should it reflect the pre-tax item cost subtotal (e.g. ₹800.00)?
+- **Current Implementation**: Updated per W3.2 to use the grand total including taxes (`bill_total_with_tax`), guaranteeing identical figures across both locations on Page 1.
+

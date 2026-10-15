@@ -1,10 +1,12 @@
-"""Club management, memberships, and roles API routes."""
+"""Club management, memberships, people, and setup wizard using strict ScopedRepository access."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from server.app.core.audit import log_audit
@@ -15,14 +17,31 @@ from server.app.core.permissions import (
     get_current_user,
     require_club_access,
 )
-from server.app.models import AuditLog, Club, Membership, User
+from server.app.core.scoped_repo import ScopedRepository
+from server.app.core.security import decrypt_field, encrypt_field, mask_sensitive_field
+from server.app.models import (
+    AuditLog,
+    Club,
+    Membership,
+    NumberingSeries,
+    NumberReservation,
+    Person,
+    RoleHeld,
+    User,
+    Venue,
+)
 from server.app.schemas.audit import AuditLogOut
 from server.app.schemas.club import (
     AddMemberRequest,
     ClubCreate,
     ClubMemberOut,
     ClubOut,
+    ClubPermissionsOut,
     ClubUpdate,
+    PersonCreate,
+    PersonOut,
+    PersonUpdate,
+    SetupWizardRequest,
     UpdateMemberRoleRequest,
 )
 
@@ -30,11 +49,15 @@ router = APIRouter(prefix="/clubs", tags=["clubs"])
 
 
 def _club_to_out(club: Club, my_role: Optional[str], db: Session) -> ClubOut:
-    member_count = (
-        db.query(Membership)
-        .filter(Membership.club_id == club.id, Membership.status == "active")
-        .count()
-    )
+    membership_repo = ScopedRepository(db, Membership, club_id=club.id)
+    member_count = membership_repo.count(Membership.status == "active")
+
+    series_repo = ScopedRepository(db, NumberingSeries, club_id=club.id)
+    room_s = series_repo.find_first(NumberingSeries.key == "ROOM")
+    evt_s = series_repo.find_first(NumberingSeries.key == "EVT")
+    mom_s = series_repo.find_first(NumberingSeries.key == "MOM")
+
+    settings_dict = club.settings or {}
     return ClubOut(
         id=club.id,
         name=club.name,
@@ -43,10 +66,16 @@ def _club_to_out(club: Club, my_role: Optional[str], db: Session) -> ClubOut:
         chapter_code=club.chapter_code,
         head_of_account=club.head_of_account,
         academic_year_default=club.academic_year_default,
-        settings=club.settings or {},
+        settings=settings_dict,
         my_role=my_role,
         members_count=member_count,
         created_at=club.created_at,
+        code=club.short_name,
+        department=settings_dict.get("department", "Computer Science & Engineering"),
+        academic_year=club.academic_year_default,
+        room_counter=room_s.last_seq if room_s else 0,
+        event_counter=evt_s.last_seq if evt_s else 0,
+        mom_counter=mom_s.last_seq if mom_s else 0,
     )
 
 
@@ -55,31 +84,23 @@ def list_clubs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List clubs that the current user belongs to, or all clubs if platform administrator."""
+    """List clubs accessible to current user."""
     if current_user.is_platform_admin:
         clubs = db.query(Club).filter(Club.disabled_at.is_(None)).all()
-        # Find user's specific roles where applicable
-        user_memberships = {
-            m.club_id: m.role
-            for m in db.query(Membership).filter(Membership.user_id == current_user.id).all()
-        }
+        user_memberships = {m.club_id: m.role for m in current_user.memberships}
         return [
             _club_to_out(c, user_memberships.get(c.id, "platform_admin"), db)
             for c in clubs
         ]
 
     # Standard user: only list clubs where user is an active member
-    memberships = (
-        db.query(Membership, Club)
-        .join(Club, Membership.club_id == Club.id)
-        .filter(
-            Membership.user_id == current_user.id,
-            Membership.status == "active",
-            Club.disabled_at.is_(None),
-        )
-        .all()
-    )
-    return [_club_to_out(club, m.role, db) for m, club in memberships]
+    active_memberships = [m for m in current_user.memberships if m.status == "active"]
+    clubs_out = []
+    for m in active_memberships:
+        club = db.query(Club).filter(Club.id == m.club_id, Club.disabled_at.is_(None)).first()
+        if club:
+            clubs_out.append(_club_to_out(club, m.role, db))
+    return clubs_out
 
 
 @router.post("/", response_model=ClubOut, status_code=status.HTTP_201_CREATED)
@@ -89,7 +110,7 @@ def create_club(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Create a new club. The creator is automatically assigned as 'owner'."""
+    """Create a new club. The creator is assigned 'owner' via ScopedRepository."""
     existing_slug = db.query(Club).filter(Club.slug == payload.slug.lower().strip()).first()
     if existing_slug:
         raise HTTPException(
@@ -107,18 +128,15 @@ def create_club(
         settings={},
     )
     db.add(club)
-    db.flush()  # populate club.id
+    db.flush()
 
-    # Assign creator as owner
-    owner_membership = Membership(
+    # Assign creator as owner using ScopedRepository
+    membership_repo = ScopedRepository(db, Membership, club_id=club.id)
+    membership_repo.create(
         user_id=current_user.id,
-        club_id=club.id,
         role=Role.OWNER,
         status="active",
     )
-    db.add(owner_membership)
-    db.commit()
-    db.refresh(club)
 
     client_ip = request.client.host if request.client else None
     log_audit(
@@ -140,8 +158,57 @@ def get_club(
     ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
     db: Session = Depends(get_db),
 ):
-    """Get details of a specific club (accessible to all members with viewer role and above)."""
+    """Get club details (viewer+)."""
     return _club_to_out(ctx.club, ctx.role, db)
+
+
+@router.get("/{club_id}/permissions", response_model=ClubPermissionsOut)
+def get_club_permissions(
+    club_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieve current user's effective permissions and role within active club."""
+    club = db.query(Club).filter(Club.id == club_id, Club.disabled_at.is_(None)).first()
+    if not club:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "CLUB_NOT_FOUND", "message": "Club not found"},
+        )
+
+    membership_repo = ScopedRepository(db, Membership, club_id=club_id)
+    membership = membership_repo.find_first(
+        Membership.user_id == current_user.id,
+        Membership.status == "active",
+    )
+
+    is_admin = current_user.is_platform_admin
+    # Role in active club: if user has explicit membership, use that role;
+    # if platform admin without explicit membership, default role to 'owner'
+    role = membership.role if membership else ("owner" if is_admin else None)
+
+    if not membership and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "NOT_A_MEMBER", "message": "You are not an active member of this club"},
+        )
+
+    can_edit_members = is_admin or role in (Role.OWNER, Role.ADMIN)
+    can_edit_settings = is_admin or role in (Role.OWNER, Role.ADMIN)
+    can_create_documents = is_admin or role in (Role.OWNER, Role.ADMIN, Role.EDITOR, "treasurer", "lead", "co_lead")
+    can_finalize_documents = is_admin or role in (Role.OWNER, Role.ADMIN, "lead", "treasurer")
+    can_view_sensitive = is_admin or role in (Role.OWNER, Role.ADMIN, "lead")
+
+    return ClubPermissionsOut(
+        is_platform_admin=is_admin,
+        role=role,
+        is_owner=(role == Role.OWNER),
+        can_edit_members=can_edit_members,
+        can_edit_settings=can_edit_settings,
+        can_create_documents=can_create_documents,
+        can_finalize_documents=can_finalize_documents,
+        can_view_sensitive=can_view_sensitive,
+    )
 
 
 @router.put("/{club_id}", response_model=ClubOut)
@@ -151,7 +218,7 @@ def update_club(
     ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    """Update club configuration (accessible to club admin and owner)."""
+    """Update club settings (admin+)."""
     club = ctx.club
     if payload.name is not None:
         club.name = payload.name.strip()
@@ -192,7 +259,7 @@ def delete_club(
     ctx: ClubContext = Depends(require_club_access(Role.OWNER)),
     db: Session = Depends(get_db),
 ):
-    """Soft-delete a club (accessible only to club owner or platform admin)."""
+    """Soft-delete club (owner only)."""
     club = ctx.club
     club.disabled_at = datetime.now(timezone.utc)
     db.commit()
@@ -211,7 +278,7 @@ def delete_club(
     return {"message": f"Club '{club.name}' has been deactivated"}
 
 
-# ---------------- MEMBERSHIP ENDPOINTS ----------------
+# ---------------- MEMBERSHIP ENDPOINTS (ScopedRepository) ----------------
 
 
 @router.get("/{club_id}/members", response_model=list[ClubMemberOut])
@@ -219,26 +286,26 @@ def list_members(
     ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
     db: Session = Depends(get_db),
 ):
-    """List all members of the club (viewer and above)."""
-    memberships = (
-        db.query(Membership, User)
-        .join(User, Membership.user_id == User.id)
-        .filter(Membership.club_id == ctx.club.id, Membership.status == "active")
-        .all()
-    )
+    """List members strictly via ScopedRepository."""
+    membership_repo = ScopedRepository(db, Membership, club_id=ctx.club.id)
+    memberships = membership_repo.all(Membership.status == "active")
 
-    return [
-        ClubMemberOut(
-            id=m.id,
-            user_id=u.id,
-            email=u.email,
-            name=u.name,
-            role=m.role,
-            status=m.status,
-            joined_at=m.created_at,
-        )
-        for m, u in memberships
-    ]
+    out = []
+    for m in memberships:
+        user = db.query(User).filter(User.id == m.user_id).first()
+        if user:
+            out.append(
+                ClubMemberOut(
+                    id=m.id,
+                    user_id=user.id,
+                    email=user.email,
+                    name=user.name,
+                    role=m.role,
+                    status=m.status,
+                    joined_at=m.created_at,
+                )
+            )
+    return out
 
 
 @router.post("/{club_id}/members", response_model=ClubMemberOut, status_code=status.HTTP_201_CREATED)
@@ -248,7 +315,7 @@ def add_member(
     ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    """Add a member to the club by email (admin and above)."""
+    """Add member via ScopedRepository."""
     target_user = db.query(User).filter(User.email == payload.email.lower().strip()).first()
     if not target_user:
         raise HTTPException(
@@ -256,11 +323,8 @@ def add_member(
             detail={"code": "USER_NOT_FOUND", "message": f"No user registered with email {payload.email}"},
         )
 
-    existing_membership = (
-        db.query(Membership)
-        .filter(Membership.user_id == target_user.id, Membership.club_id == ctx.club.id)
-        .first()
-    )
+    membership_repo = ScopedRepository(db, Membership, club_id=ctx.club.id)
+    existing_membership = membership_repo.find_first(Membership.user_id == target_user.id)
 
     if existing_membership:
         if existing_membership.status == "active":
@@ -268,22 +332,14 @@ def add_member(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": "ALREADY_MEMBER", "message": "User is already an active member of this club"},
             )
-        # Reactivate
-        existing_membership.status = "active"
-        existing_membership.role = payload.role
-        db.commit()
-        db.refresh(existing_membership)
+        membership_repo.update(existing_membership.id, status="active", role=payload.role)
         membership = existing_membership
     else:
-        membership = Membership(
+        membership = membership_repo.create(
             user_id=target_user.id,
-            club_id=ctx.club.id,
             role=payload.role,
             status="active",
         )
-        db.add(membership)
-        db.commit()
-        db.refresh(membership)
 
     client_ip = request.client.host if request.client else None
     log_audit(
@@ -316,19 +372,15 @@ def update_member_role(
     ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    """Update a member's role (admin can manage editor/viewer; owner can manage all)."""
-    membership = (
-        db.query(Membership)
-        .filter(Membership.user_id == user_id, Membership.club_id == ctx.club.id)
-        .first()
-    )
+    """Update member role via ScopedRepository."""
+    membership_repo = ScopedRepository(db, Membership, club_id=ctx.club.id)
+    membership = membership_repo.find_first(Membership.user_id == user_id)
     if not membership:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "MEMBERSHIP_NOT_FOUND", "message": "User is not a member of this club"},
         )
 
-    # An admin cannot promote someone to owner or alter an owner's role
     if not ctx.is_owner:
         if membership.role == Role.OWNER or payload.role == Role.OWNER:
             raise HTTPException(
@@ -337,9 +389,7 @@ def update_member_role(
             )
 
     old_role = membership.role
-    membership.role = payload.role
-    db.commit()
-    db.refresh(membership)
+    membership_repo.update(membership.id, role=payload.role)
 
     user = db.query(User).filter(User.id == user_id).first()
 
@@ -373,7 +423,7 @@ def remove_member(
     ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
     db: Session = Depends(get_db),
 ):
-    """Remove a member from the club. Users can leave themselves, admins can remove non-owners, owners can remove anyone."""
+    """Remove member via ScopedRepository."""
     is_self = ctx.user.id == user_id
     if not is_self and not ctx.is_admin:
         raise HTTPException(
@@ -381,11 +431,8 @@ def remove_member(
             detail={"code": "FORBIDDEN", "message": "Admin permission required to remove other members"},
         )
 
-    membership = (
-        db.query(Membership)
-        .filter(Membership.user_id == user_id, Membership.club_id == ctx.club.id)
-        .first()
-    )
+    membership_repo = ScopedRepository(db, Membership, club_id=ctx.club.id)
+    membership = membership_repo.find_first(Membership.user_id == user_id)
     if not membership:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -398,26 +445,15 @@ def remove_member(
             detail={"code": "FORBIDDEN", "message": "Cannot remove the club owner"},
         )
 
-    # Disallow leaving if user is the sole owner
     if membership.role == Role.OWNER:
-        other_owners = (
-            db.query(Membership)
-            .filter(
-                Membership.club_id == ctx.club.id,
-                Membership.role == Role.OWNER,
-                Membership.user_id != user_id,
-                Membership.status == "active",
-            )
-            .count()
-        )
+        other_owners = membership_repo.count(Membership.role == Role.OWNER, Membership.user_id != user_id)
         if other_owners == 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "SOLE_OWNER", "message": "Cannot remove the sole club owner. Transfer ownership first."},
+                detail={"code": "SOLE_OWNER", "message": "Cannot remove sole owner. Transfer ownership first."},
             )
 
-    db.delete(membership)
-    db.commit()
+    membership_repo.delete(membership.id)
 
     client_ip = request.client.host if request.client else None
     log_audit(
@@ -434,7 +470,279 @@ def remove_member(
     return {"message": "Member removed successfully"}
 
 
-# ---------------- AUDIT LOG ENDPOINTS ----------------
+# ---------------- PEOPLE & SIGNATORIES (Field Encryption + ScopedRepository) ----------------
+
+
+@router.get("/{club_id}/people", response_model=list[PersonOut])
+def list_people(
+    reveal: bool = Query(False, description="Reveal plaintext sensitive fields (requires admin)"),
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """List people strictly through ScopedRepository with field masking and reveal permission."""
+    person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+    people = person_repo.all()
+
+    can_reveal = reveal and ctx.is_admin
+
+    out = []
+    for p in people:
+        decrypted_mobile = decrypt_field(p.mobile)
+        display_mobile = decrypted_mobile if can_reveal else mask_sensitive_field(decrypted_mobile)
+
+        out.append(
+            PersonOut(
+                id=p.id,
+                club_id=p.club_id,
+                full_name=p.full_name,
+                name=p.full_name,
+                roll_no=p.roll_no,
+                roll_number=p.roll_no,
+                branch=p.branch,
+                department=p.department,
+                designation=p.notes or p.department,
+                mobile=display_mobile,
+                email=p.email,
+                notes=p.notes,
+                created_at=p.created_at,
+            )
+        )
+    return out
+
+
+@router.post("/{club_id}/people", response_model=PersonOut, status_code=status.HTTP_201_CREATED)
+def create_person(
+    payload: PersonCreate,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Create a person with mobile encrypted at rest via ScopedRepository."""
+    person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+    encrypted_mob = encrypt_field(payload.mobile) if payload.mobile else None
+
+    person = person_repo.create(
+        full_name=payload.full_name.strip(),
+        roll_no=payload.roll_no.strip() if payload.roll_no else None,
+        branch=payload.branch.strip() if payload.branch else None,
+        department=payload.department.strip() if payload.department else None,
+        mobile=encrypted_mob,
+        email=payload.email.strip() if payload.email else None,
+        notes=payload.notes,
+    )
+
+    return PersonOut(
+        id=person.id,
+        club_id=person.club_id,
+        full_name=person.full_name,
+        roll_no=person.roll_no,
+        branch=person.branch,
+        department=person.department,
+        mobile=mask_sensitive_field(payload.mobile) if payload.mobile else None,
+        email=person.email,
+        notes=person.notes,
+        created_at=person.created_at,
+    )
+
+
+# ---------------- FIRST-RUN SETUP WIZARD (ScopedRepository) ----------------
+
+
+@router.post("/{club_id}/setup-wizard", status_code=status.HTTP_200_OK)
+def run_setup_wizard(
+    payload: SetupWizardRequest,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """First-run setup wizard: configure signatories, roles, venues, and numbering series without editing YAML."""
+    person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+    role_repo = ScopedRepository(db, RoleHeld, club_id=ctx.club.id)
+    venue_repo = ScopedRepository(db, Venue, club_id=ctx.club.id)
+    num_repo = ScopedRepository(db, NumberingSeries, club_id=ctx.club.id)
+
+    # 1. Chairman
+    chair = person_repo.create(
+        full_name=payload.chairman_name,
+        department=payload.chairman_dept,
+    )
+    role_repo.create(
+        person_id=chair.id,
+        role_key="faculty_chairman",
+        designation_label=f"Chairman ({ctx.club.short_name})",
+        academic_year=payload.academic_year,
+    )
+
+    # 2. Student Head
+    s_head = person_repo.create(
+        full_name=payload.student_head_name,
+        roll_no=payload.student_head_roll,
+        branch=payload.student_head_branch,
+        mobile=encrypt_field(payload.student_head_mobile) if payload.student_head_mobile else None,
+    )
+    role_repo.create(
+        person_id=s_head.id,
+        role_key="student_head",
+        designation_label=f"Student Head ({ctx.club.short_name})",
+        academic_year=payload.academic_year,
+    )
+
+    # 3. Student Secretary
+    s_sec = person_repo.create(
+        full_name=payload.student_secretary_name,
+        roll_no=payload.student_secretary_roll,
+        branch=payload.student_secretary_branch,
+    )
+    role_repo.create(
+        person_id=s_sec.id,
+        role_key="student_secretary",
+        designation_label=f"Secretary ({ctx.club.short_name})",
+        academic_year=payload.academic_year,
+    )
+
+    # 4. Faculty Co-Chairman (if supplied)
+    if payload.faculty_co_chairman_name:
+        co_chair = person_repo.create(full_name=payload.faculty_co_chairman_name)
+        role_repo.create(
+            person_id=co_chair.id,
+            role_key="faculty_co_chairman",
+            designation_label=f"Co-Chairman ({ctx.club.short_name})",
+            academic_year=payload.academic_year,
+        )
+
+    # 5. Venues
+    for vname in payload.venues:
+        venue_repo.create(
+            name=vname,
+            addressee_default=f"The Head of Department, {payload.chairman_dept}",
+        )
+
+    # 6. Numbering Series (ROOM, MOM, EVENT)
+    cs = ctx.club.short_name
+    ay = payload.academic_year
+    num_repo.create(
+        key="ROOM",
+        format=f"{cs}/{ay}/ROOM/{{seq:03d}}",
+        academic_year=ay,
+        last_seq=0,
+    )
+    num_repo.create(
+        key="MOM",
+        format=f"{cs}/{ay}/MOM/{{seq:03d}}",
+        academic_year=ay,
+        last_seq=0,
+    )
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="setup_wizard_completed",
+        entity_type="club",
+        entity_id=ctx.club.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"academic_year": payload.academic_year, "venues_count": len(payload.venues)},
+        ip=client_ip,
+    )
+
+    return {"message": "Club setup completed successfully. All signatories, roles, venues, and numbering initialized."}
+
+
+# ---------------- NUMBERING RESERVATIONS (ATOMIC CONCURRENCY SAFE) ----------------
+
+
+class ReserveNumberRequest(BaseModel):
+    template_id: Optional[str] = None
+    event_code: Optional[str] = None
+
+
+class ReserveNumberResponse(BaseModel):
+    reservation_id: str
+    ref_no: str
+    series_key: str
+    academic_year: str
+    expires_at: datetime
+
+
+@router.post("/{club_id}/numbering/{series_key}/reserve", response_model=ReserveNumberResponse)
+def reserve_reference_number(
+    club_id: str,
+    series_key: str,
+    payload: Optional[ReserveNumberRequest] = None,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Atomically allocate and reserve the next reference number for a series and academic year.
+    
+    Academic year is strictly taken from club settings, never hardcoded.
+    """
+    from docgen.schema import load_schema
+    from server.app.api.v1.documents import allocate_next_sequence
+
+    academic_year = ctx.club.academic_year_default or (ctx.club.settings or {}).get("academic_year") or "2026-27"
+    short_year = academic_year.split("-")[-1] if "-" in academic_year else academic_year[-2:]
+    club_prefix = ctx.club.short_name or ctx.club.slug.upper()
+
+    format_pattern = None
+    if payload and payload.template_id:
+        try:
+            tmpl_schema = load_schema(payload.template_id)
+            if tmpl_schema.numbering and tmpl_schema.numbering.format:
+                format_pattern = tmpl_schema.numbering.format
+        except Exception:
+            pass
+
+    # Atomically allocate sequence number using DB lock/atomic returning
+    seq = allocate_next_sequence(
+        db=db,
+        club_id=ctx.club.id,
+        series_key=series_key,
+        academic_year=academic_year,
+        club_code=club_prefix,
+        format_pattern=format_pattern,
+    )
+
+    series_repo = ScopedRepository(db, NumberingSeries, club_id=ctx.club.id)
+    ns = series_repo.find_first(
+        NumberingSeries.key == series_key,
+        NumberingSeries.academic_year == academic_year,
+    )
+    fmt = ns.format if (ns and ns.format) else (format_pattern or f"{club_prefix}/{{academic_year}}/{{series}}/{{seq:03d}}")
+    event_code_val = (payload.event_code if payload and payload.event_code else series_key)
+    ref_no = fmt.format(
+        academic_year=academic_year,
+        short_year=short_year,
+        series=series_key,
+        event_code=event_code_val,
+        seq=seq,
+    )
+
+    now = datetime.utcnow()
+    expires = now + timedelta(minutes=30)
+    reservation = NumberReservation(
+        id=str(uuid.uuid4()),
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        series_key=series_key,
+        academic_year=academic_year,
+        sequence_num=seq,
+        ref_no=ref_no,
+        expires_at=expires,
+        status="reserved",
+    )
+    db.add(reservation)
+    db.commit()
+    db.refresh(reservation)
+
+    return ReserveNumberResponse(
+        reservation_id=reservation.id,
+        ref_no=reservation.ref_no,
+        series_key=reservation.series_key,
+        academic_year=reservation.academic_year,
+        expires_at=reservation.expires_at,
+    )
+
+
+# ---------------- AUDIT LOG ENDPOINTS (ScopedRepository) ----------------
 
 
 @router.get("/{club_id}/audit-log", response_model=list[AuditLogOut])
@@ -444,13 +752,6 @@ def get_club_audit_log(
     ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    """View audit trail for this club (accessible to admin and owner)."""
-    logs = (
-        db.query(AuditLog)
-        .filter(AuditLog.club_id == ctx.club.id)
-        .order_by(AuditLog.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return logs
+    """View audit trail strictly via ScopedRepository."""
+    audit_repo = ScopedRepository(db, AuditLog, club_id=ctx.club.id)
+    return audit_repo.list(skip=skip, limit=limit, order_by=AuditLog.created_at.desc())

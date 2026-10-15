@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clubdocs-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: clubdocs_user
+      POSTGRES_PASSWORD: clubdocs_password
+      POSTGRES_DB: clubdocs
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clubdocs_user -d clubdocs"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

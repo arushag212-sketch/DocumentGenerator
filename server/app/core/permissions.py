@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
-from fastapi import Cookie, Depends, Header, HTTPException, Path, status
+from typing import Optional
+from fastapi import Cookie, Depends, Header, HTTPException, Path, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from server.app.core.database import get_db
+from server.app.core.scoped_repo import ScopedRepository
 from server.app.core.security import decode_access_token
 from server.app.models import Club, Membership, User
 
@@ -30,7 +31,7 @@ ROLE_RANKS = {
 
 
 class ClubContext:
-    """Context holding the authenticated user, resolved club, and effective role."""
+    """Context holding the authenticated user, resolved club, effective role, and scoped repository."""
 
     def __init__(self, user: User, club: Club, role: str, membership: Optional[Membership] = None):
         self.user = user
@@ -56,17 +57,34 @@ class ClubContext:
 
 
 def get_token_from_request(
+    request: Request,
     bearer: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
     token_cookie: Optional[str] = Cookie(default=None, alias="access_token"),
     auth_header: Optional[str] = Header(default=None, alias="Authorization"),
+    csrf_header: Optional[str] = Header(default=None, alias="X-CSRF-Token"),
+    csrf_cookie: Optional[str] = Cookie(default=None, alias="csrf_token"),
 ) -> str:
-    """Extract JWT token from Bearer header or cookie."""
+    """Extract and validate JWT token from Bearer header or cookie with CSRF enforcement."""
+    # 1. Bearer header authentication (CLI / SDK / automated testing)
     if bearer and bearer.credentials:
         return bearer.credentials
     if auth_header and auth_header.startswith("Bearer "):
         return auth_header.split(" ", 1)[1]
+
+    # 2. Cookie authentication (Browser context)
     if token_cookie:
+        # Enforce CSRF protection for state-changing requests when using cookie auth
+        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+            if not csrf_header or not csrf_cookie or csrf_header != csrf_cookie:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "CSRF_ERROR",
+                        "message": "CSRF token validation failed. Missing or mismatched X-CSRF-Token header.",
+                    },
+                )
         return token_cookie
+
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail={"code": "UNAUTHORIZED", "message": "Missing authentication credentials"},
@@ -78,7 +96,7 @@ def get_current_user(
     token: str = Depends(get_token_from_request),
     db: Session = Depends(get_db),
 ) -> User:
-    """Authenticate current user from JWT token."""
+    """Authenticate current user from JWT token and verify server-side session validity."""
     payload = decode_access_token(token)
     if not payload or "sub" not in payload:
         raise HTTPException(
@@ -86,6 +104,7 @@ def get_current_user(
             detail={"code": "INVALID_TOKEN", "message": "Invalid or expired token"},
             headers={"WWW-Authenticate": "Bearer"},
         )
+
     user_id = payload["sub"]
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -98,6 +117,19 @@ def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "USER_DISABLED", "message": "Account has been deactivated"},
         )
+
+    # Server-side session verification: token_version must match user.token_version
+    token_version = payload.get("token_version")
+    if token_version is not None and token_version != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "SESSION_REVOKED",
+                "message": "Session has been invalidated. Please sign in again.",
+            },
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user
 
 
@@ -133,15 +165,11 @@ def require_club_access(min_role: str = Role.VIEWER):
         if current_user.is_platform_admin:
             return ClubContext(user=current_user, club=club, role=Role.OWNER, membership=None)
 
-        # Lookup membership
-        membership = (
-            db.query(Membership)
-            .filter(
-                Membership.user_id == current_user.id,
-                Membership.club_id == club_id,
-                Membership.status == "active",
-            )
-            .first()
+        # Lookup membership strictly through ScopedRepository
+        membership_repo = ScopedRepository(db, Membership, club_id=club_id)
+        membership = membership_repo.find_first(
+            Membership.user_id == current_user.id,
+            Membership.status == "active",
         )
 
         if not membership:

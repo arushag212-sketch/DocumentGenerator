@@ -133,7 +133,7 @@ def main():
         "bill_items": [{"name": i.name, "qty": i.qty, "unit_cost": fn_format_inr(i.unit_cost), "line_total": fn_format_inr(i.qty * i.unit_cost)} for i in b1.items],
         "tax_type": b1.tax_type,
         "tax_amount": fn_format_inr(b1.tax_rate_or_amount),
-        "certifier_name": "Ansh Gupta",
+        "certifier_name": "Demo Student Head",
         "payment_party": b1.payment.party,
         "payment_account_no": b1.payment.account_no,
         "payment_holder": b1.payment.holder,

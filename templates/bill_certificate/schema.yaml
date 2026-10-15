@@ -55,12 +55,30 @@ fields:
     ask: "Items purchased (name, qty, unit cost)?"
   - key: tax_type
     type: text
-    required: false
+    required: true
     ask: "Tax type (GST, etc.)?"
   - key: tax_amount
     type: money
-    required: false
+    required: true
     ask: "Tax amount?"
+  - key: purchase_order
+    type: text
+    required: true
+    ask: "Purchase Order No. and date?"
+    default_from: "config.defaults.purchase_order"
+    defer_ok: true
+  - key: advance
+    type: text
+    required: true
+    ask: "Advance drawn in Rs. (if any)?"
+    default_from: "config.defaults.advance"
+    defer_ok: true
+  - key: laboratory_office
+    type: text
+    required: true
+    ask: "Name of the Laboratory / Office?"
+    default_from: "config.defaults.laboratory_office"
+    defer_ok: true
   - key: certifier_name
     type: text
     required: true

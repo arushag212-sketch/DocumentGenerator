@@ -58,29 +58,29 @@ def test_rule2_global_guard_against_none_and_empty_required_fields():
 
 
 def test_rule3_seeded_real_names_and_placeholders():
-    """Verify seeded club_config.yaml contains real signatories and empty mobiles/bank."""
+    """Verify seeded club_config.yaml contains dummy signatories and empty mobiles/bank."""
     config = load_config()
-    assert config.chairperson.name == "Ansh Gupta"
-    assert config.chairperson.admission_no == "I24AI005"
+    assert config.chairperson.name == "Demo Student Head"
+    assert config.chairperson.admission_no == "DEMO-001"
     assert config.chairperson.branch == "Artificial Intelligence"
     assert config.chairperson.mobile == ""  # Placeholder blank
 
-    assert config.student_secretary.name == "Arshad Khatib"
-    assert config.student_secretary.admission_no == "U24AI112"
+    assert config.student_secretary.name == "Demo Student Secretary"
+    assert config.student_secretary.admission_no == "DEMO-002"
 
-    assert config.faculty_chairman.name == "Dr. Sankita Patel"
-    assert config.faculty_co_chairman.name == "Dr. Balu Parne"
+    assert config.faculty_chairman.name == "Demo Faculty Chairman"
+    assert config.faculty_co_chairman.name == "Demo Faculty Co-Chairman"
 
     # Venue officials
     venue = config.get_venue("Seminar Hall 402")
     assert venue is not None
-    assert venue.tech_assistant.name == "Sunny Bodiwala"
-    assert venue.faculty_in_charge.name == "Shri Rakesh P. Gohil"
+    assert venue.tech_assistant.name == "Demo Tech Assistant"
+    assert venue.faculty_in_charge.name == "Demo Faculty In-charge"
 
     # Approval chain
-    assert any("Rakesh Maurya" in step for step in config.approval_chain)
-    assert any("Manish K Rathod" in step for step in config.approval_chain)
-    assert any("Sanjay R. Patel" in step for step in config.approval_chain)
+    assert any("Chairman F&SW" in step for step in config.approval_chain)
+    assert any("Associate Dean SW" in step for step in config.approval_chain)
+    assert any("Dean SW" in step for step in config.approval_chain)
 
 
 def test_rule4_description_and_objectives_drafted_separately():
@@ -180,7 +180,7 @@ def test_rule8_bill_certificate_pulls_approval_note_details():
         "invoice_no": "INV-091",
         "invoice_date": "2026-09-12",
         "bill_items": [{"name": "Banner", "qty": 1, "unit_cost": "800", "line_total": "800"}],
-        "certifier_name": "Ansh Gupta",
+        "certifier_name": "Demo Student Head",
         "payment_party": "Test Supplier",
         "payment_account_no": "50200012345678",
         "payment_holder": "Test Supplier",

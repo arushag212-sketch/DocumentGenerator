@@ -187,12 +187,14 @@ def build_club_config_from_db(db_session: Any, club_slug: str) -> ClubConfig:
         numbering_map[n.key] = NumberingConfig(last_used=n.last_seq)
 
     # Defaults and settings from club
-    defaults = club.settings.get("defaults", {
+    std_defaults = {
         "purchase_order": "NiL",
         "advance": "NiL",
         "laboratory_office": "Student Council",
         "mode": "Offline",
-    })
+    }
+    club_defaults = club.settings.get("defaults", {})
+    defaults = {**std_defaults, **club_defaults}
 
     approval_chain = club.settings.get("approval_chain", [
         "Dr. Rakesh Maurya\nChairman F&SW",

@@ -135,7 +135,7 @@ def test_item4_bill_certificate_single_invoice_and_date_format(rendered_sih_pdfs
     assert "INV/TEST/001" in text_cert
     # Approval note date from approval_note.date formatted as DD/MM/YYYY
     assert "08/09/2026" in text_cert, "Approval Note date 08/09/2026 missing from Bill Certificate PDF!"
-    assert "Ansh Gupta" in text_cert, "Certifier name missing from Bill Certificate PDF!"
+    assert "Demo Student Head" in text_cert, "Certifier name missing from Bill Certificate PDF!"
 
     # Step 0 Requirement 2: If user has not supplied certifier_name, render a blank underline
     renderer = Renderer(config=load_config(), outputs_dir="outputs/test_blank_cert")
@@ -277,7 +277,7 @@ def test_item9_sih_fixture_mirroring_sample():
     assert event.venue.value == "CSE Department"
     assert event.target_audience.value == "All year Student"
     assert event.expected_participants.value == "1000+"
-    assert event.judges.value == ["Dr. Alok Kumar"]
+    assert event.judges.value == ["Demo Guest Judge"]
     assert event.approval_note.date == "08/09/2026"
     assert event.bills[0].supplier.name == "TEST VENDOR PVT LTD"
     assert event.bills[0].payment.account_no == "00000000000000"

@@ -1,0 +1,50 @@
+--- Page 1 ---
+MINUTES OF MEETING
+Ref No.: ACM/26-27/MOM/001
+Date: 15/10/2026
+Meeting Title
+SIH 2026 Core Executive Committee Planning Meeting
+Date & Time
+15/10/2026, 05:00 PM - 06:30 PM
+Venue
+Seminar Hall
+Mode
+Offline
+Chaired By
+Dr. Sankita Patel
+Attendees:
+1. Dr. Sankita Patel
+2. Dr. Balu Parne
+3. Ansh Gupta
+4. Arshad Khatib
+Absentees:
+Nil
+Agenda & Discussion:
+Sr.
+Agenda Item
+Discussion
+Decision
+1
+SIH Internal Hackathon 
+Logistics & Evaluation
+Reviewed laboratory 
+bookings, power backups, and 
+mentor invitations.
+Finalized Seminar Hall for 
+hackathon schedule.
+Action Items:
+Sr.
+Task
+Owner
+Deadline
+1
+Issue formal room permission 
+letter to HoD CSE
+Ansh Gupta
+12/10/2026
+Next Meeting: 
+Prepared by:
+Ansh Gupta
+Approved by:
+Dr. Sankita Patel
+

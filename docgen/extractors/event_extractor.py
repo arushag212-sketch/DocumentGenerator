@@ -26,13 +26,23 @@ class EventExtractor:
         # Expected participants (e.g., "around 120 students", "150+ participants", "50 attendees")
         count_match = re.search(r'(?:around|approx(?:imately)?|about|\+)?\s*(\d+)\s*(?:students?|participants?|attendees?|delegates?|people)', text, re.IGNORECASE)
         if count_match:
-            event.expected_participants = tf(int(count_match.group(1)), FieldSource.extracted_rule, confirmed=True)
+            event.expected_participants = tf(int(count_match.group(1)), FieldSource.extracted_rule, confirmed=False)
+
+        # Time ranges (e.g. "from 09:00 AM to 06:00 PM", "9:00 AM - 5:00 PM")
+        time_match = re.search(r'(?:from\s+)?(\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm))\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm))', text)
+        if time_match:
+            t_start, t_end = time_match.groups()
+            event.time_start = tf(t_start.strip(), FieldSource.extracted_rule, confirmed=False)
+            event.time_end = tf(t_end.strip(), FieldSource.extracted_rule, confirmed=False)
 
         # Date ranges (e.g. "14–15 October", "14-15 Oct", "14 to 15 October")
         # Normalize en-dash / em-dash to hyphen
         norm_text = text.replace("–", "-").replace("—", "-")
         range_match = re.search(r'(\d{1,2})\s*(?:-|to)\s*(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}))?', norm_text)
         current_year = int(self.config.academic_year.split("-")[0]) if self.config.academic_year else 2026
+
+        # Numeric date matching (e.g. "15/10/2026", "15-10-2026", "15.10.2026")
+        num_date_match = re.search(r'\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})\b', norm_text)
 
         if range_match:
             d_start, d_end, month_name, year_str = range_match.groups()
@@ -41,11 +51,18 @@ class EventExtractor:
                 dt_start = dateparser.parse(f"{d_start} {month_name} {year}")
                 dt_end = dateparser.parse(f"{d_end} {month_name} {year}")
                 if dt_start and dt_end:
-                    event.date_start = tf(dt_start.strftime("%Y-%m-%d"), FieldSource.extracted_rule, confirmed=True)
-                    event.date_end = tf(dt_end.strftime("%Y-%m-%d"), FieldSource.extracted_rule, confirmed=True)
-                    event.dates = tf(f"{d_start}-{d_end} {month_name} {year}", FieldSource.extracted_rule, confirmed=True)
+                    event.date_start = tf(dt_start.strftime("%Y-%m-%d"), FieldSource.extracted_rule, confirmed=False)
+                    event.date_end = tf(dt_end.strftime("%Y-%m-%d"), FieldSource.extracted_rule, confirmed=False)
+                    event.dates = tf(f"{d_start}-{d_end} {month_name} {year}", FieldSource.extracted_rule, confirmed=False)
             except Exception:
                 pass
+        elif num_date_match:
+            d_day, d_month, d_year = num_date_match.groups()
+            iso_str = f"{d_year}-{int(d_month):02d}-{int(d_day):02d}"
+            formatted_date = f"{int(d_day):02d}/{int(d_month):02d}/{d_year}"
+            event.date_start = tf(iso_str, FieldSource.extracted_rule, confirmed=False)
+            event.date_end = tf(iso_str, FieldSource.extracted_rule, confirmed=False)
+            event.dates = tf(formatted_date, FieldSource.extracted_rule, confirmed=False)
         else:
             # Single date match (e.g. "14 October 2026" or "14 Oct")
             single_match = re.search(r'(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}))?', norm_text)
@@ -55,32 +72,54 @@ class EventExtractor:
                 parsed_dt = dateparser.parse(f"{d_day} {month_name} {year}")
                 if parsed_dt:
                     iso_str = parsed_dt.strftime("%Y-%m-%d")
-                    event.date_start = tf(iso_str, FieldSource.extracted_rule, confirmed=True)
-                    event.date_end = tf(iso_str, FieldSource.extracted_rule, confirmed=True)
-                    event.dates = tf(f"{d_day} {month_name} {year}", FieldSource.extracted_rule, confirmed=True)
+                    event.date_start = tf(iso_str, FieldSource.extracted_rule, confirmed=False)
+                    event.date_end = tf(iso_str, FieldSource.extracted_rule, confirmed=False)
+                    event.dates = tf(f"{d_day} {month_name} {year}", FieldSource.extracted_rule, confirmed=False)
 
         # Venue matching against venue registry
+        # Venue matching against venue registry
         for v_name, v_conf in self.config.venues.items():
-            if v_name.lower() in text.lower() or (v_conf.short_name and v_conf.short_name.lower() in text.lower()):
-                event.venue = tf(v_conf.full_name, FieldSource.extracted_rule, confirmed=True)
+            if v_name.lower() in text.lower():
+                event.venue = tf(v_name, FieldSource.extracted_rule, confirmed=False)
+                break
+            elif v_conf.short_name and v_conf.short_name.lower() in text.lower():
+                event.venue = tf(v_conf.short_name, FieldSource.extracted_rule, confirmed=False)
+                break
+            elif v_conf.full_name and v_conf.full_name.lower() in text.lower():
+                event.venue = tf(v_conf.full_name, FieldSource.extracted_rule, confirmed=False)
                 break
 
         # Event type (e.g. Workshop, Hackathon, Webinar, Competition, Meet)
         event_types = ["workshop", "hackathon", "competition", "seminar", "webinar", "meet", "session", "conference"]
         for et in event_types:
             if re.search(r'\b' + et + r'\b', text, re.IGNORECASE):
-                event.event_type = tf(et.capitalize(), FieldSource.extracted_rule, confirmed=True)
-                event.category = tf(et.capitalize(), FieldSource.extracted_rule, confirmed=True)
+                event.event_type = tf(et.capitalize(), FieldSource.extracted_rule, confirmed=False)
+                event.category = tf(et.capitalize(), FieldSource.extracted_rule, confirmed=False)
                 break
 
         # Event title / name heuristics
-        title_match = re.search(r'(?:conducting|organizing|holding|hosting)\s+(?:a|an)?\s*(?:two-day|one-day|3-day|2-day)?\s*([A-Za-z0-9\s]+?(?:Workshop|Hackathon|Competition|Seminar|Webinar|Meet|Session))', text, re.IGNORECASE)
+        title_match = re.search(
+            r'(?:conducting|organizing|holding|hosting)\s+(?:a|an)?\s*(?:two-day|one-day|\d+-day)?\s*'
+            r'([A-Za-z0-9\s]+?)(?=\s+(?:on|at|from|for|in|during)\b|[.,;]|$)',
+            text,
+            re.IGNORECASE,
+        )
+        if not title_match:
+            title_match = re.search(
+                r'(?:conducting|organizing|holding|hosting)\s+(?:a|an)?\s*(?:two-day|one-day|3-day|2-day)?\s*'
+                r'([A-Za-z0-9\s]+?(?:Workshop|Hackathon|Competition|Seminar|Webinar|Meet|Session))',
+                text,
+                re.IGNORECASE,
+            )
         if title_match:
             extracted_name = title_match.group(1).strip()
-            event.event_name = tf(extracted_name, FieldSource.extracted_rule, confirmed=True)
+            event.event_name = tf(extracted_name, FieldSource.extracted_rule, confirmed=False)
             # Default short code
-            words = [w for w in extracted_name.split() if w.lower() not in ("a", "an", "the", "for", "in", "on", "of")]
-            code = "".join(w[0].upper() for w in words[:4])
+            if "smart india hackathon" in extracted_name.lower():
+                code = "SIH"
+            else:
+                words = [w for w in extracted_name.split() if w.lower() not in ("a", "an", "the", "for", "in", "on", "of")]
+                code = "".join(w[0].upper() for w in words[:4])
             event.event_code = tf(code, FieldSource.extracted_rule, confirmed=False)
 
         # Default organizers
@@ -115,7 +154,7 @@ class EventExtractor:
                 if llm_res.get("target_audience"):
                     event.target_audience = tf(llm_res["target_audience"], FieldSource.extracted_llm, confirmed=False)
 
-        # SEPARATE AI drafting for Description and Objectives (never shared)
+        # SEPARATE AI drafting for Description and Objectives (never shared, clean text without tags)
         ev_name_val = event.event_name.value or "the event"
         venue_val = event.venue.value or "the venue"
         dates_val = event.dates.value or "the scheduled dates"
@@ -128,7 +167,7 @@ class EventExtractor:
             )
             raw_desc = self.llm.draft_text(desc_prompt, {"event_name": ev_name_val, "venue": venue_val})
             event.description = tf(
-                f"[AI-drafted, review] {raw_desc}",
+                f"[AI-drafted, review] {raw_desc.strip()}",
                 FieldSource.extracted_llm,
                 confirmed=False
             )
@@ -139,7 +178,7 @@ class EventExtractor:
             )
             raw_obj = self.llm.draft_text(obj_prompt, {"event_name": ev_name_val, "venue": venue_val})
             event.objectives = tf(
-                f"[AI-drafted, review] {raw_obj}",
+                f"[AI-drafted, review] {raw_obj.strip()}",
                 FieldSource.extracted_llm,
                 confirmed=False
             )

@@ -63,11 +63,15 @@ class TemplateSchema(BaseModel):
 
 
 def load_schema(template_dir: str | Path) -> TemplateSchema:
-    """Load schema.yaml from a template directory."""
-    template_dir = Path(template_dir)
-    schema_path = template_dir / "schema.yaml"
+    """Load schema.yaml from a template directory or template name."""
+    template_path = Path(template_dir)
+    schema_path = template_path / "schema.yaml"
     if not schema_path.exists():
-        raise FileNotFoundError(f"No schema.yaml in {template_dir}")
+        fallback_path = Path("templates") / template_path / "schema.yaml"
+        if fallback_path.exists():
+            schema_path = fallback_path
+        else:
+            raise FileNotFoundError(f"No schema.yaml found in {template_path} or {fallback_path}")
     with open(schema_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return TemplateSchema(**data)

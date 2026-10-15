@@ -157,7 +157,7 @@ class Renderer:
         # Unpack approval note properties if available in event
         if isinstance(ctx.get("approval_note"), dict):
             if not ctx.get("approval_note_no"):
-                ctx["approval_note_no"] = ctx["approval_note"].get("no")
+                ctx["approval_note_no"] = ctx["approval_note"].get("ref_no") or ctx["approval_note"].get("no")
             if not ctx.get("approval_note_date"):
                 ctx["approval_note_date"] = ctx["approval_note"].get("date")
 
@@ -196,6 +196,37 @@ class Renderer:
                     ctx["tax_amount"] = first_bill.get("tax_rate_or_amount") or first_bill.get("tax_amount")
                 if not ctx.get("ref_no"):
                     ctx["ref_no"] = first_bill.get("invoice_no")
+
+        # Unpack first winner if rendering prize_money_receipt and winners exist in event
+        if schema.id == "prize_money_receipt" and ctx.get("winners") and isinstance(ctx["winners"], list) and len(ctx["winners"]) > 0:
+            first_w = ctx["winners"][0]
+            if isinstance(first_w, dict):
+                if not ctx.get("winner_name"):
+                    ctx["winner_name"] = first_w.get("name")
+                if not ctx.get("winner_position"):
+                    ctx["winner_position"] = first_w.get("position")
+                if not ctx.get("winner_amount"):
+                    ctx["winner_amount"] = first_w.get("amount")
+                if not ctx.get("winner_roll_no"):
+                    ctx["winner_roll_no"] = first_w.get("roll_no")
+                if not ctx.get("winner_course_semester"):
+                    ctx["winner_course_semester"] = first_w.get("course_semester")
+                if not ctx.get("winner_mobile"):
+                    ctx["winner_mobile"] = first_w.get("mobile")
+                bank_info = first_w.get("bank")
+                if isinstance(bank_info, dict):
+                    if not ctx.get("winner_bank_name_as_per_bank"):
+                        ctx["winner_bank_name_as_per_bank"] = bank_info.get("name_as_per_bank")
+                    if not ctx.get("winner_bank_name"):
+                        ctx["winner_bank_name"] = bank_info.get("bank_name")
+                    if not ctx.get("winner_bank_branch"):
+                        ctx["winner_bank_branch"] = bank_info.get("branch")
+                    if not ctx.get("winner_account_no"):
+                        ctx["winner_account_no"] = bank_info.get("account_no")
+                    if not ctx.get("winner_ifsc"):
+                        ctx["winner_ifsc"] = bank_info.get("ifsc")
+                    if not ctx.get("winner_pan"):
+                        ctx["winner_pan"] = bank_info.get("pan")
 
         # Unpack meeting block if rendering mom and meeting exists in event
         if schema.id == "mom":
@@ -261,7 +292,10 @@ class Renderer:
                 parts = field.default_from.split(".")
                 val: Any = self.config
                 for part in parts[1:]:  # skip 'config'
-                    val = getattr(val, part, None) if hasattr(val, part) else None
+                    if isinstance(val, dict):
+                        val = val.get(part)
+                    else:
+                        val = getattr(val, part, None) if hasattr(val, part) else None
                 if val is not None:
                     ctx[field.key] = val
 
@@ -333,6 +367,29 @@ class Renderer:
         elif ctx.get("dates"):
             ctx["date_range_str"] = fn_format_date(str(ctx["dates"]))
 
+        # Permission Letter Schedule & Description Formatting per official institutional sample
+        if schema.id == "permission_letter":
+            t_start = ctx.get("time_start")
+            t_end = ctx.get("time_end")
+            d_range = ctx.get("date_range_str", "")
+            if t_start and t_end and d_range:
+                if " to " not in d_range:
+                    ctx["date_range_str"] = f"{d_range}, {t_start} to {t_end}"
+
+            # Brief Description includes the reusable clause from sample:
+            # "We request permission to use {venue} on {date} from {start} to {end} for conducting the {event}."
+            desc_val = str(ctx.get("description", "") or "").strip()
+            if "We request permission to use" not in desc_val:
+                venue_val = ctx.get("venue", "the venue")
+                evt_val = ctx.get("event_name", "the event")
+                date_val = fn_format_date(ctx.get("date_start") or ctx.get("dates") or ctx.get("document_date"))
+                time_clause = f"from {t_start} to {t_end}" if (t_start and t_end) else ""
+                clause = f"We request permission to use {venue_val} on {date_val} {time_clause} for conducting the {evt_val}.".replace("  ", " ")
+                if desc_val:
+                    ctx["description"] = f"{desc_val}\n\n{clause}"
+                else:
+                    ctx["description"] = clause
+
         # Formatted date for document header (always default to today, standardized to DD/MM/YYYY)
         raw_doc_date = ctx.get("document_date")
         if not raw_doc_date:
@@ -354,13 +411,13 @@ class Renderer:
         if schema.id == "bill_certificate":
             money_keys.update({"bill_total", "tax_amount", "bill_total_with_tax", "bill_amount", "unit_cost", "line_total"})
         elif schema.id == "bill_summary":
-            money_keys.update({"prize_total", "other_total", "grand_total"})
+            money_keys.update({"prize_total", "other_total", "grand_total", "amount"})
 
         # Convert Decimal values (format strictly as INR if field is in money_keys, otherwise keep plain numeric string)
         ctx = self._convert_decimals(ctx, money_keys)
 
-        # GLOBAL GUARD (Extended per Requirement 2):
-        # 1. Any context value that is callable, a function/method repr, or contains "<function", "<bound", "object at 0x" must raise.
+        # GLOBAL GUARD (Extended per Requirement 2 & W3.1):
+        # 1. Any context value that is callable, a function/method repr, or contains "<function", "<bound", "object at 0x", "[AI-drafted" must raise.
         # 2. Any required field that is None or resolves to empty must raise.
         # 3. Any computed field that resolves to empty must raise.
         self._validate_rendered_context(ctx, schema)
@@ -376,10 +433,11 @@ class Renderer:
                     f"Computed fields must be evaluated to data, not passed as functions."
                 )
             s_val = str(val)
-            for bad_token in ["<function", "<bound", "object at 0x"]:
+            for bad_token in ["<function", "<bound", "object at 0x", "[AI-drafted"]:
                 if bad_token in s_val:
+                    token_desc = "function repr" if bad_token in ("<function", "<bound", "object at 0x") else "illegal token"
                     raise ValueError(
-                        f"Global guard violation: Context variable '{key_name}' in template '{schema.id}' contains function repr '{bad_token}': {s_val}"
+                        f"Global guard violation: Context variable '{key_name}' in template '{schema.id}' contains {token_desc} '{bad_token}': {s_val}"
                     )
 
         # Recursively check all context values for callable or function representations

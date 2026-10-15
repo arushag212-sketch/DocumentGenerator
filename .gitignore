@@ -3,6 +3,11 @@ config/club_config.yaml
 *.env
 .env
 data/*.db
+storage/
+outputs/
+sample docs/
+node_modules/
+dist/
 
 # Python
 __pycache__/

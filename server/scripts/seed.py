@@ -17,10 +17,12 @@ from pathlib import Path
 
 import yaml
 from server.app.core.database import SessionLocal, engine, Base
+from server.app.core.security import get_password_hash
 from server.app.models import (
     Asset,
     Club,
     Letterhead,
+    Membership,
     NumberingSeries,
     Person,
     RoleHeld,
@@ -225,6 +227,107 @@ def seed():
         db.flush()
     print(f"-> Seeded demo club: {club.name} ({club.slug})")
 
+    # 5.1 Seed Demo Users and Memberships
+    demo_owner = db.query(User).filter(User.email == "demo.owner@svnit.ac.in").first()
+    if not demo_owner:
+        demo_owner = User(
+            email="demo.owner@svnit.ac.in",
+            password_hash=get_password_hash("DemoOwnerPass123!"),
+            name="Demo Club Head",
+            is_platform_admin=False,
+        )
+        db.add(demo_owner)
+        db.flush()
+    else:
+        demo_owner.password_hash = get_password_hash("DemoOwnerPass123!")
+        demo_owner.name = "Demo Club Head"
+        demo_owner.failed_login_attempts = 0
+        demo_owner.locked_until = None
+        db.flush()
+
+    m_owner = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == demo_owner.id).first()
+    if not m_owner:
+        m_owner = Membership(
+            club_id=club.id,
+            user_id=demo_owner.id,
+            role="owner",
+            status="active",
+        )
+        db.add(m_owner)
+        db.flush()
+
+    demo_lead = db.query(User).filter(User.email == "demo.lead@example.com").first()
+    if not demo_lead:
+        demo_lead = User(
+            email="demo.lead@example.com",
+            password_hash=get_password_hash("DemoSecurePass123!"),
+            name="Demo Student Head",
+            is_platform_admin=True,
+        )
+        db.add(demo_lead)
+        db.flush()
+    else:
+        demo_lead.password_hash = get_password_hash("DemoSecurePass123!")
+        demo_lead.is_platform_admin = True
+        demo_lead.failed_login_attempts = 0
+        demo_lead.locked_until = None
+        db.flush()
+
+    m_lead = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == demo_lead.id).first()
+    if not m_lead:
+        m_lead = Membership(
+            club_id=club.id,
+            user_id=demo_lead.id,
+            role="owner",
+            status="active",
+        )
+        db.add(m_lead)
+        db.flush()
+
+    # Additional sample members so members count is realistic
+    sec_user = db.query(User).filter(User.email == "secretary@svnit.ac.in").first()
+    if not sec_user:
+        sec_user = User(
+            email="secretary@svnit.ac.in",
+            password_hash=get_password_hash("SecretaryPass123!"),
+            name="Demo Student Secretary",
+            is_platform_admin=False,
+        )
+        db.add(sec_user)
+        db.flush()
+    m_sec = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == sec_user.id).first()
+    if not m_sec:
+        m_sec = Membership(
+            club_id=club.id,
+            user_id=sec_user.id,
+            role="editor",
+            status="active",
+        )
+        db.add(m_sec)
+        db.flush()
+
+    tres_user = db.query(User).filter(User.email == "treasurer@svnit.ac.in").first()
+    if not tres_user:
+        tres_user = User(
+            email="treasurer@svnit.ac.in",
+            password_hash=get_password_hash("TreasurerPass123!"),
+            name="Demo Student Treasurer",
+            is_platform_admin=False,
+        )
+        db.add(tres_user)
+        db.flush()
+    m_tres = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == tres_user.id).first()
+    if not m_tres:
+        m_tres = Membership(
+            club_id=club.id,
+            user_id=tres_user.id,
+            role="treasurer",
+            status="active",
+        )
+        db.add(m_tres)
+        db.flush()
+    print("-> Seeded demo users and active memberships for ACM")
+
     # 6. Seed People & Roles for ACM
     people_map: dict[str, Person] = {}
 
@@ -326,20 +429,52 @@ def seed():
             NumberingSeries.academic_year == "2026-27"
         ).first()
         if not ns:
+            if n_key == "ROOM":
+                fmt = "ACM/2026-27/ROOM/{seq:03d}"
+            elif n_key == "MOM":
+                fmt = "ACM/2026-27/MOM/{seq:03d}"
+            elif n_key in ("approval_note", "event_approval"):
+                fmt = "ACM/2026-27/{event_code}/{seq:03d}"
+            else:
+                fmt = f"ACM/2026-27/{n_key}/{{seq:03d}}"
+
             ns = NumberingSeries(
                 club_id=club.id,
                 key=n_key,
-                format=f"ACM/26-27/{n_key}/{{seq:03d}}" if n_key == "ROOM" else f"ACM/26-27/{{seq:03d}}",
+                format=fmt,
                 academic_year="2026-27",
                 last_seq=n_val.get("last_used", 0),
             )
             db.add(ns)
             db.flush()
+    
+    # Also explicitly ensure event_approval series exists using {academic_year}/{event_code}
+    evt_ns = db.query(NumberingSeries).filter(
+        NumberingSeries.club_id == club.id,
+        NumberingSeries.key == "approval_note",
+        NumberingSeries.academic_year == "2026-27"
+    ).first()
+    if not evt_ns:
+        db.add(NumberingSeries(
+            club_id=club.id,
+            key="approval_note",
+            format="ACM/2026-27/{event_code}/{seq:03d}",
+            academic_year="2026-27",
+            last_seq=0
+        ))
+        db.flush()
     print(f"-> Seeded numbering series for ACM")
 
     db.commit()
     db.close()
     print("Database seeding completed successfully!")
+    print("\n" + "=" * 72)
+    print("DEMO CREDENTIALS (DUMMY DATA):")
+    print("  Club Owner: demo.owner@svnit.ac.in  /  DemoOwnerPass123!   (Role: owner)")
+    print("  Club Lead:  demo.lead@example.com   /  DemoSecurePass123!  (Role: owner, Admin)")
+    print("  Secretary:  secretary@svnit.ac.in   /  SecretaryPass123!   (Role: editor)")
+    print("  Treasurer:  treasurer@svnit.ac.in   /  TreasurerPass123!   (Role: treasurer)")
+    print("=" * 72 + "\n")
 
 
 if __name__ == "__main__":

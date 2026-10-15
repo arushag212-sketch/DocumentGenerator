@@ -72,8 +72,8 @@ def test_w1_database_models_and_seeds(db_session):
     # Check People seeded for ACM
     people = db_session.query(Person).filter(Person.club_id == club.id).all()
     names = {p.full_name for p in people}
-    assert "Ansh Gupta" in names
-    assert "Dr. Sankita Patel" in names
+    assert "Demo Student Head" in names
+    assert "Demo Faculty Chairman" in names
 
 
 def test_w1_render_all_six_documents_from_db_data(db_session):
@@ -81,8 +81,8 @@ def test_w1_render_all_six_documents_from_db_data(db_session):
     # 1. Build ClubConfig directly from DB rows
     db_config = build_club_config_from_db(db_session, "acm")
     assert db_config.club_short == "ACM"
-    assert db_config.student_head.name == "Ansh Gupta"
-    assert db_config.faculty_chairman.name == "Dr. Sankita Patel"
+    assert db_config.student_head.name == "Demo Student Head"
+    assert db_config.faculty_chairman.name == "Demo Faculty Chairman"
     assert "Seminar Hall" in db_config.venues
 
     # 2. Build DatabaseTemplateSource directly from DB rows

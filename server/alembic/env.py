@@ -14,9 +14,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from server.app.core.database import Base
+from server.app.core.database import Base, DATABASE_URL
 import server.app.models  # noqa: F401
 target_metadata = Base.metadata
+
+if DATABASE_URL:
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

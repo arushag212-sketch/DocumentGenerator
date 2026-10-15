@@ -24,10 +24,15 @@ dependencies = [
     "passlib>=1.7.4",
     "argon2-cffi>=23.1",
     "httpx>=0.28.0",
+    "cryptography>=42.0",
 ]
 
 [project.scripts]
 docgen = "docgen.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["docgen*"]
+include = ["docgen*", "server*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

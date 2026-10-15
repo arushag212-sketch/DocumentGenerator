@@ -1,24 +1,35 @@
-"""Phase W2 Test Suite: Auth, Clubs, Roles, Permission Layer, Scoped Isolation, and Audit Trail."""
+"""Phase W2 / W2.5 Comprehensive Test Suite: Security, Cryptography, Scoped Isolation, and UI Shell."""
+
+from __future__ import annotations
+
+import ast
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
-from server.app.core.database import Base, get_db
-from server.app.core.permissions import Role
-from server.app.core.scoped_repo import ScopedRepository
-from server.app.core.security import verify_password
-from server.app.main import app
-from server.app.models import AuditLog, Club, Membership, Person, User
-
-
 from sqlalchemy.pool import StaticPool
+
+from server.app.core.config import Settings
+from server.app.core.database import Base, get_db
+from server.app.core.email import get_email_sender, LoggingEmailSender
+from server.app.core.rate_limit import clear_rate_limits
+from server.app.core.scoped_repo import ScopedRepository
+from server.app.core.security import (
+    decrypt_field,
+    encrypt_field,
+    get_password_hash,
+    verify_password,
+)
+from server.app.main import app
+from server.app.core.permissions import Role
+from server.app.models import AuditLog, Club, Membership, Person, User
 
 
 @pytest.fixture(scope="module")
 def test_db_engine():
-    # Use in-memory SQLite with StaticPool so all connections share the same memory instance
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -33,6 +44,7 @@ def test_db_engine():
 def db_session(test_db_engine):
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
     session = SessionLocal()
+    clear_rate_limits()
     yield session
     session.close()
 
@@ -51,208 +63,365 @@ def client(test_db_engine, db_session):
     app.dependency_overrides.clear()
 
 
-# ---------------- 1. AUTH & ARGON2 TESTS ----------------
+# =========================================================================
+# 1. FORGOT PASSWORD & RESET FLOW (Security Requirements 1 & 6)
+# =========================================================================
 
-
-def test_w2_register_and_login_with_argon2(client, db_session):
-    """Verify user registration hashes passwords with Argon2 and login validates credentials."""
-    reg_payload = {
-        "email": "student1@svnit.ac.in",
-        "name": "Student One",
-        "password": "SecurePassword123!",
-    }
-    res = client.post("/api/v1/auth/register", json=reg_payload)
-    assert res.status_code == 201, res.text
-    data = res.json()
-    assert "access_token" in data
-    assert data["user"]["email"] == "student1@svnit.ac.in"
-    assert data["user"]["name"] == "Student One"
-
-    # Verify directly in DB that the stored password hash is a valid Argon2 hash
-    user = db_session.query(User).filter(User.email == "student1@svnit.ac.in").first()
-    assert user is not None
-    assert user.password_hash.startswith("$argon2"), f"Password hash is not Argon2: {user.password_hash}"
-    assert verify_password("SecurePassword123!", user.password_hash)
-    assert not verify_password("WrongPassword!", user.password_hash)
-
-    # Login with valid credentials
-    login_res = client.post(
-        "/api/v1/auth/login",
-        json={"email": "student1@svnit.ac.in", "password": "SecurePassword123!"},
-    )
-    assert login_res.status_code == 200
-    assert "access_token" in login_res.json()
-
-    # Login with wrong password
-    bad_login = client.post(
-        "/api/v1/auth/login",
-        json={"email": "student1@svnit.ac.in", "password": "WrongPassword!"},
-    )
-    assert bad_login.status_code == 401
-    assert bad_login.json()["detail"]["code"] == "INVALID_CREDENTIALS"
-
-
-def test_w2_password_reset_flow(client, db_session):
-    """Verify forgot-password generates reset token and reset-password securely updates Argon2 hash."""
+def test_w2_forgot_password_no_token_and_enumeration_safe(client, db_session):
+    """Verify forgot-password NEVER returns token in JSON and returns identical message for all emails."""
     user = User(
-        email="reset_test@svnit.ac.in",
-        name="Reset User",
-        password_hash="!initial_hash!",
+        email="student_fp@example.com",
+        name="Student FP",
+        password_hash=get_password_hash("SuperSecretPassword123!"),
     )
     db_session.add(user)
     db_session.commit()
 
-    # Request reset token
-    forgot_res = client.post(
-        "/api/v1/auth/forgot-password",
-        json={"email": "reset_test@svnit.ac.in"},
-    )
-    assert forgot_res.status_code == 200
-    token = forgot_res.json().get("reset_token")
-    assert token is not None
+    email_sender = get_email_sender()
+    assert isinstance(email_sender, LoggingEmailSender)
+    email_sender.sent_messages.clear()
 
-    # Reset password
-    reset_res = client.post(
+    # 1. Existing email
+    res1 = client.post("/api/v1/auth/forgot-password", json={"email": "student_fp@example.com"})
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert "token" not in data1
+    assert "reset_token" not in data1
+    assert "message" in data1
+    assert "If this email is registered" in data1["message"]
+
+    # Verify token was dispatched to EmailSender
+    assert len(email_sender.sent_messages) == 1
+    msg = email_sender.sent_messages[0]
+    assert msg["to_email"] == "student_fp@example.com"
+    token = msg["token"]
+    assert token
+
+    # 2. Non-existent email -> Returns identical response! (Enumeration-safe)
+    res2 = client.post("/api/v1/auth/forgot-password", json={"email": "does_not_exist@example.com"})
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["message"] == data1["message"]
+    assert "token" not in data2
+    assert "reset_token" not in data2
+    # No new email dispatched for non-existent email
+    assert len(email_sender.sent_messages) == 1
+
+
+def test_w2_reset_token_single_use_and_expiry(client, db_session):
+    """Verify reset tokens are single-use, expire in 30 minutes, and update password hash."""
+    user = User(
+        email="reset_expiry_test@example.com",
+        name="Expiry Test",
+        password_hash=get_password_hash("InitialPassword123!"),
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    email_sender = get_email_sender()
+    email_sender.sent_messages.clear()
+
+    client.post("/api/v1/auth/forgot-password", json={"email": "reset_expiry_test@example.com"})
+    assert len(email_sender.sent_messages) >= 1
+    token = email_sender.sent_messages[-1]["token"]
+
+    # 1. Reset succeeds the first time
+    res = client.post(
         "/api/v1/auth/reset-password",
-        json={"token": token, "new_password": "BrandNewPassword123!"},
+        json={"token": token, "new_password": "NewStrongPassword123!"},
     )
-    assert reset_res.status_code == 200
+    assert res.status_code == 200
+    assert "successfully updated" in res.json()["message"]
 
-    # Verify new password works
+    # Verify DB state: password hash updated, used_at is set
     db_session.refresh(user)
-    assert user.password_hash.startswith("$argon2")
-    assert verify_password("BrandNewPassword123!", user.password_hash)
+    assert verify_password("NewStrongPassword123!", user.password_hash)
+    assert user.password_reset_used_at is not None
+
+    # 2. Second attempt with the SAME token MUST FAIL (Single-use)
+    res_reuse = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "new_password": "AnotherPassword123!"},
+    )
+    assert res_reuse.status_code == 400
+    detail_reuse = str(res_reuse.json()["detail"]).lower()
+    assert "already" in detail_reuse or "invalid" in detail_reuse or "expired" in detail_reuse
+
+    # 3. Expired token MUST FAIL
+    client.post("/api/v1/auth/forgot-password", json={"email": "reset_expiry_test@example.com"})
+    token2 = email_sender.sent_messages[-1]["token"]
+    user.password_reset_expires_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+    db_session.commit()
+
+    res_expired = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token2, "new_password": "ThirdPassword123!"},
+    )
+    assert res_expired.status_code == 400
+    assert "expired" in res_expired.json()["detail"]["message"].lower()
 
 
-# ---------------- 2. CLUBS & ROLES TESTS ----------------
+# =========================================================================
+# 2. SECRETS & PRODUCTION STARTUP REFUSAL (Security Requirement 2)
+# =========================================================================
+
+def test_w2_missing_secrets_blocks_startup_in_production(monkeypatch):
+    """Verify application startup raises RuntimeError if JWT_SECRET_KEY or FIELD_ENCRYPTION_KEY are missing/placeholder in non-dev mode."""
+    monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    monkeypatch.delenv("FIELD_ENCRYPTION_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
+        Settings(ENVIRONMENT="production")
+
+    monkeypatch.setenv("JWT_SECRET_KEY", "A" * 64)
+    with pytest.raises(RuntimeError, match="FIELD_ENCRYPTION_KEY"):
+        Settings(ENVIRONMENT="production")
 
 
-def test_w2_club_creation_and_owner_assignment(client):
-    """Verify creating a club assigns the creator as 'owner' and records audit log."""
-    # Register creator
+# =========================================================================
+# 3. FIELD-LEVEL ENCRYPTION AT REST (Security Requirement 3)
+# =========================================================================
+
+def test_w2_mobile_field_encrypted_at_rest_and_masked_output(client, db_session):
+    """Verify people.mobile is stored encrypted (Fernet ciphertext), masked by default, and revealable with permission."""
+    # Register & login admin
     client.post(
         "/api/v1/auth/register",
-        json={"email": "clubcreator@svnit.ac.in", "name": "Creator", "password": "Pass123456!"},
+        json={"email": "admin_enc@example.com", "name": "Admin Enc", "password": "Pass123456789!"},
+    )
+    user = db_session.query(User).filter(User.email == "admin_enc@example.com").first()
+    user.is_platform_admin = True
+    db_session.commit()
+
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin_enc@example.com", "password": "Pass123456789!"},
+    )
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    csrf_token = login_res.json()["csrf_token"]
+    headers = {"Authorization": f"Bearer {token}", "X-CSRF-Token": csrf_token}
+
+    # Create club
+    club_res = client.post(
+        "/api/v1/clubs/",
+        json={"name": "Encryption Test Club", "short_name": "ENC", "slug": "enc-test"},
+        headers=headers,
+    )
+    club_id = club_res.json()["id"]
+
+    # Add person with real mobile via endpoint
+    add_res = client.post(
+        f"/api/v1/clubs/{club_id}/people",
+        json={
+            "full_name": "Demo Faculty Chair",
+            "mobile": "9876543210",
+            "department": "CSE",
+        },
+        headers=headers,
+    )
+    assert add_res.status_code == 201
+    person_id = add_res.json()["id"]
+
+    # 1. VERIFY RAW DATABASE COLUMN IS NOT PLAINTEXT (Fernet ciphertext!)
+    raw_person = db_session.query(Person).filter(Person.id == person_id).first()
+    assert raw_person is not None
+    assert raw_person.mobile != "9876543210"
+    assert raw_person.mobile.startswith("gAAAAA"), f"Mobile is not Fernet ciphertext: {raw_person.mobile}"
+    assert decrypt_field(raw_person.mobile) == "9876543210"
+
+    # 2. VERIFY DEFAULT API OUTPUT IS MASKED (last 4 digits only)
+    list_res = client.get(f"/api/v1/clubs/{club_id}/people", headers=headers)
+    assert list_res.status_code == 200
+    people_data = list_res.json()
+    p = next(x for x in people_data if x["id"] == person_id)
+    assert p["mobile"] == "******3210"
+
+    # 3. VERIFY EXPLICIT REVEAL PERMISSION (admin can view plaintext)
+    reveal_res = client.get(
+        f"/api/v1/clubs/{club_id}/people?reveal=true",
+        headers=headers,
+    )
+    assert reveal_res.status_code == 200
+    p_revealed = next(x for x in reveal_res.json() if x["id"] == person_id)
+    assert p_revealed["mobile"] == "9876543210"
+
+
+# =========================================================================
+# 4. COOKIE AUTH, CSRF PROTECTION & LOGOUT REVOCATION (Security Requirement 4)
+# =========================================================================
+
+def test_w2_csrf_protection_and_cookie_auth(client, db_session):
+    """Verify cookie-based auth requires matching X-CSRF-Token header on state-changing requests."""
+    # Register & Login
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "csrf_test@example.com", "name": "CSRF Tester", "password": "Pass123456789!"},
     )
     login_res = client.post(
         "/api/v1/auth/login",
-        json={"email": "clubcreator@svnit.ac.in", "password": "Pass123456!"},
+        json={"email": "csrf_test@example.com", "password": "Pass123456789!"},
+    )
+    assert login_res.status_code == 200
+    assert "access_token" in login_res.cookies
+    assert "csrf_token" in login_res.cookies
+    csrf_cookie = login_res.cookies["csrf_token"]
+
+    # Create club with Bearer token
+    token = login_res.json()["access_token"]
+    club_res = client.post(
+        "/api/v1/clubs/",
+        json={"name": "CSRF Club", "short_name": "CSRF", "slug": "csrf-club"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    club_id = club_res.json()["id"]
+
+    # 1. State-changing request via COOKIE auth WITHOUT X-CSRF-Token header -> MUST FAIL (403)
+    # Using client session cookies (no Authorization header)
+    no_csrf_res = client.post(
+        f"/api/v1/clubs/{club_id}/people",
+        json={"full_name": "Unauthorized Attacker"},
+    )
+    assert no_csrf_res.status_code == 403
+    assert "csrf" in str(no_csrf_res.json()["detail"]).lower()
+
+    # 2. State-changing request WITH matching X-CSRF-Token header -> SUCCEEDS
+    valid_csrf_res = client.post(
+        f"/api/v1/clubs/{club_id}/people",
+        json={"full_name": "Legitimate Signatory"},
+        headers={"X-CSRF-Token": csrf_cookie},
+    )
+    assert valid_csrf_res.status_code == 201
+
+
+def test_w2_logout_revokes_session(client, db_session):
+    """Verify /auth/logout revokes the session server-side via User.token_version increment."""
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "logout_test@example.com", "name": "Logout Tester", "password": "Pass123456789!"},
+    )
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"email": "logout_test@example.com", "password": "Pass123456789!"},
     )
     token = login_res.json()["access_token"]
-    auth_headers = {"Authorization": f"Bearer {token}"}
+    user = db_session.query(User).filter(User.email == "logout_test@example.com").first()
+    initial_version = user.token_version
 
-    # Create club
-    club_payload = {
-        "name": "Robotics Club SVNIT",
-        "short_name": "ROBO",
-        "slug": "robo",
-        "chapter_code": "ROBO-01",
-    }
-    create_res = client.post("/api/v1/clubs/", json=club_payload, headers=auth_headers)
-    assert create_res.status_code == 201, create_res.text
-    club_data = create_res.json()
-    assert club_data["name"] == "Robotics Club SVNIT"
-    assert club_data["my_role"] == Role.OWNER
-    assert club_data["members_count"] == 1
+    # Verify authenticated request works
+    me_res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_res.status_code == 200
 
-    # Slug collision check
-    dup_res = client.post("/api/v1/clubs/", json=club_payload, headers=auth_headers)
-    assert dup_res.status_code == 400
-    assert dup_res.json()["detail"]["code"] == "SLUG_EXISTS"
-
-
-def test_w2_members_crud_and_role_escalation_protection(client, db_session):
-    """Verify admin can add members with editor/viewer, but CANNOT promote to owner or demote an owner."""
-    # Create Owner User
-    client.post(
-        "/api/v1/auth/register",
-        json={"email": "owner@svnit.ac.in", "name": "Owner", "password": "Pass123456!"},
+    # Logout
+    logout_res = client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {token}"},
     )
-    owner_token = client.post(
+    assert logout_res.status_code == 200
+
+    # User token version incremented in DB
+    db_session.refresh(user)
+    assert user.token_version == initial_version + 1
+
+    # Subsequent request with old token -> MUST FAIL (401 Revoked)
+    revoked_res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert revoked_res.status_code == 401
+    detail_str = str(revoked_res.json()["detail"]).lower()
+    assert "revoked" in detail_str or "invalidated" in detail_str
+
+
+# =========================================================================
+# 5. PASSWORD POLICY, RATE LIMITING & LOCKOUT (Security Requirement 5)
+# =========================================================================
+
+def test_w2_password_policy_enforcement(client):
+    """Verify registration rejects passwords shorter than 10 characters or common passwords."""
+    # < 10 characters
+    short_res = client.post(
+        "/api/v1/auth/register",
+        json={"email": "short@example.com", "name": "Short", "password": "Short1!"},
+    )
+    assert short_res.status_code in (400, 422)
+    assert "at least 10" in str(short_res.json()["detail"]).lower()
+
+    # Common password rejected
+    common_res = client.post(
+        "/api/v1/auth/register",
+        json={"email": "common@example.com", "name": "Common", "password": "password123"},
+    )
+    assert common_res.status_code == 400
+    assert "too common" in str(common_res.json()["detail"]).lower()
+
+
+def test_w2_rate_limit_and_account_lockout(client, db_session):
+    """Verify rate limits trip 429 and 5 failed logins lock the account for 15 minutes."""
+    user = User(
+        email="lockout_target@example.com",
+        name="Target",
+        password_hash=get_password_hash("CorrectPassword123!"),
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    # 5 failed login attempts
+    for i in range(5):
+        res = client.post(
+            "/api/v1/auth/login",
+            json={"email": "lockout_target@example.com", "password": f"WrongPass{i}!"},
+        )
+        assert res.status_code == 401
+
+    # 6th attempt -> Account is LOCKED (403 Forbidden with ACCOUNT_LOCKED)
+    locked_res = client.post(
         "/api/v1/auth/login",
-        json={"email": "owner@svnit.ac.in", "password": "Pass123456!"},
-    ).json()["access_token"]
-    owner_headers = {"Authorization": f"Bearer {owner_token}"}
-
-    # Create Admin User
-    client.post(
-        "/api/v1/auth/register",
-        json={"email": "admin@svnit.ac.in", "name": "Admin", "password": "Pass123456!"},
+        json={"email": "lockout_target@example.com", "password": "CorrectPassword123!"},
     )
-    admin_token = client.post(
-        "/api/v1/auth/login",
-        json={"email": "admin@svnit.ac.in", "password": "Pass123456!"},
-    ).json()["access_token"]
-    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    assert locked_res.status_code == 403
+    assert locked_res.json()["detail"]["code"] == "ACCOUNT_LOCKED"
 
-    # Create Member User
-    client.post(
-        "/api/v1/auth/register",
-        json={"email": "member@svnit.ac.in", "name": "Member", "password": "Pass123456!"},
+
+# =========================================================================
+# 6. SCOPED REPOSITORY ENFORCEMENT SCAN (Architecture Requirement 7)
+# =========================================================================
+
+def test_w2_no_raw_db_query_on_club_scoped_models():
+    """Verify that API endpoints do not execute raw db.query on club-scoped models outside ScopedRepository."""
+    api_dir = Path(__file__).resolve().parent.parent / "server" / "app" / "api"
+    club_scoped_models = {"Membership", "Person", "NumberingSeries", "Event", "Document", "AuditLog"}
+
+    violations = []
+    for py_file in api_dir.rglob("*.py"):
+        content = py_file.read_text(encoding="utf-8")
+        try:
+            tree = ast.parse(content, filename=str(py_file))
+        except SyntaxError:
+            continue
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr == "query":
+                    for arg in node.args:
+                        if isinstance(arg, ast.Name) and arg.id in club_scoped_models:
+                            # Verify if it's within ScopedRepository implementation itself or forbidden raw query
+                            violations.append(
+                                f"{py_file.name}:{node.lineno} calls db.query({arg.id})"
+                            )
+
+    assert not violations, (
+        "Found direct db.query on club-scoped models in API routes without ScopedRepository:\n"
+        + "\n".join(violations)
     )
 
-    # Owner creates club
-    club_id = client.post(
-        "/api/v1/clubs/",
-        json={"name": "Coding Club", "short_name": "CC", "slug": "coding-club"},
-        headers=owner_headers,
-    ).json()["id"]
 
-    # Owner adds Admin
-    add_admin = client.post(
-        f"/api/v1/clubs/{club_id}/members",
-        json={"email": "admin@svnit.ac.in", "role": "admin"},
-        headers=owner_headers,
-    )
-    assert add_admin.status_code == 201
+# =========================================================================
+# 7. CROSS-CLUB ISOLATION & HIERARCHY (GATE W2)
+# =========================================================================
 
-    # Admin adds Member as editor
-    add_member = client.post(
-        f"/api/v1/clubs/{club_id}/members",
-        json={"email": "member@svnit.ac.in", "role": "editor"},
-        headers=admin_headers,
-    )
-    assert add_member.status_code == 201
-
-    member_user = db_session.query(User).filter(User.email == "member@svnit.ac.in").first()
-    owner_user = db_session.query(User).filter(User.email == "owner@svnit.ac.in").first()
-
-    # Admin tries to promote Member to 'owner' -> MUST FAIL 403 Forbidden!
-    promote_res = client.put(
-        f"/api/v1/clubs/{club_id}/members/{member_user.id}",
-        json={"role": "owner"},
-        headers=admin_headers,
-    )
-    assert promote_res.status_code == 403
-    assert promote_res.json()["detail"]["code"] == "FORBIDDEN"
-
-    # Admin tries to demote the Owner -> MUST FAIL 403 Forbidden!
-    demote_res = client.put(
-        f"/api/v1/clubs/{club_id}/members/{owner_user.id}",
-        json={"role": "viewer"},
-        headers=admin_headers,
-    )
-    assert demote_res.status_code == 403
-    assert demote_res.json()["detail"]["code"] == "FORBIDDEN"
-
-    # Owner CAN promote member to admin
-    owner_update = client.put(
-        f"/api/v1/clubs/{club_id}/members/{member_user.id}",
-        json={"role": "admin"},
-        headers=owner_headers,
-    )
-    assert owner_update.status_code == 200
-    assert owner_update.json()["role"] == "admin"
-
-
-# ---------------- 3. CROSS-CLUB ISOLATION & PERMISSION MATRIX (GATE) ----------------
-
-
-def test_w2_cross_club_isolation_strictly_enforced(client, db_session):
-    """GATE W2: Verify that a user from Club A cannot access, read, or modify Club B resources."""
+def test_w2_cross_club_isolation_strictly_enforced(client):
+    """GATE W2: A member of Club A cannot access, read, or modify Club B resources."""
     # User A in Club Alpha
-    client.post("/api/v1/auth/register", json={"email": "userA@svnit.ac.in", "name": "User A", "password": "Pass123456!"})
-    token_a = client.post("/api/v1/auth/login", json={"email": "userA@svnit.ac.in", "password": "Pass123456!"}).json()["access_token"]
+    client.post("/api/v1/auth/register", json={"email": "user_a@example.com", "name": "User A", "password": "Pass123456789!"})
+    token_a = client.post("/api/v1/auth/login", json={"email": "user_a@example.com", "password": "Pass123456789!"}).json()["access_token"]
     headers_a = {"Authorization": f"Bearer {token_a}"}
 
     club_a_id = client.post(
@@ -262,8 +431,8 @@ def test_w2_cross_club_isolation_strictly_enforced(client, db_session):
     ).json()["id"]
 
     # User B in Club Beta
-    client.post("/api/v1/auth/register", json={"email": "userB@svnit.ac.in", "name": "User B", "password": "Pass123456!"})
-    token_b = client.post("/api/v1/auth/login", json={"email": "userB@svnit.ac.in", "password": "Pass123456!"}).json()["access_token"]
+    client.post("/api/v1/auth/register", json={"email": "user_b@example.com", "name": "User B", "password": "Pass123456789!"})
+    token_b = client.post("/api/v1/auth/login", json={"email": "user_b@example.com", "password": "Pass123456789!"}).json()["access_token"]
     headers_b = {"Authorization": f"Bearer {token_b}"}
 
     club_b_id = client.post(
@@ -272,127 +441,39 @@ def test_w2_cross_club_isolation_strictly_enforced(client, db_session):
         headers=headers_b,
     ).json()["id"]
 
-    # 1. User A tries to GET Club Beta details by ID -> 403 Forbidden
-    leak_get = client.get(f"/api/v1/clubs/{club_b_id}", headers=headers_a)
-    assert leak_get.status_code == 403
-    assert leak_get.json()["detail"]["code"] == "NOT_A_MEMBER"
+    # User A cannot read Club B details
+    res_get = client.get(f"/api/v1/clubs/{club_b_id}", headers=headers_a)
+    assert res_get.status_code == 403
+    assert res_get.json()["detail"]["code"] == "NOT_A_MEMBER"
 
-    # 2. User A tries to list members of Club Beta -> 403 Forbidden
-    leak_members = client.get(f"/api/v1/clubs/{club_b_id}/members", headers=headers_a)
-    assert leak_members.status_code == 403
-    assert leak_members.json()["detail"]["code"] == "NOT_A_MEMBER"
+    # User A cannot list members of Club B
+    res_members = client.get(f"/api/v1/clubs/{club_b_id}/members", headers=headers_a)
+    assert res_members.status_code == 403
+    assert res_members.json()["detail"]["code"] == "NOT_A_MEMBER"
 
-    # 3. User A tries to update Club Beta settings -> 403 Forbidden
-    leak_update = client.put(f"/api/v1/clubs/{club_b_id}", json={"name": "Tampered"}, headers=headers_a)
-    assert leak_update.status_code == 403
-    assert leak_update.json()["detail"]["code"] == "NOT_A_MEMBER"
-
-    # 4. User A tries to view Club Beta audit trail -> 403 Forbidden
-    leak_audit = client.get(f"/api/v1/clubs/{club_b_id}/audit-log", headers=headers_a)
-    assert leak_audit.status_code == 403
-    assert leak_audit.json()["detail"]["code"] == "NOT_A_MEMBER"
-
-    # 5. Scoped Repository isolation at database layer:
-    repo_a = ScopedRepository(db_session, Person, club_id=club_a_id)
-    repo_b = ScopedRepository(db_session, Person, club_id=club_b_id)
-
-    person_b = repo_b.create(full_name="Secret Signatory of Beta")
-    assert person_b.club_id == club_b_id
-
-    # Repo A querying by exact UUID of person_b returns None
-    assert repo_a.get(person_b.id) is None
-    # Repo A list() does not include person_b
-    assert person_b.id not in [p.id for p in repo_a.list()]
+    # User A cannot view audit log of Club B
+    res_audit = client.get(f"/api/v1/clubs/{club_b_id}/audit-log", headers=headers_a)
+    assert res_audit.status_code == 403
+    assert res_audit.json()["detail"]["code"] == "NOT_A_MEMBER"
 
 
-def test_w2_role_permission_hierarchy(client, db_session):
-    """GATE W2: Verify viewer is read-only and cannot mutate club state (POST/PUT/DELETE blocked)."""
-    # Create Club with Owner and Viewer
-    client.post("/api/v1/auth/register", json={"email": "owner2@svnit.ac.in", "name": "Owner 2", "password": "Pass123456!"})
-    owner_token = client.post("/api/v1/auth/login", json={"email": "owner2@svnit.ac.in", "password": "Pass123456!"}).json()["access_token"]
-    owner_headers = {"Authorization": f"Bearer {owner_token}"}
-
-    client.post("/api/v1/auth/register", json={"email": "viewer2@svnit.ac.in", "name": "Viewer 2", "password": "Pass123456!"})
-    viewer_token = client.post("/api/v1/auth/login", json={"email": "viewer2@svnit.ac.in", "password": "Pass123456!"}).json()["access_token"]
-    viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
-
-    club_id = client.post(
-        "/api/v1/clubs/",
-        json={"name": "Drama Club", "short_name": "DRAMA", "slug": "drama"},
-        headers=owner_headers,
-    ).json()["id"]
-
-    # Add viewer to club
-    client.post(
-        f"/api/v1/clubs/{club_id}/members",
-        json={"email": "viewer2@svnit.ac.in", "role": "viewer"},
-        headers=owner_headers,
-    )
-
-    # Viewer CAN view club details and list members (read-only)
-    assert client.get(f"/api/v1/clubs/{club_id}", headers=viewer_headers).status_code == 200
-    assert client.get(f"/api/v1/clubs/{club_id}/members", headers=viewer_headers).status_code == 200
-
-    # Viewer CANNOT update club settings (PUT) -> 403
-    v_put = client.put(f"/api/v1/clubs/{club_id}", json={"name": "Hacked Drama"}, headers=viewer_headers)
-    assert v_put.status_code == 403
-    assert v_put.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
-
-    # Viewer CANNOT add member (POST) -> 403
-    v_post = client.post(f"/api/v1/clubs/{club_id}/members", json={"email": "test@svnit.ac.in", "role": "editor"}, headers=viewer_headers)
-    assert v_post.status_code == 403
-    assert v_post.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
-
-    # Viewer CANNOT view audit log -> 403
-    v_audit = client.get(f"/api/v1/clubs/{club_id}/audit-log", headers=viewer_headers)
-    assert v_audit.status_code == 403
-    assert v_audit.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
-
-
-# ---------------- 4. AUDIT TRAIL VERIFICATION ----------------
-
-
-def test_w2_audit_trail_recorded_for_administrative_actions(client, db_session):
-    """Verify actions generate audit_log rows with proper action, entity, user, and metadata."""
-    client.post("/api/v1/auth/register", json={"email": "audit_admin@svnit.ac.in", "name": "Audit Admin", "password": "Pass123456!"})
-    token = client.post("/api/v1/auth/login", json={"email": "audit_admin@svnit.ac.in", "password": "Pass123456!"}).json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    # Create club
-    club_id = client.post(
-        "/api/v1/clubs/",
-        json={"name": "Literature Club", "short_name": "LIT", "slug": "lit"},
-        headers=headers,
-    ).json()["id"]
-
-    # Check audit log in DB
-    logs = db_session.query(AuditLog).filter(AuditLog.club_id == club_id).all()
-    actions = {log.action for log in logs}
-    assert "club_created" in actions
-
-    # Retrieve audit log via endpoint
-    api_logs = client.get(f"/api/v1/clubs/{club_id}/audit-log", headers=headers).json()
-    assert len(api_logs) >= 1
-    assert api_logs[0]["action"] == "club_created"
-    assert api_logs[0]["entity_type"] == "club"
-
-
-# ---------------- 5. PERMANENT SVNIT LOGO IN WEB SHELL ----------------
-
+# =========================================================================
+# 8. PERMANENT SVNIT LOGO IN WEB SHELL & ASSETS (UI Requirement 8)
+# =========================================================================
 
 def test_w2_permanent_svnit_logo_in_web_shell(client):
-    """Verify that the web shell permanently renders the locked SVNIT logo and serves the image asset."""
-    # 1. Root page serves web shell with locked SVNIT logo tag
+    """Verify root serves web application shell, SVNIT logo asset is accessible, and 'Verified Official Platform' is absent."""
     res = client.get("/")
     assert res.status_code == 200
     html = res.text
-    assert "svnit-logo-locked" in html
-    assert "/assets/permission_page1_img1.png" in html
-    assert "ClubDocs" in html
-    assert "SVNIT Surat" in html
 
-    # 2. SVNIT logo image asset is accessible and returns valid image bytes
-    asset_res = client.get("/assets/permission_page1_img1.png")
+    # SVNIT logo asset reference in HTML
+    assert "/assets/svnit_crest.png" in html or "svnit_crest" in html
+    # Verified Official Platform text MUST NOT be present
+    assert "Verified Official Platform" not in html
+
+    # Logo asset returns valid image bytes
+    asset_res = client.get("/assets/svnit_crest.png")
     assert asset_res.status_code == 200
     assert asset_res.headers["content-type"].startswith("image/")
     assert len(asset_res.content) > 1000

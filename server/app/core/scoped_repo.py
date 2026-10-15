@@ -27,6 +27,14 @@ class ScopedRepository(Generic[T]):
         )
         return self.db.scalars(stmt).first()
 
+    def find_first(self, *filters: Any) -> Optional[T]:
+        """Find the first entity matching the given filters, strictly scoped to club_id."""
+        stmt = select(self.model_cls).where(
+            self.model_cls.club_id == self.club_id,  # type: ignore[attr-defined]
+            *filters,
+        )
+        return self.db.scalars(stmt).first()
+
     def list(
         self,
         skip: int = 0,
@@ -49,15 +57,23 @@ class ScopedRepository(Generic[T]):
         stmt = stmt.offset(skip).limit(limit)
         return list(self.db.scalars(stmt).all())
 
-    def count(self, filters: Optional[list[Any]] = None) -> int:
+    def all(self, *filters: Any) -> list[T]:
+        """Return all matching entities scoped to this club_id."""
+        stmt = select(self.model_cls).where(
+            self.model_cls.club_id == self.club_id,  # type: ignore[attr-defined]
+            *filters,
+        )
+        if hasattr(self.model_cls, "created_at"):
+            stmt = stmt.order_by(self.model_cls.created_at.desc())  # type: ignore[attr-defined]
+        return list(self.db.scalars(stmt).all())
+
+    def count(self, *filters: Any) -> int:
         """Count entities strictly scoped to this club_id."""
         from sqlalchemy import func
         stmt = select(func.count(self.model_cls.id)).where(  # type: ignore[attr-defined]
-            self.model_cls.club_id == self.club_id  # type: ignore[attr-defined]
+            self.model_cls.club_id == self.club_id,  # type: ignore[attr-defined]
+            *filters,
         )
-        if filters:
-            for f in filters:
-                stmt = stmt.where(f)
         return self.db.scalar(stmt) or 0
 
     def create(self, **kwargs: Any) -> T:
@@ -91,3 +107,8 @@ class ScopedRepository(Generic[T]):
         self.db.delete(entity)
         self.db.commit()
         return True
+
+
+def get_scoped_repository(db: Session, model_cls: Type[T], club_id: str) -> ScopedRepository[T]:
+    """Factory for ScopedRepository."""
+    return ScopedRepository(db, model_cls, club_id)

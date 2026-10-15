@@ -50,6 +50,18 @@ class User(TimestampMixin, Base):
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     disabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+    # Session revocation & token versioning
+    token_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    # Password reset tracking (single-use, hashed, 30 min expiry)
+    password_reset_token_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    password_reset_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    password_reset_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Rate limiting & Lockout
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     memberships = relationship("Membership", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -218,6 +230,25 @@ class NumberingSeries(TimestampMixin, Base):
     )
 
 
+class NumberReservation(TimestampMixin, Base):
+    __tablename__ = "number_reservations"
+
+    club_id: Mapped[str] = mapped_column(String(36), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    series_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    academic_year: Mapped[str] = mapped_column(String(20), nullable=False)
+    sequence_num: Mapped[int] = mapped_column(Integer, nullable=False)
+    ref_no: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="reserved", nullable=False)  # reserved | used | released
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    document_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("club_id", "ref_no", name="uq_reservation_club_ref_no"),
+    )
+
+
 class Event(TimestampMixin, Base):
     __tablename__ = "events"
 
@@ -241,6 +272,10 @@ class Document(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)  # draft | needs_info | ready | finalized
     current_version_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     created_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("club_id", "ref_no", name="uq_document_club_ref_no"),
+    )
 
 
 class DocumentVersion(TimestampMixin, Base):

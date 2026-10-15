@@ -1,0 +1,41 @@
+--- Page 1 ---
+REF NO.: ACM/2026-27/ROOM/001
+DATE: 15/10/2026
+SUBMITTED TO: HoD(CSE Dept.)
+SUBJECT: Requesting Permission to Conduct Smart India Hackathon 2026 Internal Hackathon in 
+Seminar Hall.
+SCHEDULE OF EVENT: 15/10/2026, 09:00 AM to 06:00 PM
+ABOUT THE EVENT
+Brief Description
+Internal hackathon to shortlist top teams for the national 
+Smart India Hackathon.
+We request permission to use Seminar Hall on 
+15/10/2026 from 09:00 AM to 06:00 PM for conducting 
+the Smart India Hackathon 2026 Internal Hackathon.
+Objective
+To evaluate problem statements, test prototype feasibility, 
+and select institute teams.
+Number of Participants
+120
+Mode
+Offline
+Event Organizers
+ACM Student Chapter, SVNIT
+Name: Demo Student Head
+Designation: Chairperson , ACM
+Admission No.: DEMO-001
+Branch: Artificial Intelligence
+Mobile No.:
+Name: Demo Tech Assistant
+Designation: Tech Assistant , Seminar Hall
+Branch: Computer Science & Engineering
+Mobile No.:
+Name: Demo Faculty Chairman
+Designation: Chairman , ACM
+Department: Computer Science & Engineering
+Mobile No.:
+Name: Demo Faculty In-charge
+Designation: Faculty In-charge , Seminar Hall
+Department: Computer Science & Engineering
+Mobile No.:
+

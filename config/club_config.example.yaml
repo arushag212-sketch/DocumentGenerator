@@ -1,4 +1,4 @@
-# Club Configuration for ACM SVNIT
+# Club Configuration for Demo ACM SVNIT (DUMMY DATA ONLY)
 club_name: "ACM Student Chapter, SVNIT"
 club_short: "ACM"
 institute_name: "Sardar Vallabhbhai National Institute of Technology, Surat (SVNIT)"
@@ -26,13 +26,13 @@ letterheads:
     font: "Times New Roman"
     color: "#000000"
 
-# Office Bearers - Seeded from official sample PDFs
+# Office Bearers - Dummy Data for Privacy
 student_head:
-  name: "Ansh Gupta"
-  admission_no: "I24AI005"
+  name: "Demo Student Head"
+  admission_no: "DEMO-001"
   branch: "Artificial Intelligence"
   mobile: ""
-  email: ""
+  email: "demo.student.head@example.com"
   roles:
     permission_letter: "Chairperson , ACM"
     approval_note: "Student Head"
@@ -41,27 +41,27 @@ student_head:
     mom: "Chairperson"
 
 student_secretary:
-  name: "Arshad Khatib"
-  admission_no: "U24AI112"
+  name: "Demo Student Secretary"
+  admission_no: "DEMO-002"
   branch: "Artificial Intelligence"
   mobile: ""
-  email: ""
+  email: "demo.secretary@example.com"
   roles:
     approval_note: "Student Secretary"
     bill_summary: "Student Secretary"
 
 chairperson:
-  name: "Ansh Gupta"
-  admission_no: "I24AI005"
+  name: "Demo Student Head"
+  admission_no: "DEMO-001"
   branch: "Artificial Intelligence"
   mobile: ""
-  email: ""
+  email: "demo.student.head@example.com"
   roles:
     permission_letter: "Chairperson , ACM"
     approval_note: "Student Head"
 
 faculty_chairman:
-  name: "Dr. Sankita Patel"
+  name: "Demo Faculty Chairman"
   designation: "Chairman, ACM Student Chapter SVNIT"
   department: "Computer Science & Engineering"
   mobile: ""
@@ -72,7 +72,7 @@ faculty_chairman:
     bill_certificate: "Faculty Chairman"
 
 faculty_co_chairman:
-  name: "Dr. Balu Parne"
+  name: "Demo Faculty Co-Chairman"
   designation: "Co-Chairman, ACM Student Chapter SVNIT"
   department: "Computer Science & Engineering"
   mobile: ""
@@ -80,9 +80,9 @@ faculty_co_chairman:
     approval_note: "Faculty Co-Chairman"
 
 approval_chain:
-  - "Dr. Rakesh Maurya\nChairman F&SW"
-  - "Dr. Manish K Rathod\nAssociate Dean SW"
-  - "Dr. Sanjay R. Patel\nDean SW"
+  - "Demo Chairman F&SW\nChairman F&SW"
+  - "Demo Associate Dean SW\nAssociate Dean SW"
+  - "Demo Dean SW\nDean SW"
 
 venues:
   "Seminar Hall":
@@ -90,64 +90,22 @@ venues:
     short_name: "Seminar Hall 402"
     default_addressee: "HoD(CSE Dept.)"
     tech_assistant:
-      name: "Sunny Bodiwala"
+      name: "Demo Tech Assistant"
       admission_no: ""
       branch: "Computer Science & Engineering"
       mobile: ""
       roles:
         permission_letter: "Tech Assistant , Seminar Hall"
     faculty_in_charge:
-      name: "Shri Rakesh P. Gohil"
-      admission_no: ""
-      branch: "Computer Science & Engineering"
-      mobile: ""
+      name: "Demo Faculty In-charge"
       roles:
-        permission_letter: "Faculty In-charge , Seminar Hall"
-  "Seminar Hall 402":
-    full_name: "Seminar Hall 402, Department of Computer Science & Engineering"
-    short_name: "Seminar Hall 402"
-    default_addressee: "HoD(CSE Dept.)"
-    tech_assistant:
-      name: "Sunny Bodiwala"
-      admission_no: ""
-      branch: "Computer Science & Engineering"
-      mobile: ""
-      roles:
-        permission_letter: "Tech Assistant , Seminar Hall"
-    faculty_in_charge:
-      name: "Shri Rakesh P. Gohil"
-      admission_no: ""
-      branch: "Computer Science & Engineering"
-      mobile: ""
-      roles:
-        permission_letter: "Faculty In-charge , Seminar Hall"
-  "CSE Department":
-    full_name: "Department of Computer Science & Engineering"
-    short_name: "CSE Dept."
-    default_addressee: "HoD(CSE Dept.)"
-    tech_assistant:
-      name: "Sunny Bodiwala"
-      branch: "Computer Science & Engineering"
-      roles:
-        permission_letter: "Tech Assistant , Seminar Hall"
-    faculty_in_charge:
-      name: "Shri Rakesh P. Gohil"
-      branch: "Computer Science & Engineering"
-      roles:
-        permission_letter: "Faculty In-charge , Seminar Hall"
+        permission_letter: "Faculty in-charge , Seminar Hall"
+  "Lab 1":
+    full_name: "Computer Center Lab 1"
+    short_name: "CC Lab 1"
+    default_addressee: "Head, Computer Center"
 
 defaults:
-  purchase_order: "NiL"
-  advance: "NiL"
-  laboratory_office: "Student Council"
-  mode: "Offline"
-
-numbering:
-  ROOM:
-    last_used: 9
-  SIH:
-    last_used: 1
-  MOM:
-    last_used: 0
-  PRIZE:
-    last_used: 0
+  event_category: "Technical"
+  target_audience: "All SVNIT Students"
+  organizing_department: "Department of Computer Science & Engineering"

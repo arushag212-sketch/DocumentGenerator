@@ -125,7 +125,15 @@ class OtherReimbursement(BaseModel):
 
 class ApprovalNote(BaseModel):
     no: Optional[str] = None
+    ref_no: Optional[str] = None
     date: Optional[str | date] = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.ref_no and not self.no:
+            self.no = self.ref_no
+        elif self.no and not self.ref_no:
+            self.ref_no = self.no
+
 
 
 class AgendaItem(BaseModel):
@@ -227,6 +235,11 @@ class EventRecord(BaseModel):
     # Config-derived
     academic_year: TrackedField[str] = Field(default_factory=lambda: tf())
 
+    # Standing defaults / overrides
+    purchase_order: Optional[str] = None
+    advance: Optional[str] = None
+    laboratory_office: Optional[str] = None
+
     def flat_dict(self) -> dict[str, Any]:
         """Return a flat dictionary suitable for template rendering.
 
@@ -267,3 +280,33 @@ class EventRecord(BaseModel):
             if isinstance(val, TrackedField) and val.is_present and not val.confirmed:
                 result[field_name] = val
         return result
+
+    @classmethod
+    def from_flat_dict(cls, data: dict[str, Any]) -> EventRecord:
+        """Create an EventRecord from a flat dictionary, wrapping values as TrackedFields where expected."""
+        kwargs: dict[str, Any] = {}
+        for field_name, field_info in cls.model_fields.items():
+            if field_name in data:
+                val = data[field_name]
+                if field_info.annotation and "TrackedField" in str(field_info.annotation):
+                    if isinstance(val, TrackedField):
+                        kwargs[field_name] = val
+                    else:
+                        kwargs[field_name] = TrackedField(value=val, source=FieldSource.user, confirmed=True)
+                else:
+                    kwargs[field_name] = val
+            elif field_name == "event_name" and ("title" in data or "name" in data):
+                kwargs["event_name"] = TrackedField(value=data.get("title") or data.get("name"), source=FieldSource.user, confirmed=True)
+
+        if "budget_items" in data and isinstance(data["budget_items"], list):
+            kwargs["budget_items"] = [BudgetItem(**b) if isinstance(b, dict) else b for b in data["budget_items"]]
+        if "winners" in data and isinstance(data["winners"], list):
+            kwargs["winners"] = [Winner(**w) if isinstance(w, dict) else w for w in data["winners"]]
+        if "bills" in data and isinstance(data["bills"], list):
+            kwargs["bills"] = [BillRecord(**b) if isinstance(b, dict) else b for b in data["bills"]]
+        if "approval_note" in data and isinstance(data["approval_note"], dict):
+            kwargs["approval_note"] = ApprovalNote(**data["approval_note"])
+        if "meeting" in data and isinstance(data["meeting"], dict):
+            kwargs["meeting"] = MeetingBlock(**data["meeting"])
+
+        return cls(**kwargs)
