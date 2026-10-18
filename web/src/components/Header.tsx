@@ -1,17 +1,44 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, ChevronDown, Building2, UserCircle } from 'lucide-react';
+import { api } from '../api/client';
+import { LogOut, ChevronDown, Building2, UserCircle, UserPlus } from 'lucide-react';
 
 interface HeaderProps {
-  currentTab: string;
-  setCurrentTab: (tab: string) => void;
-  memberCount: number;
+  memberCount?: number;
   onOpenClubModal?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, memberCount: _memberCount, onOpenClubModal }) => {
+export const Header: React.FC<HeaderProps> = ({ onOpenClubModal }) => {
   const { user, clubs, activeClub, setActiveClubId, logout } = useAuth();
-  const [dropdownOpen, setDropdownOpen] = React.useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState<number>(0);
+  const location = useLocation();
+
+  const isClubAdmin =
+    user?.is_platform_admin ||
+    activeClub?.my_role === 'owner' ||
+    activeClub?.my_role === 'admin';
+
+  useEffect(() => {
+    if (activeClub && isClubAdmin) {
+      api.clubs.listJoinRequests(activeClub.id)
+        .then((reqs) => {
+          const pending = (reqs || []).filter((r) => r.status === 'pending');
+          setPendingCount(pending.length);
+        })
+        .catch(() => setPendingCount(0));
+    } else {
+      setPendingCount(0);
+    }
+  }, [activeClub?.id, isClubAdmin, location.pathname]);
+
+  const navLinks = [
+    { to: '/home', label: 'Home' },
+    { to: '/documents', label: 'My Documents' },
+    { to: '/templates', label: 'Templates' },
+    { to: '/settings/club', label: 'Club Settings' },
+  ];
 
   return (
     <header className="bg-white border-b border-slate-200 text-slate-800 shadow-sm sticky top-0 z-50">
@@ -19,8 +46,8 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, membe
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Permanent SVNIT Logo and Institution Title */}
-          <div className="flex items-center space-x-3">
-            <div className="h-11 w-11 rounded-lg bg-white p-0.5 flex items-center justify-center border border-slate-200 shadow-sm overflow-hidden flex-shrink-0">
+          <Link to="/home" className="flex items-center space-x-3 group">
+            <div className="h-11 w-11 rounded-lg bg-white p-0.5 flex items-center justify-center border border-slate-200 shadow-sm overflow-hidden flex-shrink-0 group-hover:border-slate-300 transition-colors">
               <img
                 src="/assets/svnit_crest.png"
                 alt="SVNIT Crest"
@@ -39,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, membe
                 Sardar Vallabhbhai National Institute of Technology, Surat
               </p>
             </div>
-          </div>
+          </Link>
 
           {/* Right Header Controls: Club Switcher, User Info, Logout */}
           <div className="flex items-center space-x-3 sm:space-x-4">
@@ -98,16 +125,13 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, membe
                   </div>
 
                   <div className="border-t border-slate-100 p-1.5 bg-slate-50/60">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        onOpenClubModal?.();
-                      }}
+                    <Link
+                      to="/onboarding/club"
+                      onClick={() => setDropdownOpen(false)}
                       className="w-full text-left px-3 py-2 text-xs font-semibold text-[#1b365d] hover:bg-blue-50 rounded-lg flex items-center gap-2 transition-colors"
                     >
                       <span>+ Join or Add Another Club</span>
-                    </button>
+                    </Link>
                   </div>
                 </div>
               )}
@@ -142,48 +166,42 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, membe
         {/* Navigation Tabs */}
         <div className="flex items-center justify-between border-t border-slate-100 pt-1 overflow-x-auto no-scrollbar">
           <div className="flex space-x-1">
-            {[
-              { id: 'home', label: 'Home' },
-              { id: 'documents', label: 'My Documents' },
-              { id: 'templates', label: 'Templates' },
-              { id: 'admin', label: 'Club settings' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setCurrentTab(tab.id)}
-                className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-t-md transition-colors whitespace-nowrap flex-shrink-0 ${
-                  currentTab === tab.id
-                    ? 'bg-slate-50 text-[#1b365d] border-b-2 border-[#1b365d] font-bold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/60'
-                }`}
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                className={({ isActive }) =>
+                  `px-3.5 py-2 text-xs sm:text-sm font-medium rounded-t-md transition-colors whitespace-nowrap flex-shrink-0 ${
+                    isActive
+                      ? 'bg-slate-50 text-[#1b365d] border-b-2 border-[#1b365d] font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/60'
+                  }`
+                }
               >
-                {tab.label}
-              </button>
+                {link.label}
+              </NavLink>
             ))}
-          </div>
 
-          {/* Secondary tools / legacy views */}
-          <div className="hidden lg:flex items-center space-x-1 pl-4 text-xs text-slate-400">
-            <button
-              onClick={() => setCurrentTab('dashboard')}
-              className={`px-2 py-1 rounded text-[11px] transition-colors ${
-                currentTab === 'dashboard'
-                  ? 'text-[#1b365d] font-semibold bg-blue-50'
-                  : 'hover:text-slate-700'
-              }`}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => setCurrentTab('events')}
-              className={`px-2 py-1 rounded text-[11px] transition-colors ${
-                currentTab === 'events'
-                  ? 'text-[#1b365d] font-semibold bg-blue-50'
-                  : 'hover:text-slate-700'
-              }`}
-            >
-              Events
-            </button>
+            {isClubAdmin && (
+              <NavLink
+                to="/join-requests"
+                className={({ isActive }) =>
+                  `px-3 py-2 text-xs sm:text-sm font-medium rounded-t-md transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-slate-50 text-[#1b365d] border-b-2 border-[#1b365d] font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/60'
+                  }`
+                }
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Join Requests</span>
+                {pendingCount > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 bg-amber-500 text-white rounded-full text-[10px] font-bold">
+                    {pendingCount}
+                  </span>
+                )}
+              </NavLink>
+            )}
           </div>
         </div>
       </div>

@@ -39,22 +39,14 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
   const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
-  // Modals state
-  const [showBlankModal, setShowBlankModal] = useState<boolean>(false);
-  const [blankName, setBlankName] = useState<string>('');
-  const [submittingBlank, setSubmittingBlank] = useState<boolean>(false);
-  const [blankModalError, setBlankModalError] = useState<string | null>(null);
-
-  const [forkingTemplate, setForkingTemplate] = useState<TemplateGalleryItem | null>(null);
-  const [forkName, setForkName] = useState<string>('');
-  const [submittingFork, setSubmittingFork] = useState<boolean>(false);
-
-  const [renamingTemplate, setRenamingTemplate] = useState<TemplateGalleryItem | null>(null);
-  const [renameValue, setRenameValue] = useState<string>('');
-  const [submittingRename, setSubmittingRename] = useState<boolean>(false);
-
-  const [archivingTemplate, setArchivingTemplate] = useState<TemplateGalleryItem | null>(null);
-  const [submittingArchive, setSubmittingArchive] = useState<boolean>(false);
+  // Unified Action Modal state
+  const [actionModal, setActionModal] = useState<{
+    type: 'blank' | 'fork' | 'rename' | 'archive';
+    tmpl?: TemplateGalleryItem;
+    value?: string;
+  } | null>(null);
+  const [modalSubmitting, setModalSubmitting] = useState<boolean>(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // AI Describe state
   const [aiPrompt, setAiPrompt] = useState<string>('');
@@ -123,99 +115,44 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
     fetchTemplates();
   }, [clubId]);
 
-  const openForkModal = (tmpl: TemplateGalleryItem) => {
-    setForkingTemplate(tmpl);
-    setForkName(`${tmpl.name} (Custom)`);
-  };
-
-  const handleConfirmFork = async (e: React.FormEvent) => {
+  const handleModalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forkingTemplate) return;
+    if (!actionModal) return;
     try {
-      setSubmittingFork(true);
+      setModalSubmitting(true);
+      setModalError(null);
       setError(null);
-      const res = await api.documents.forkTemplate(clubId, forkingTemplate.id, {
-        name: forkName.trim() || undefined,
-      });
-      setSuccessMsg(`Successfully forked "${forkingTemplate.name}" into your club as "${res.name}" (Draft)!`);
-      setLastCreatedId(res.id);
-      setForkingTemplate(null);
-      await fetchTemplates();
-      if (onOpenEditor) {
-        onOpenEditor(res.id);
+      const val = (actionModal.value || '').trim();
+      if (actionModal.type === 'blank') {
+        if (!val) return;
+        const res = await api.documents.createBlankTemplate(clubId, { name: val, category: 'Official Event Documents' });
+        setActionModal(null);
+        await fetchTemplates();
+        if (onOpenEditor) onOpenEditor(res.id);
+        else setSuccessMsg(`Created new blank template "${res.name}".`);
+      } else if (actionModal.type === 'fork' && actionModal.tmpl) {
+        const res = await api.documents.forkTemplate(clubId, actionModal.tmpl.id, { name: val || undefined });
+        setSuccessMsg(`Forked "${actionModal.tmpl.name}" as "${res.name}"!`);
+        setLastCreatedId(res.id);
+        setActionModal(null);
+        await fetchTemplates();
+        if (onOpenEditor) onOpenEditor(res.id);
+      } else if (actionModal.type === 'rename' && actionModal.tmpl) {
+        if (!val) return;
+        const res = await api.documents.updateTemplate(clubId, actionModal.tmpl.id, { name: val });
+        setSuccessMsg(`Template renamed to "${res.name}".`);
+        setActionModal(null);
+        await fetchTemplates();
+      } else if (actionModal.type === 'archive' && actionModal.tmpl) {
+        await api.documents.deleteTemplate(clubId, actionModal.tmpl.id);
+        setSuccessMsg(`Template "${actionModal.tmpl.name}" archived successfully.`);
+        setActionModal(null);
+        await fetchTemplates();
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to fork template');
+      setModalError(err.message || 'Operation failed');
     } finally {
-      setSubmittingFork(false);
-    }
-  };
-
-  const handleCreateBlankTemplate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!blankName.trim()) return;
-    try {
-      setSubmittingBlank(true);
-      setBlankModalError(null);
-      setError(null);
-      const res = await api.documents.createBlankTemplate(clubId, {
-        name: blankName.trim(),
-        category: 'Official Event Documents',
-      });
-      setShowBlankModal(false);
-      setBlankName('');
-      setBlankModalError(null);
-      await fetchTemplates();
-      if (onOpenEditor) {
-        onOpenEditor(res.id);
-      } else {
-        setSuccessMsg(`Created new blank template "${res.name}".`);
-      }
-    } catch (err: any) {
-      setBlankModalError(err.message || 'Failed to create blank template');
-      setError(err.message || 'Failed to create blank template');
-    } finally {
-      setSubmittingBlank(false);
-    }
-  };
-
-  const openRenameModal = (tmpl: TemplateGalleryItem) => {
-    setRenamingTemplate(tmpl);
-    setRenameValue(tmpl.name);
-  };
-
-  const handleConfirmRename = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!renamingTemplate || !renameValue.trim()) return;
-    try {
-      setSubmittingRename(true);
-      setError(null);
-      const res = await api.documents.updateTemplate(clubId, renamingTemplate.id, {
-        name: renameValue.trim(),
-      });
-      setSuccessMsg(`Template renamed to "${res.name}".`);
-      setRenamingTemplate(null);
-      await fetchTemplates();
-    } catch (err: any) {
-      setError(err.message || 'Failed to rename template');
-    } finally {
-      setSubmittingRename(false);
-    }
-  };
-
-  const handleConfirmArchive = async () => {
-    if (!archivingTemplate) return;
-    try {
-      setSubmittingArchive(true);
-      setError(null);
-      await api.documents.deleteTemplate(clubId, archivingTemplate.id);
-      setSuccessMsg(`Template "${archivingTemplate.name}" archived successfully.`);
-      setArchivingTemplate(null);
-      await fetchTemplates();
-    } catch (err: any) {
-      setError(err.message || 'Failed to archive template');
-    } finally {
-      setSubmittingArchive(false);
+      setModalSubmitting(false);
     }
   };
 
@@ -261,10 +198,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
             <button
               type="button"
               data-testid="new-blank-template-btn"
-              onClick={() => {
-                setBlankName('');
-                setShowBlankModal(true);
-              }}
+              onClick={() => setActionModal({ type: 'blank', value: '' })}
               className="inline-flex items-center gap-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg font-semibold shadow-xs transition-colors"
             >
               <PlusCircle className="w-3.5 h-3.5" />
@@ -371,10 +305,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setBlankName('');
-                      setShowBlankModal(true);
-                    }}
+                    onClick={() => setActionModal({ type: 'blank', value: '' })}
                     className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold rounded-lg text-xs shadow-xs transition-colors self-start sm:self-auto"
                   >
                     <span>Open Manual Editor →</span>
@@ -559,7 +490,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                   <button
                     type="button"
                     data-testid={`fork-btn-${tmpl.slug}`}
-                    onClick={() => openForkModal(tmpl)}
+                    onClick={() => setActionModal({ type: 'fork', tmpl, value: `${tmpl.name} (Custom)` })}
                     title="Fork into this club to customize schema and layout"
                     className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
                   >
@@ -585,7 +516,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                     <button
                       type="button"
                       data-testid={`rename-btn-${tmpl.id}`}
-                      onClick={() => openRenameModal(tmpl)}
+                      onClick={() => setActionModal({ type: 'rename', tmpl, value: tmpl.name })}
                       title="Rename this custom draft"
                       className="p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
                     >
@@ -594,7 +525,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                     <button
                       type="button"
                       data-testid={`archive-btn-${tmpl.id}`}
-                      onClick={() => setArchivingTemplate(tmpl)}
+                      onClick={() => setActionModal({ type: 'archive', tmpl })}
                       title="Archive / Delete this custom draft"
                       className="p-2 text-red-600 hover:text-red-700 bg-white hover:bg-red-50 border border-slate-200 rounded-lg transition-colors"
                     >
@@ -608,208 +539,76 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
         </div>
       )}
 
-      {/* Fork Template Modal */}
-      {forkingTemplate && (
+      {/* Unified Action Modal */}
+      {actionModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Copy className="w-4 h-4 text-amber-600" />
-                Customize Template (Fork)
+                {actionModal.type === 'fork' && <><Copy className="w-4 h-4 text-amber-600" /> Customize Template (Fork)</>}
+                {actionModal.type === 'rename' && <><Edit2 className="w-4 h-4 text-[#1b365d]" /> Rename Custom Draft</>}
+                {actionModal.type === 'archive' && <><Archive className="w-4 h-4 text-red-600" /> Archive Custom Draft</>}
+                {actionModal.type === 'blank' && <><PlusCircle className="w-4 h-4 text-blue-600" /> New Blank Template</>}
               </h3>
               <button
                 type="button"
-                onClick={() => setForkingTemplate(null)}
+                onClick={() => setActionModal(null)}
                 className="text-slate-400 hover:text-slate-600"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              This creates an independent draft copy of <strong className="text-slate-900">{forkingTemplate.name}</strong> for your club. The system template remains untouched and read-only.
-            </p>
-            <form onSubmit={handleConfirmFork} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Draft Template Name
-                </label>
-                <input
-                  type="text"
-                  value={forkName}
-                  onChange={(e) => setForkName(e.target.value)}
-                  required
-                  placeholder="e.g. Permission Letter (Custom)"
-                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#1b365d]"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setForkingTemplate(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingFork}
-                  className="bg-[#1b365d] hover:bg-[#152a48] text-white px-5 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
-                >
-                  {submittingFork && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Create Club Fork
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Rename Template Modal */}
-      {renamingTemplate && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-[#1b365d]" />
-                Rename Custom Draft
-              </h3>
-              <button
-                type="button"
-                onClick={() => setRenamingTemplate(null)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleConfirmRename} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  New Template Name
-                </label>
-                <input
-                  type="text"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  required
-                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#1b365d]"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setRenamingTemplate(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingRename}
-                  className="bg-[#1b365d] hover:bg-[#152a48] text-white px-5 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
-                >
-                  {submittingRename && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Save Name
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Archive Template Modal */}
-      {archivingTemplate && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 text-red-600">
-                <Archive className="w-4 h-4" />
-                Archive Custom Draft
-              </h3>
-              <button
-                type="button"
-                onClick={() => setArchivingTemplate(null)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Are you sure you want to archive <strong className="text-slate-900">{archivingTemplate.name}</strong>? It will be removed from your club's active template gallery.
-            </p>
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setArchivingTemplate(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={submittingArchive}
-                onClick={handleConfirmArchive}
-                className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
-              >
-                {submittingArchive && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Archive Draft
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create Blank Template Modal */}
-      {showBlankModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <PlusCircle className="w-4 h-4 text-blue-600" />
-                New Blank Template
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowBlankModal(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleCreateBlankTemplate} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Template Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Sponsorship Request Letter"
-                  value={blankName}
-                  onChange={(e) => setBlankName(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              {blankModalError && (
+            {actionModal.type === 'fork' && (
+              <p className="text-xs text-slate-600 leading-relaxed">
+                This creates an independent draft copy of <strong className="text-slate-900">{actionModal.tmpl?.name}</strong> for your club.
+              </p>
+            )}
+            {actionModal.type === 'archive' && (
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to archive <strong className="text-slate-900">{actionModal.tmpl?.name}</strong>? It will be removed from your active gallery.
+              </p>
+            )}
+            <form onSubmit={handleModalSubmit} className="space-y-4">
+              {actionModal.type !== 'archive' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {actionModal.type === 'blank' ? 'Template Name *' : actionModal.type === 'fork' ? 'Draft Template Name' : 'New Template Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={actionModal.value || ''}
+                    onChange={(e) => setActionModal({ ...actionModal, value: e.target.value })}
+                    placeholder={actionModal.type === 'blank' ? 'e.g. Sponsorship Request Letter' : undefined}
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#1b365d]"
+                  />
+                </div>
+              )}
+              {modalError && (
                 <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-1.5">
                   <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-500" />
-                  <span>{blankModalError}</span>
+                  <span>{modalError}</span>
                 </div>
               )}
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowBlankModal(false)}
+                  onClick={() => setActionModal(null)}
                   className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={submittingBlank || !blankName.trim()}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                  disabled={modalSubmitting || (actionModal.type === 'blank' && !actionModal.value?.trim())}
+                  className={`px-5 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5 text-white ${
+                    actionModal.type === 'archive'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-[#1b365d] hover:bg-[#152a48]'
+                  }`}
                 >
-                  {submittingBlank && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Create & Open Editor
+                  {modalSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {actionModal.type === 'fork' ? 'Create Club Fork' : actionModal.type === 'archive' ? 'Archive Draft' : actionModal.type === 'rename' ? 'Save Name' : 'Create & Open Editor'}
                 </button>
               </div>
             </form>

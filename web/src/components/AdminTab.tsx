@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ClubPermissions, Venue, NumberingSeries, Letterhead, Asset, ClubMember } from '../types';
+import { ClubPermissions, Venue, NumberingSeries, Letterhead, Asset } from '../types';
 import { api } from '../api/client';
-import { MembersTab } from './MembersTab';
-import { PeopleTab } from './PeopleTab';
-import { AuditTab } from './AuditTab';
 import {
   Building,
   Hash,
@@ -19,42 +16,36 @@ import {
   Info,
   Layers,
   MapPin,
-  Users,
-  UserCheck,
-  ShieldAlert,
 } from 'lucide-react';
 
 interface AdminTabProps {
   clubId: string | number;
   permissions: ClubPermissions | null;
-  members?: ClubMember[];
+  members?: any[];
   onRefreshMembers?: () => void;
 }
 
-export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members = [], onRefreshMembers }) => {
-  const [subTab, setSubTab] = useState<'members' | 'signatories' | 'venues' | 'numbering' | 'letterheads' | 'audit'>('members');
+export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
+  const [subTab, setSubTab] = useState<'venues' | 'numbering' | 'letterheads'>('venues');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   // Venues state
   const [venues, setVenues] = useState<Venue[]>([]);
-  const [showVenueModal, setShowVenueModal] = useState(false);
-  const [editingVenue, setEditingVenue] = useState<Venue | null>(null);
-  const [venueName, setVenueName] = useState('');
-  const [venueLocation, setVenueLocation] = useState('');
-  const [venueCapacity, setVenueCapacity] = useState<number | ''>('');
-  const [venueAddressee, setVenueAddressee] = useState('');
-  const [venueTechAssistant, setVenueTechAssistant] = useState('');
-  const [venueFacultyInCharge, setVenueFacultyInCharge] = useState('');
+  const [venueForm, setVenueForm] = useState<{
+    id?: string;
+    name: string;
+    location: string;
+    capacity: number | '';
+    addressee: string;
+    tech_assistant: string;
+    faculty_in_charge: string;
+  } | null>(null);
 
   // Numbering series state
   const [seriesList, setSeriesList] = useState<NumberingSeries[]>([]);
-  const [showSeriesModal, setShowSeriesModal] = useState(false);
-  const [editingSeries, setEditingSeries] = useState<NumberingSeries | null>(null);
-  const [seriesFormat, setSeriesFormat] = useState('');
-  const [seriesAcademicYear, setSeriesAcademicYear] = useState('');
-  const [seriesDescription, setSeriesDescription] = useState('');
+  const [seriesForm, setSeriesForm] = useState<NumberingSeries | null>(null);
 
   // Letterheads state
   const [letterheads, setLetterheads] = useState<Letterhead[]>([]);
@@ -98,47 +89,34 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
 
   // Venue actions
   const handleOpenAddVenue = () => {
-    setEditingVenue(null);
-    setVenueName('');
-    setVenueLocation('');
-    setVenueCapacity('');
-    setVenueAddressee('Dean (Student Welfare)');
-    setVenueTechAssistant('');
-    setVenueFacultyInCharge('');
-    setShowVenueModal(true);
+    setVenueForm({ name: '', location: '', capacity: '', addressee: 'Dean (Student Welfare)', tech_assistant: '', faculty_in_charge: '' });
   };
 
   const handleOpenEditVenue = (v: Venue) => {
-    setEditingVenue(v);
-    setVenueName(v.name);
-    setVenueLocation(v.location || '');
-    setVenueCapacity(v.capacity ?? '');
-    setVenueAddressee(v.addressee || '');
-    setVenueTechAssistant(v.tech_assistant || '');
-    setVenueFacultyInCharge(v.faculty_in_charge || '');
-    setShowVenueModal(true);
+    setVenueForm({ id: v.id, name: v.name, location: v.location || '', capacity: v.capacity ?? '', addressee: v.addressee || '', tech_assistant: v.tech_assistant || '', faculty_in_charge: v.faculty_in_charge || '' });
   };
 
   const handleSaveVenue = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!venueForm) return;
     setError(null);
     try {
       const payload: Partial<Venue> = {
-        name: venueName.trim(),
-        location: venueLocation.trim() || undefined,
-        capacity: venueCapacity !== '' ? Number(venueCapacity) : undefined,
-        addressee: venueAddressee.trim() || undefined,
-        tech_assistant: venueTechAssistant.trim() || undefined,
-        faculty_in_charge: venueFacultyInCharge.trim() || undefined,
+        name: venueForm.name.trim(),
+        location: venueForm.location.trim() || undefined,
+        capacity: venueForm.capacity !== '' ? Number(venueForm.capacity) : undefined,
+        addressee: venueForm.addressee.trim() || undefined,
+        tech_assistant: venueForm.tech_assistant.trim() || undefined,
+        faculty_in_charge: venueForm.faculty_in_charge.trim() || undefined,
       };
-      if (editingVenue) {
-        await api.clubs.updateVenue(clubId, editingVenue.id, payload);
-        setSuccess('Venue updated successfully');
+      if (venueForm.id) {
+        await api.clubs.updateVenue(clubId, venueForm.id, payload);
+        setSuccess('Venue updated successfully.');
       } else {
         await api.clubs.createVenue(clubId, payload);
-        setSuccess('Venue created successfully');
+        setSuccess('Venue created successfully.');
       }
-      setShowVenueModal(false);
+      setVenueForm(null);
       loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to save venue');
@@ -157,27 +135,18 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
     }
   };
 
-  // Numbering actions
-  const handleOpenEditSeries = (s: NumberingSeries) => {
-    setEditingSeries(s);
-    setSeriesFormat(s.format);
-    setSeriesAcademicYear(s.academic_year);
-    setSeriesDescription(s.description || '');
-    setShowSeriesModal(true);
-  };
-
   const handleSaveSeries = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingSeries) return;
+    if (!seriesForm) return;
     setError(null);
     try {
-      await api.clubs.updateNumberingSeries(clubId, editingSeries.series_key, {
-        format: seriesFormat.trim(),
-        academic_year: seriesAcademicYear.trim() || undefined,
-        description: seriesDescription.trim() || undefined,
+      await api.clubs.updateNumberingSeries(clubId, seriesForm.series_key, {
+        format: seriesForm.format.trim(),
+        academic_year: seriesForm.academic_year?.trim() || undefined,
+        description: seriesForm.description?.trim() || undefined,
       });
-      setSuccess(`Series "${editingSeries.series_key}" updated. Format changes apply only to future numbers.`);
-      setShowSeriesModal(false);
+      setSuccess(`Series "${seriesForm.series_key}" updated.`);
+      setSeriesForm(null);
       loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to update numbering series');
@@ -231,12 +200,9 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
       {/* Sub-tab Navigation */}
       <div className="flex border-b border-slate-200 bg-white rounded-t-xl px-4 pt-2 gap-2 overflow-x-auto no-scrollbar">
         {[
-          { id: 'members', label: 'Members & Join Requests', icon: Users },
-          { id: 'signatories', label: 'People & Signatories', icon: UserCheck },
           { id: 'venues', label: 'Venues & Facilities', icon: MapPin },
           { id: 'letterheads', label: 'Letterheads & Logos', icon: FileSpreadsheet },
           { id: 'numbering', label: 'Numbering Series', icon: Hash },
-          { id: 'audit', label: 'Audit Log', icon: ShieldAlert },
         ].map((t) => {
           const Icon = t.icon;
           const active = subTab === t.id;
@@ -274,21 +240,6 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
           <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600" />
           <span>{success}</span>
         </div>
-      )}
-
-      {/* SUBTAB: MEMBERS & JOIN REQUESTS */}
-      {subTab === 'members' && (
-        <MembersTab
-          clubId={clubId}
-          members={members}
-          permissions={permissions}
-          onRefresh={onRefreshMembers || loadData}
-        />
-      )}
-
-      {/* SUBTAB: PEOPLE & SIGNATORIES */}
-      {subTab === 'signatories' && (
-        <PeopleTab clubId={clubId} permissions={permissions} />
       )}
 
       {/* TAB 1: VENUES */}
@@ -441,7 +392,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
                     <div className="pt-2 border-t border-slate-200 flex items-center justify-end text-xs">
                       <button
                         type="button"
-                        onClick={() => handleOpenEditSeries(s)}
+                        onClick={() => setSeriesForm(s)}
                         className="inline-flex items-center gap-1 text-[#1b365d] hover:bg-blue-50 px-2 py-1 rounded font-semibold transition-colors"
                       >
                         <Edit2 className="w-3.5 h-3.5" /> Edit Format
@@ -587,11 +538,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
       )}
 
       {/* VENUE MODAL */}
-      {showVenueModal && (
+      {venueForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
             <h3 className="font-bold text-base text-slate-900">
-              {editingVenue ? 'Edit Campus Venue' : 'Add Campus Venue'}
+              {venueForm.id ? 'Edit Campus Venue' : 'Add Campus Venue'}
             </h3>
             <form onSubmit={handleSaveVenue} className="space-y-3 text-xs">
               <div>
@@ -599,20 +550,19 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
                 <input
                   type="text"
                   required
-                  value={venueName}
-                  onChange={(e) => setVenueName(e.target.value)}
+                  value={venueForm.name}
+                  onChange={(e) => setVenueForm({ ...venueForm, name: e.target.value })}
                   placeholder="e.g. Seminar Hall, Department of Computer Engineering"
                   className="w-full border border-slate-300 rounded-lg p-2.5"
                 />
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Location / Building</label>
                   <input
                     type="text"
-                    value={venueLocation}
-                    onChange={(e) => setVenueLocation(e.target.value)}
+                    value={venueForm.location}
+                    onChange={(e) => setVenueForm({ ...venueForm, location: e.target.value })}
                     placeholder="e.g. DoCSE 1st Floor"
                     className="w-full border border-slate-300 rounded-lg p-2.5"
                   />
@@ -621,51 +571,47 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
                   <label className="block font-semibold text-slate-700 mb-1">Capacity</label>
                   <input
                     type="number"
-                    value={venueCapacity}
-                    onChange={(e) => setVenueCapacity(e.target.value ? Number(e.target.value) : '')}
+                    value={venueForm.capacity}
+                    onChange={(e) => setVenueForm({ ...venueForm, capacity: e.target.value ? Number(e.target.value) : '' })}
                     placeholder="e.g. 150"
                     className="w-full border border-slate-300 rounded-lg p-2.5"
                   />
                 </div>
               </div>
-
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Letter Addressee</label>
                 <input
                   type="text"
-                  value={venueAddressee}
-                  onChange={(e) => setVenueAddressee(e.target.value)}
+                  value={venueForm.addressee}
+                  onChange={(e) => setVenueForm({ ...venueForm, addressee: e.target.value })}
                   placeholder="e.g. Head of Department / Associate Dean (SW)"
                   className="w-full border border-slate-300 rounded-lg p-2.5"
                 />
               </div>
-
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Technical Assistant / In-Charge</label>
+                <label className="block font-semibold text-slate-700 mb-1">Technical Assistant</label>
                 <input
                   type="text"
-                  value={venueTechAssistant}
-                  onChange={(e) => setVenueTechAssistant(e.target.value)}
+                  value={venueForm.tech_assistant}
+                  onChange={(e) => setVenueForm({ ...venueForm, tech_assistant: e.target.value })}
                   placeholder="e.g. Shri R. K. Patel"
                   className="w-full border border-slate-300 rounded-lg p-2.5"
                 />
               </div>
-
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Faculty In-Charge</label>
                 <input
                   type="text"
-                  value={venueFacultyInCharge}
-                  onChange={(e) => setVenueFacultyInCharge(e.target.value)}
+                  value={venueForm.faculty_in_charge}
+                  onChange={(e) => setVenueForm({ ...venueForm, faculty_in_charge: e.target.value })}
                   placeholder="e.g. Dr. P. M. Shah"
                   className="w-full border border-slate-300 rounded-lg p-2.5"
                 />
               </div>
-
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setShowVenueModal(false)}
+                  onClick={() => setVenueForm(null)}
                   className="px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
                 >
                   Cancel
@@ -683,56 +629,51 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
       )}
 
       {/* NUMBERING MODAL */}
-      {showSeriesModal && editingSeries && (
+      {seriesForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
             <h3 className="font-bold text-base text-slate-900">
-              Edit Numbering Series: {editingSeries.series_key}
+              Edit Numbering Series: {seriesForm.series_key}
             </h3>
-
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
-              Note: Format changes only apply to newly allocated document numbers. Existing documents will keep their allocated numbers without modification.
-            </div>
-
+            <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+              Format changes apply only to future documents; historical documents preserve allocated numbers.
+            </p>
             <form onSubmit={handleSaveSeries} className="space-y-3 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Format Template *</label>
                 <input
                   type="text"
                   required
-                  value={seriesFormat}
-                  onChange={(e) => setSeriesFormat(e.target.value)}
+                  value={seriesForm.format}
+                  onChange={(e) => setSeriesForm({ ...seriesForm, format: e.target.value })}
                   placeholder="{club}/{yy}-{next}/{series}/{seq:03d}"
                   className="w-full border border-slate-300 rounded-lg p-2.5 font-mono text-xs"
                 />
               </div>
-
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Academic Year</label>
                 <input
                   type="text"
-                  value={seriesAcademicYear}
-                  onChange={(e) => setSeriesAcademicYear(e.target.value)}
+                  value={seriesForm.academic_year || ''}
+                  onChange={(e) => setSeriesForm({ ...seriesForm, academic_year: e.target.value })}
                   placeholder="2026-27"
                   className="w-full border border-slate-300 rounded-lg p-2.5"
                 />
               </div>
-
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Description</label>
                 <textarea
                   rows={2}
-                  value={seriesDescription}
-                  onChange={(e) => setSeriesDescription(e.target.value)}
+                  value={seriesForm.description || ''}
+                  onChange={(e) => setSeriesForm({ ...seriesForm, description: e.target.value })}
                   placeholder="Purpose of this numbering series..."
                   className="w-full border border-slate-300 rounded-lg p-2.5"
                 />
               </div>
-
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setShowSeriesModal(false)}
+                  onClick={() => setSeriesForm(null)}
                   className="px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
                 >
                   Cancel
@@ -747,11 +688,6 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, members
             </form>
           </div>
         </div>
-      )}
-
-      {/* SUBTAB: AUDIT LOG */}
-      {subTab === 'audit' && (
-        <AuditTab clubId={clubId} />
       )}
     </div>
   );

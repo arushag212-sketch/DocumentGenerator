@@ -333,3 +333,9 @@ class ClubPermissionsOut(BaseModel):
     can_create_documents: bool = False
     can_finalize_documents: bool = False
     can_view_sensitive: bool = False
+    position: Optional[str] = None
+
+
+class UpdatePositionRequest(BaseModel):
+    position: str
+

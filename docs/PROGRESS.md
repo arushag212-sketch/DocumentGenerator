@@ -104,13 +104,31 @@ Screenshots archived to `docs/screenshots/baseline/`.
 
 ---
 
+### Phase 3: React Router, Onboarding Flow & Frontend Cleanup (COMPLETED)
+- **What was done**:
+  - Configured `react-router-dom` `<BrowserRouter>` and full declarative route tree matching `/login`, `/onboarding/club`, `/onboarding/position`, `/home`, `/documents`, `/documents/:id`, `/templates`, `/templates/:id`, `/settings/*`, and `/join-requests`.
+  - Added SPA fallback catch-all in FastAPI `server/app/main.py` to route all non-API paths to `dist/index.html`.
+  - Built dedicated route pages under `web/src/pages/`: `HomePageWrapper`, `DocumentsPage`, `DocumentDetailPage`, `DocumentNewPage`, `TemplatesPage`, `TemplateEditorPage`, `SettingsPage`, `OnboardingClubPage`, `OnboardingPositionPage`, `JoinRequestsPage`.
+  - Deleted legacy dead components: `EventsTab.tsx`, `Dashboard.tsx`, `NewDocumentPage.tsx`, `ReviewDocumentPage.tsx`, `ClubSelectionModal.tsx`, `SetupWizardModal.tsx`.
+  - Frontend size significantly shrunk: from 11,472 lines down to **8,339 lines** (crossing well under the < 8,500 target!).
+  - Verified onboarding flow: join request submission, administrator review and approval, position assignment, and session routing.
+- **Verification**:
+  - `npm run build`: built in 10.20s with 0 errors.
+  - `python scripts/verify_phase3_router_selenium.py`: ALL 6 steps passed cleanly in headless Chrome with zero severe console errors.
+  - Screenshots saved under `docs/screenshots/phase3/`.
+
+---
+
 ## Current Status & Next Steps
 - **Phase 0**: **DONE** (Commit `69b63d8`)
 - **Phase 1**: **DONE** (Commit `941f16e`)
-- **Phase 2**: **DONE**
-- **Phase 3 (Next)**: React Router real URLs, Onboarding & Frontend Shrink:
-  - Configure `react-router-dom` for real routes: `/login`, `/onboarding/club`, `/onboarding/position`, `/home`, `/documents`, `/documents/:id`, `/templates`, `/templates/:id`, `/settings/*`.
-  - Remove dead legacy components: `EventsTab.tsx`, `Dashboard.tsx`, `NewDocumentPage.tsx`, `ReviewDocumentPage.tsx`.
-  - Verify route transitions and deep linking.
+- **Phase 2**: **DONE** (Commit `9253148`)
+- **Phase 3**: **DONE**
+- **Phase 4 (Next)**: Home Flow & Native Input Widgets
+  - Native HTML5 date (`type="date"`) and time (`type="time"`) pickers formatting to `DD/MM/YYYY` and `hh:mm A`.
+  - Indian currency formatting (`₹`, Decimal arithmetic, grouping `5,000.00`).
+  - Enum dropdowns, person pickers, and lightweight event dropdown on `/home`.
+  - End-to-end prompt-to-batch document generation verification.
+
 
 

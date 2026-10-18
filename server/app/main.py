@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -100,3 +100,16 @@ async def health_check():
         "version": settings.PROJECT_VERSION,
         "database": "connected",
     }
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_fallback(full_path: str):
+    if full_path.startswith("api/") or full_path.startswith("assets/"):
+        raise HTTPException(status_code=404, detail="Not Found")
+    if (dist_dir / "index.html").exists():
+        return FileResponse(dist_dir / "index.html")
+    index_file = web_dir / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"message": "ClubDocs API is running. Access /docs for Swagger UI."}
+

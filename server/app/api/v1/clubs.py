@@ -67,6 +67,7 @@ from server.app.schemas.club import (
     RoleHeldUpdate,
     SetupWizardRequest,
     UpdateMemberRoleRequest,
+    UpdatePositionRequest,
     VenueCreate,
     VenueOut,
     VenueUpdate,
@@ -930,7 +931,56 @@ def get_club_permissions(
         can_create_documents=can_create_documents,
         can_finalize_documents=can_finalize_documents,
         can_view_sensitive=can_view_sensitive,
+        position=membership.position if membership else None,
     )
+
+
+@router.put("/{club_id}/position")
+def update_my_position(
+    club_id: str,
+    payload: UpdatePositionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Allow active club member to set or update their position in the club."""
+    club = db.query(Club).filter(Club.id == club_id, Club.disabled_at.is_(None)).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found")
+
+    membership_repo = ScopedRepository(db, Membership, club_id=club_id)
+    membership = membership_repo.find_first(
+        Membership.user_id == current_user.id,
+        Membership.status == "active",
+    )
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "NOT_A_MEMBER", "message": "You are not an active member of this club"},
+        )
+
+    pos = payload.position.strip()
+    if not pos:
+        raise HTTPException(status_code=400, detail="Position cannot be empty")
+
+    membership.position = pos
+    db.commit()
+    db.refresh(membership)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="member_position_updated",
+        entity_type="membership",
+        entity_id=membership.id,
+        club_id=club_id,
+        user_id=current_user.id,
+        meta={"position": pos},
+        ip=client_ip,
+    )
+
+    return {"status": "success", "position": membership.position}
+
 
 
 @router.put("/{club_id}", response_model=ClubOut)

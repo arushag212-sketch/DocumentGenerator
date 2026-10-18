@@ -72,6 +72,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshClubs = async () => {
     const clubList = await api.clubs.list();
     setClubs(clubList);
+    if (clubList.length > 0) {
+      if (!activeClubId || !clubList.some(c => String(c.id) === String(activeClubId))) {
+        setActiveClubIdState(clubList[0].id);
+        localStorage.setItem('activeClubId', clubList[0].id.toString());
+      }
+    } else {
+      setActiveClubIdState(null);
+      localStorage.removeItem('activeClubId');
+    }
   };
 
   const activeClub = clubs.find(c => String(c.id) === String(activeClubId)) || null;

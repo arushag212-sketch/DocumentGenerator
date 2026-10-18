@@ -11,38 +11,20 @@ let refreshPromise: Promise<boolean> | null = null;
 
 async function attemptTokenRefresh(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
-
   refreshPromise = (async () => {
     try {
-      const storedRefreshToken = localStorage.getItem('refresh_token');
       const res = await fetch('/api/v1/auth/refresh', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(storedRefreshToken ? { 'X-Refresh-Token': storedRefreshToken } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ refresh_token: storedRefreshToken || undefined }),
       });
-
-      if (!res.ok) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        return false;
-      }
-
-      const data = await res.json();
-      if (data.access_token) localStorage.setItem('access_token', data.access_token);
-      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
-      if (data.csrf_token) localStorage.setItem('csrf_token', data.csrf_token);
-      return true;
+      return res.ok;
     } catch {
       return false;
     } finally {
       refreshPromise = null;
     }
   })();
-
   return refreshPromise;
 }
 
@@ -52,16 +34,10 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     headers.set('Content-Type', 'application/json');
   }
 
-  // Include Bearer token from localStorage as reliable backup
-  const storedAccessToken = localStorage.getItem('access_token');
-  if (storedAccessToken && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${storedAccessToken}`);
-  }
-
   // Include CSRF token for state-changing requests
   const method = (options.method || 'GET').toUpperCase();
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    const csrfToken = getCookie('csrf_token') || localStorage.getItem('csrf_token');
+    const csrfToken = getCookie('csrf_token');
     if (csrfToken) {
       headers.set('X-CSRF-Token', csrfToken);
     }
@@ -70,34 +46,22 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
   let res = await fetch(`/api/v1${endpoint}`, {
     ...options,
     headers,
-    credentials: 'include', // sends cookies
+    credentials: 'include',
   });
-
-  // If a new CSRF token is provided in response, store it
-  const newCsrf = res.headers.get('X-CSRF-Token');
-  if (newCsrf) {
-    localStorage.setItem('csrf_token', newCsrf);
-  }
 
   // Auto-refresh token on 401 for non-auth endpoints
   const isAuthRoute = endpoint.startsWith('/auth/');
   if (res.status === 401 && !isAuthRoute) {
     const refreshed = await attemptTokenRefresh();
     if (refreshed) {
-      // Retry the original request with refreshed credentials
       const retryHeaders = new Headers(options.headers || {});
       if (!retryHeaders.has('Content-Type') && !(options.body instanceof FormData)) {
         retryHeaders.set('Content-Type', 'application/json');
       }
-      const newAccessToken = localStorage.getItem('access_token');
-      if (newAccessToken) {
-        retryHeaders.set('Authorization', `Bearer ${newAccessToken}`);
+      const csrfToken = getCookie('csrf_token');
+      if (csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        retryHeaders.set('X-CSRF-Token', csrfToken);
       }
-      const newCsrfToken = getCookie('csrf_token') || localStorage.getItem('csrf_token');
-      if (newCsrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-        retryHeaders.set('X-CSRF-Token', newCsrfToken);
-      }
-
       res = await fetch(`/api/v1${endpoint}`, {
         ...options,
         headers: retryHeaders,
@@ -230,6 +194,11 @@ export const api = {
       apiFetch<JoinRequest>(`/clubs/${clubId}/join-requests`, {
         method: 'POST',
         body: JSON.stringify(data),
+      }),
+    updatePosition: (clubId: string | number, position: string) =>
+      apiFetch<{ status: string; position: string }>(`/clubs/${clubId}/position`, {
+        method: 'PUT',
+        body: JSON.stringify({ position }),
       }),
     getMyJoinRequest: (clubId: string | number) =>
       apiFetch<JoinRequest | null>(`/clubs/${clubId}/join-requests/my`),
@@ -537,79 +506,6 @@ export const api = {
     update: (clubId: string | number, eventId: string, payload: { title?: string; event_code?: string; record?: Record<string, any> }, updateDocuments = false) =>
       apiFetch<any>(`/clubs/${clubId}/events/${eventId}?update_documents=${updateDocuments}`, {
         method: 'PUT',
-        body: JSON.stringify(payload),
-      }),
-    recommend: (
-      clubId: string | number,
-      payload: {
-        text: string;
-        explicit_data?: Record<string, any>;
-        selected_template_ids?: string[];
-      }
-    ) =>
-      apiFetch<{
-        event_text: string;
-        extracted_data: Record<string, any>;
-        detected_stage: string;
-        has_budget: boolean;
-        has_winners: boolean;
-        has_bills: boolean;
-        templates: Array<{
-          template_id: string;
-          slug: string;
-          name: string;
-          category: string;
-          stage: string;
-          recommended: boolean;
-          reason: string;
-          numbering_series?: string;
-          repeat_per?: string;
-          fields_count: number;
-        }>;
-        grouped_missing_fields: Array<{
-          key: string;
-          label: string;
-          type: string;
-          ask: string;
-          required: boolean;
-          defer_ok: boolean;
-          sensitive: boolean;
-          columns?: any[];
-          needed_by: string[];
-        }>;
-      }>(`/clubs/${clubId}/events/recommend`, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
-    generateBatch: (
-      clubId: string | number,
-      payload: {
-        selected_template_ids: string[];
-        event_data: Record<string, any>;
-        event_id?: string;
-        event_title?: string;
-      }
-    ) =>
-      apiFetch<{
-        batch_id: string;
-        event_id: string;
-        event_title: string;
-        documents_count: number;
-        zip_filename: string;
-        zip_path: string;
-        zip_url: string;
-        documents: Array<{
-          id: string;
-          template_slug: string;
-          template_name: string;
-          title: string;
-          ref_no: string;
-          docx_path: string;
-          pdf_path: string;
-          page_count: number;
-        }>;
-      }>(`/clubs/${clubId}/events/generate-batch`, {
-        method: 'POST',
         body: JSON.stringify(payload),
       }),
   },

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ClubMember, ClubPermissions, RoleName, Invite, JoinRequest } from '../types';
+import { Link } from 'react-router-dom';
+import { ClubMember, ClubPermissions, RoleName, Invite } from '../types';
 import { api } from '../api/client';
 import {
   Users,
@@ -8,15 +9,13 @@ import {
   Shield,
   Info,
   CheckCircle2,
-  Link,
+  Link as LinkIcon,
   Copy,
   Ban,
   Clock,
   Sparkles,
   AlertCircle,
   UserCheck,
-  UserX,
-  X,
 } from 'lucide-react';
 
 interface MembersTabProps {
@@ -47,14 +46,6 @@ export const MembersTab: React.FC<MembersTabProps> = ({
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  // Join Requests state
-  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
-  const [reviewingReq, setReviewingReq] = useState<JoinRequest | null>(null);
-  const [approvalRole, setApprovalRole] = useState<string>('editor');
-  const [approvalSignatory, setApprovalSignatory] = useState<boolean>(false);
-  const [approvalConflict, setApprovalConflict] = useState<string>('keep_both');
-  const [actionLoading, setActionLoading] = useState<boolean>(false);
-
   const canEdit = permissions?.can_edit_members || permissions?.is_platform_admin || permissions?.role === 'admin' || permissions?.role === 'owner';
   const myRole = permissions?.role || 'viewer';
 
@@ -68,77 +59,9 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     }
   };
 
-  const fetchJoinRequests = async () => {
-    if (!canEdit) return;
-    try {
-      const data = await api.clubs.listJoinRequests(clubId);
-      setJoinRequests(data.filter((r) => r.status === 'pending'));
-    } catch {
-      // Ignored if user lacks permission
-    }
-  };
-
   useEffect(() => {
     fetchInvites();
-    fetchJoinRequests();
   }, [clubId, canEdit]);
-
-  const handleOpenReview = (req: JoinRequest) => {
-    setReviewingReq(req);
-    // Suggest default role based on requested position
-    if (req.position === 'Student Head/Chairperson' || req.position === 'Faculty Chairman') {
-      setApprovalRole('admin');
-      setApprovalSignatory(true);
-    } else if (req.position === 'Student Secretary' || req.position === 'Faculty Co-Chairman') {
-      setApprovalRole('editor');
-      setApprovalSignatory(true);
-    } else if (req.position === 'Treasurer') {
-      setApprovalRole('treasurer');
-      setApprovalSignatory(true);
-    } else {
-      setApprovalRole('editor');
-      setApprovalSignatory(false);
-    }
-  };
-
-  const handleApprove = async () => {
-    if (!reviewingReq) return;
-    setError(null);
-    setSuccess(null);
-    setActionLoading(true);
-    try {
-      await api.clubs.approveJoinRequest(clubId, reviewingReq.id, {
-        role: approvalRole,
-        is_signatory: approvalSignatory,
-        conflict_resolution: approvalConflict,
-      });
-      setSuccess(`Approved ${reviewingReq.user_name || reviewingReq.user_email} as ${approvalRole}!`);
-      setReviewingReq(null);
-      await fetchJoinRequests();
-      onRefresh();
-    } catch (err: any) {
-      setError(err.message || 'Failed to approve join request');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleReject = async (req: JoinRequest) => {
-    if (!confirm(`Reject join request from ${req.user_name || req.user_email}?`)) return;
-    setError(null);
-    setSuccess(null);
-    setActionLoading(true);
-    try {
-      await api.clubs.rejectJoinRequest(clubId, req.id);
-      setSuccess(`Join request rejected.`);
-      if (reviewingReq?.id === req.id) setReviewingReq(null);
-      await fetchJoinRequests();
-    } catch (err: any) {
-      setError(err.message || 'Failed to reject join request');
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,67 +192,22 @@ export const MembersTab: React.FC<MembersTabProps> = ({
         <div className="lg:col-span-2 space-y-6">
           {/* PENDING JOIN REQUESTS (HEAD APPROVAL FLOW) */}
           {canEdit && (
-            <div className="bg-white rounded-xl shadow-sm border border-amber-200 overflow-hidden">
-              <div className="px-4 sm:px-6 py-4 border-b border-amber-100 bg-amber-50/70 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <UserCheck className="w-5 h-5 text-amber-700" />
-                  <span className="text-xs sm:text-sm font-bold text-amber-900 uppercase tracking-wider">
-                    Pending Join Requests
-                  </span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                    joinRequests.length > 0 ? 'bg-amber-200 text-amber-900 animate-pulse' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    {joinRequests.length}
-                  </span>
+            <div className="flex items-center justify-between p-4 bg-amber-50/60 border border-amber-200 rounded-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                  <UserCheck className="w-5 h-5" />
                 </div>
-                <span className="text-xs text-amber-800 hidden sm:inline">
-                  {joinRequests.length > 0 ? 'Action required: Review applicants to grant club access' : 'No pending requests'}
-                </span>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-900">Pending Join Requests</h4>
+                  <p className="text-xs text-slate-500">Review applicants and approve club roles</p>
+                </div>
               </div>
-
-              {joinRequests.length === 0 ? (
-                <div className="p-6 text-center text-xs text-slate-500">
-                  No pending join requests right now. New students who apply to join this club will appear here for your approval.
-                </div>
-              ) : (
-                <div className="divide-y divide-amber-100/60">
-                  {joinRequests.map((req) => (
-                    <div key={req.id} className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50/30 hover:bg-amber-50/60 transition-colors">
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-sm text-slate-900">{req.user_name || 'Applicant'}</span>
-                          <span className="text-xs font-medium text-slate-500 font-mono">({req.user_email})</span>
-                          <span className="text-[11px] font-semibold bg-blue-50 text-[#1b365d] border border-blue-200 px-2 py-0.5 rounded-md">
-                            Applied as: {req.position}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-1">
-                          Requested: {req.created_at ? new Date(req.created_at).toLocaleString() : 'Recently'}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2 self-end sm:self-center">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenReview(req)}
-                          className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-xs"
-                        >
-                          <UserCheck className="w-3.5 h-3.5" />
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleReject(req)}
-                          className="inline-flex items-center gap-1.5 bg-white hover:bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                        >
-                          <UserX className="w-3.5 h-3.5" />
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <Link
+                to="/join-requests"
+                className="px-3.5 py-2 bg-[#1b365d] hover:bg-[#132742] text-white text-xs font-bold rounded-xl transition-colors shadow-sm"
+              >
+                Review Requests →
+              </Link>
             </div>
           )}
 
@@ -388,7 +266,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Link className="w-4 h-4 text-[#1b365d]" />
+                  <LinkIcon className="w-4 h-4 text-[#1b365d]" />
                   <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                     Club Invites & Shareable Links ({invites.length})
                   </span>
@@ -635,99 +513,6 @@ export const MembersTab: React.FC<MembersTabProps> = ({
         </div>
       </div>
 
-      {/* APPROVAL MODAL */}
-      {reviewingReq && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-emerald-600" />
-                Approve Club Membership
-              </h3>
-              <button
-                type="button"
-                onClick={() => setReviewingReq(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="bg-slate-50 p-3.5 rounded-xl text-xs space-y-1 border border-slate-200">
-              <p><strong>Applicant:</strong> {reviewingReq.user_name} ({reviewingReq.user_email})</p>
-              <p><strong>Position:</strong> {reviewingReq.position}</p>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Assign Access Role
-                </label>
-                <select
-                  value={approvalRole}
-                  onChange={(e) => setApprovalRole(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1b365d]"
-                >
-                  <option value="editor">Editor — Can draft & generate documents</option>
-                  <option value="viewer">Viewer — Read-only access to finalized documents</option>
-                  <option value="treasurer">Treasurer — Financial documents & vouchers</option>
-                  {myRole === 'owner' && <option value="admin">Admin — Full club management</option>}
-                </select>
-              </div>
-
-              {['Student Head/Chairperson', 'Student Secretary', 'Treasurer', 'Faculty Chairman', 'Faculty Co-Chairman'].includes(reviewingReq.position) && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={approvalSignatory}
-                      onChange={(e) => setApprovalSignatory(e.target.checked)}
-                      className="mt-0.5 rounded text-[#1b365d] focus:ring-[#1b365d]"
-                    />
-                    <span className="font-medium text-slate-800">
-                      This person signs official documents as {reviewingReq.position}
-                    </span>
-                  </label>
-
-                  {approvalSignatory && (
-                    <div className="pt-2 border-t border-blue-200/60">
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                        If another active member holds this role:
-                      </label>
-                      <select
-                        value={approvalConflict}
-                        onChange={(e) => setApprovalConflict(e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
-                      >
-                        <option value="keep_both">Keep both (two active signatories)</option>
-                        <option value="replace">Replace existing role holder</option>
-                      </select>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setReviewingReq(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={actionLoading}
-                onClick={handleApprove}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs disabled:opacity-50"
-              >
-                {actionLoading ? 'Approving...' : 'Confirm Approval'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

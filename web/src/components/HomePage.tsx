@@ -484,18 +484,19 @@ export const HomePage: React.FC<HomePageProps> = ({
                 />
               </div>
 
-              {/* Description (with AI draft accept button if flagged) */}
-              {description && (
-                <div className="sm:col-span-2">
+              {/* Description & Objectives (with AI draft accept button if flagged) */}
+              {[
+                { label: 'Description', val: description, setVal: setDescription, btnId: 'acceptAiDraftDescription' },
+                { label: 'Objectives', val: objectives, setVal: setObjectives, btnId: 'acceptAiDraftObjectives' },
+              ].map(({ label, val, setVal, btnId }) => val ? (
+                <div key={label} className="sm:col-span-2">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-600">
-                      Description
-                    </label>
-                    {description.includes('[AI-drafted') && (
+                    <label className="block text-xs font-semibold text-slate-600">{label}</label>
+                    {val.includes('[AI-drafted') && (
                       <button
                         type="button"
-                        id="acceptAiDraftDescription"
-                        onClick={() => setDescription(description.replace(/\[AI-drafted[^\]]*\]\s*/g, '').trim())}
+                        id={btnId}
+                        onClick={() => setVal(val.replace(/\[AI-drafted[^\]]*\]\s*/g, '').trim())}
                         className="text-[11px] font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
                       >
                         Accept AI Draft
@@ -504,39 +505,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                   <textarea
                     rows={2}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
+                    value={val}
+                    onChange={(e) => setVal(e.target.value)}
                     className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
                   />
                 </div>
-              )}
-
-              {/* Objectives (with AI draft accept button if flagged) */}
-              {objectives && (
-                <div className="sm:col-span-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-600">
-                      Objectives
-                    </label>
-                    {objectives.includes('[AI-drafted') && (
-                      <button
-                        type="button"
-                        id="acceptAiDraftObjectives"
-                        onClick={() => setObjectives(objectives.replace(/\[AI-drafted[^\]]*\]\s*/g, '').trim())}
-                        className="text-[11px] font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
-                      >
-                        Accept AI Draft
-                      </button>
-                    )}
-                  </div>
-                  <textarea
-                    rows={2}
-                    value={objectives}
-                    onChange={(e) => setObjectives(e.target.value)}
-                    className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                  />
-                </div>
-              )}
+              ) : null)}
             </div>
           </div>
 
@@ -645,38 +619,6 @@ export const HomePage: React.FC<HomePageProps> = ({
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
                         </select>
-                      ) : q.type === 'time' ? (
-                        <input
-                          type="time"
-                          value={val}
-                          onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                          className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                        />
-                      ) : q.type === 'date' ? (
-                        <input
-                          type="date"
-                          value={val}
-                          onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                          className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                        />
-                      ) : q.type === 'int' ? (
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={val}
-                          onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                          className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                        />
-                      ) : q.type === 'money' ? (
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={val}
-                          onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                          className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                        />
                       ) : q.type === 'longtext' ? (
                         <textarea
                           rows={2}
@@ -687,7 +629,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                       ) : (
                         <div>
                           <input
-                            type="text"
+                            type={q.type === 'time' ? 'time' : q.type === 'date' ? 'date' : (q.type === 'int' || q.type === 'money') ? 'number' : 'text'}
+                            step={q.type === 'money' ? '0.01' : q.type === 'int' ? '1' : undefined}
+                            min={(q.type === 'int' || q.type === 'money') ? '0' : undefined}
                             value={val}
                             onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
                             placeholder={

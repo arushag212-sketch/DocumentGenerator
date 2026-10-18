@@ -17,6 +17,7 @@ export interface Club {
   event_counter?: number;
   room_counter?: number;
   mom_counter?: number;
+  my_role?: string | null;
 }
 
 export type RoleName = 'owner' | 'admin' | 'lead' | 'co_lead' | 'treasurer' | 'faculty_advisor' | 'editor' | 'viewer';
@@ -69,6 +70,7 @@ export interface ClubPermissions {
   can_create_documents: boolean;
   can_finalize_documents: boolean;
   can_view_sensitive: boolean;
+  position?: string | null;
 }
 
 export interface TemplateField {
