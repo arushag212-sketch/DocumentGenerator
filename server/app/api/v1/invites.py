@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -41,7 +41,7 @@ def get_invite_preview(code: str, request: Request, db: Session = Depends(get_db
         .first()
     )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     is_invalid = False
     reason = None
 
@@ -118,7 +118,7 @@ def accept_invite(
         .first()
     )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     is_invalid = False
     reason = None
 

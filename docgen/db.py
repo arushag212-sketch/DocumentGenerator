@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -15,12 +15,17 @@ from docgen.models import EventRecord
 Base = declarative_base()
 
 
+def utc_now() -> datetime:
+    """Return current naive UTC datetime for SQLAlchemy/SQLite compatibility."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class EventModel(Base):
     __tablename__ = "events"
 
     id = Column(String, primary_key=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     event_name = Column(String, nullable=True)
     record_type = Column(String, default="event")
     data_json = Column(Text, nullable=False)
@@ -33,7 +38,7 @@ class DocumentVersionModel(Base):
     event_id = Column(String, nullable=False)
     template_id = Column(String, nullable=False)
     version = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     docx_path = Column(String, nullable=False)
     pdf_path = Column(String, nullable=True)
     snapshot_json = Column(Text, nullable=False)
@@ -68,7 +73,7 @@ class Database:
                 existing.event_name = name
                 existing.record_type = rec_type
                 existing.data_json = data_str
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = utc_now()
             else:
                 record = EventModel(
                     id=event.id,

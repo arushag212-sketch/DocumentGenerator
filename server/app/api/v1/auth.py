@@ -167,7 +167,7 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
             .filter((Invite.code_hash == inv_hash) | (Invite.code == inv_hash) | (Invite.code == clean_inv))
             .first()
         )
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if (
             not invite_obj
             or invite_obj.revoked
@@ -212,7 +212,7 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
         db.add(m)
         invite_obj.use_count += 1
         if invite_obj.use_count >= invite_obj.max_uses:
-            invite_obj.accepted_at = datetime.utcnow()
+            invite_obj.accepted_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         log_audit(

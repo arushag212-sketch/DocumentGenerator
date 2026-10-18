@@ -11,7 +11,7 @@ and atomic batch generation.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -206,7 +206,7 @@ def reserve_number_for_document(
         event_code=event_code_val,
     )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     reservation = NumberReservation(
         id=str(uuid.uuid4()),
         club_id=club_id,

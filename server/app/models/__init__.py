@@ -7,7 +7,7 @@ Club-scoped tables have club_id with an index.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import (
@@ -30,12 +30,17 @@ def generate_uuid() -> str:
     return str(uuid.uuid4())
 
 
+def utc_now() -> datetime:
+    """Return timezone-aware UTC datetime compatible with SQLite and Postgres."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class TimestampMixin:
     """Standard UUID primary key and timestamp tracking."""
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now, onupdate=utc_now, nullable=False
     )
 
 
@@ -105,7 +110,7 @@ class JoinRequest(TimestampMixin, Base):
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     position: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False)  # pending | approved | rejected | cancelled
-    reviewed_by: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     club = relationship("Club", backref="join_requests")
@@ -121,7 +126,7 @@ class Invite(TimestampMixin, Base):
     code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     email_or_code: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(50), default="editor", nullable=False)
-    created_by: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     max_uses: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     use_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -291,7 +296,7 @@ class Document(TimestampMixin, Base):
     club_id: Mapped[str] = mapped_column(String(36), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False, index=True)
     event_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("events.id", ondelete="SET NULL"), nullable=True, index=True)
     template_id: Mapped[str] = mapped_column(String(36), ForeignKey("templates.id", ondelete="RESTRICT"), nullable=False, index=True)
-    template_version_id: Mapped[str] = mapped_column(String(36), ForeignKey("template_versions.id", ondelete="RESTRICT"), nullable=False)
+    template_version_id: Mapped[str] = mapped_column(String(36), ForeignKey("template_versions.id", ondelete="RESTRICT"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     ref_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)  # draft | needs_info | ready | finalized

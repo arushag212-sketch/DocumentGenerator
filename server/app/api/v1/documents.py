@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -2249,7 +2249,7 @@ def generate_document(
                     "message": f"Reservation is already {reservation.status}.",
                 },
             )
-        if reservation.expires_at < datetime.utcnow():
+        if reservation.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -2309,7 +2309,7 @@ def generate_document(
 
     if reservation:
         reservation.status = "used"
-        reservation.used_at = datetime.utcnow()
+        reservation.used_at = datetime.now(timezone.utc).replace(tzinfo=None)
         reservation.document_id = doc_record.id
         db.flush()
 

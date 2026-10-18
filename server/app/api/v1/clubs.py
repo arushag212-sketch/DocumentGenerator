@@ -245,7 +245,7 @@ def sync_membership_position_to_role_held(
                 },
             )
         elif conflict_resolution == "replace":
-            now_dt = datetime.utcnow()
+            now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
             for ah in other_holders:
                 ah.valid_to = now_dt
             db.flush()
@@ -287,7 +287,7 @@ def sync_membership_position_to_role_held(
             role_key=target_role,
             designation_label=label,
             academic_year=ay,
-            valid_from=datetime.utcnow(),
+            valid_from=datetime.now(timezone.utc).replace(tzinfo=None),
             valid_to=None,
         )
         db.add(new_rh)
@@ -414,7 +414,7 @@ def create_club(
         )
 
     # 2. Rate limit: maximum 3 clubs created per user per day
-    one_day_ago = datetime.utcnow() - timedelta(days=1)
+    one_day_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
     clubs_created_24h = (
         db.scalar(
             select(func.count(AuditLog.id)).where(
@@ -518,7 +518,7 @@ def create_join_request(
     stored_pos, mapped_role, note = validate_and_normalize_position(payload.position)
 
     # 2. Rate limits: maximum 5/hour, 20/day per user
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     one_hour_ago = now - timedelta(hours=1)
     one_day_ago = now - timedelta(days=1)
 
@@ -750,7 +750,7 @@ def approve_join_request(
 
     jr.status = "approved"
     jr.reviewed_by = ctx.user.id
-    jr.reviewed_at = datetime.utcnow()
+    jr.reviewed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Create or update membership
     membership_repo = ScopedRepository(db, Membership, club_id=ctx.club.id)
@@ -811,7 +811,7 @@ def reject_join_request(
 
     jr.status = "rejected"
     jr.reviewed_by = ctx.user.id
-    jr.reviewed_at = datetime.utcnow()
+    jr.reviewed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     target_user = db.query(User).filter(User.id == jr.user_id).first()
     client_ip = request.client.host if request.client else None
@@ -1916,7 +1916,7 @@ def create_club_invite(
     raw_code = secrets.token_urlsafe(16)
     code_hash = hashlib.sha256(raw_code.encode("utf-8")).hexdigest()
     expiry_days = payload.expiry_days or 7
-    expires_at = datetime.utcnow() + timedelta(days=expiry_days)
+    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=expiry_days)
     max_uses = payload.max_uses if (payload.max_uses and payload.max_uses > 0) else 1
 
     invite = Invite(

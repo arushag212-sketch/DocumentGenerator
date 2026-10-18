@@ -152,17 +152,40 @@ Screenshots archived to `docs/screenshots/baseline/`.
 
 ---
 
+## Phase 5: Backend Hardening and PostgreSQL Portability (COMPLETED)
+- **Work Completed**:
+  - Deprecated `datetime.utcnow()` completely eradicated across the entire codebase (`server/app/models/`, `server/app/core/`, `server/app/api/v1/`, and `docgen/db.py`), replaced with standard timezone-aware UTC normalization `datetime.now(timezone.utc).replace(tzinfo=None)` ensuring full compatibility with both SQLite and PostgreSQL without runtime timezone comparison errors.
+  - Implemented clean `EmailSender` interface in `server/app/core/email.py` supporting `SMTPEmailSender` (with STARTTLS, TLS, and plain SMTP support) and `ConsoleEmailSender` (standardized logging with `[ACTIVATION LINK]`, `[INVITATION LINK]`, and `[PASSWORD RESET LINK]` prefixes for local and automated testing).
+  - Implemented clean `Storage` interface in `server/app/core/storage.py` supporting `LocalDiskStorage` (safe path normalization preventing traversal escaping) and `S3Storage` (AWS S3, Supabase S3, Cloudflare R2).
+  - Schema hardening:
+    - Added `index=True` to all foreign key columns previously lacking direct indexes: `join_requests.reviewed_by`, `invites.created_by`, and `documents.template_version_id`.
+    - Verified all JSON fields use cross-dialect `sqlalchemy.JSON`.
+    - Verified all status/role columns use portable string fallbacks rather than fragile database-level native enums.
+  - Implemented `scripts/check_db.py` validator tool:
+    - Inspects all 21 tables in `Base.metadata`.
+    - Verifies foreign key indexing coverage, portable JSON usage, non-native enum safety, and successfully compiles table DDL against PostgreSQL dialect without errors.
+  - Updated Alembic configuration in `server/alembic/env.py` to support `render_as_batch=True` on SQLite and standard DDL on PostgreSQL.
+  - Verified offline Alembic migration compilation (`alembic upgrade head --sql`) against PostgreSQL dialect.
+- **Verification**:
+  - `python scripts/check_db.py`: Exits with code 0 (21 tables verified and compiled to PostgreSQL DDL).
+  - `python -m pytest tests/test_phase5_storage_email.py -v`: 8/8 tests passed in 1.17s.
+
+---
+
 ## Current Status & Next Steps
 - **Phase 0**: **DONE** (Commit `69b63d8`)
 - **Phase 1**: **DONE** (Commit `941f16e`)
 - **Phase 2**: **DONE** (Commit `9253148`)
 - **Phase 3**: **DONE** (Commit `0987314`)
-- **Phase 4**: **DONE**
-- **Phase 5 (Next)**: Backend Hardening & PostgreSQL Portability
-  - Email sender abstraction (`EmailSender`: SMTP with Console fallback).
-  - Storage abstraction (`Storage`: LocalDiskStorage + S3-compatible stub).
-  - Timezone-aware UTC timestamps (`datetime.now(timezone.utc)` across models).
-  - Check database migration & portability scripts (`scripts/check_db.py`).
+- **Phase 4**: **DONE** (Commit `5fd1c8c`)
+- **Phase 5**: **DONE**
+- **Phase 6 (Next)**: Production Deployment Readiness
+  - Multi-stage Dockerfile (FastAPI + LibreOffice + fonts + built React SPA).
+  - docker-compose.yml configuration with healthchecks.
+  - vercel.json deployment configuration for frontend alternative.
+  - docs/DEPLOYMENT.md guide.
+  - scripts/predeploy_check.py automated deployment pre-flight verification script.
+
 
 
 
