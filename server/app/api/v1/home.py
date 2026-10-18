@@ -72,6 +72,7 @@ class HomeMissingQuestion(BaseModel):
     label: str
     type: str  # time | time_range | date | date_range | int | money | enum | venue | person_ref | text | longtext
     required: bool = True
+    importance: str = "optional"
     defer_ok: bool = False
     needed_by: list[str] = Field(default_factory=list)
     values: Optional[list[str]] = None
@@ -253,6 +254,7 @@ def understand_user_need(
                 label=q_label,
                 type=w_type,
                 required=mf.required,
+                importance=mf.importance,
                 defer_ok=mf.defer_ok,
                 needed_by=[_clean_jargon(n) for n in mf.needed_by],
                 values=getattr(mf, "values", None),

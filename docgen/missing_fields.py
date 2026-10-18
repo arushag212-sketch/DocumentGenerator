@@ -135,6 +135,7 @@ class MissingField:
     mask: bool = False
     field_type: str = "text"
     values: Optional[list[str]] = None  # for enum fields
+    importance: str = "optional"  # essential | optional
 
 
 @dataclass
@@ -145,8 +146,11 @@ class MissingFieldReport:
 
     @property
     def has_blockers(self) -> bool:
-        """Are there required fields that are missing and not defer_ok?"""
-        return any(f.required and not f.defer_ok for f in self.missing)
+        """Are there essential required fields that are missing and not defer_ok?"""
+        return any(
+            f.required and not f.defer_ok and getattr(f, "importance", "optional") == "essential"
+            for f in self.missing
+        )
 
     def summary(self) -> str:
         lines = []
@@ -224,6 +228,7 @@ def detect_missing_fields(event: EventRecord,
                         mask=field_schema.mask,
                         field_type=field_schema.type,
                         values=field_schema.values,
+                        importance=getattr(field_schema, "importance", "optional"),
                     )
                     seen_keys[key] = mf
                     report.missing.append(mf)
@@ -236,6 +241,7 @@ def detect_missing_fields(event: EventRecord,
                         documents=[schema.name],
                         required=field_schema.required is True,
                         defer_ok=field_schema.defer_ok,
+                        importance=getattr(field_schema, "importance", "optional"),
                     )
                     seen_keys[key] = mf
                     report.unconfirmed.append(mf)

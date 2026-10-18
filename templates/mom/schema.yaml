@@ -13,62 +13,78 @@ repeat_per: null
 fields:
   - key: meeting_title
     type: text
+    importance: essential
     required: true
     ask: "What is the meeting title?"
-  - key: ref_no
-    type: text
-    required: false
-    ask: "Reference number for MoM?"
   - key: meeting_date
     type: date
+    importance: essential
     required: true
     ask: "Meeting date?"
+  - key: venue
+    type: text
+    importance: essential
+    required: true
+    ask: "Meeting venue?"
+  - key: attendees
+    type: table
+    importance: essential
+    required: true
+    ask: "List of attendees?"
+  - key: agenda_items
+    type: table
+    importance: essential
+    required: true
+    ask: "Agenda items and discussions?"
+  - key: ref_no
+    type: text
+    importance: optional
+    required: false
+    ask: "Reference number for MoM?"
   - key: meeting_start_time
     type: text
-    required: true
+    importance: optional
+    required: false
     ask: "Meeting start time?"
   - key: meeting_end_time
     type: text
-    required: true
+    importance: optional
+    required: false
     ask: "Meeting end time?"
-  - key: venue
-    type: text
-    required: true
-    ask: "Meeting venue?"
   - key: mode
     type: enum
     values: [Offline, Online, Hybrid]
     default_from: config.defaults.mode
+    importance: optional
+    required: false
   - key: chaired_by
     type: text
-    required: true
+    importance: optional
+    required: false
     ask: "Who chaired the meeting?"
-  - key: attendees
-    type: table
-    required: true
-    ask: "List of attendees?"
   - key: absentees
     type: table
+    importance: optional
     required: false
     ask: "List of absentees (if any)?"
-  - key: agenda_items
-    type: table
-    required: true
-    ask: "Agenda items and discussions?"
   - key: action_items
     type: table
+    importance: optional
     required: false
     ask: "Action items (task, owner, deadline)?"
   - key: next_meeting_date
     type: date
+    importance: optional
     required: false
     ask: "Date of next meeting?"
   - key: prepared_by
     type: text
-    required: true
+    importance: optional
+    required: false
     ask: "Who prepared these minutes?"
   - key: approved_by
     type: text
-    required: true
+    importance: optional
+    required: false
     ask: "Who approved these minutes?"
 sections: []

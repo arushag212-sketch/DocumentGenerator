@@ -12,10 +12,11 @@ import os
 from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, event
+import tempfile
 from sqlalchemy.orm import sessionmaker
 
-# Path to isolated test database
-TEST_DB_PATH = Path("data/test_isolated.db")
+# Path to isolated test database in OS temp directory
+TEST_DB_PATH = Path(tempfile.gettempdir()) / "clubdocs_test_isolated.db"
 
 # Force DATABASE_URL to test DB before importing app/db modules
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH.as_posix()}"

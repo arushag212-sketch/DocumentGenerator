@@ -45,6 +45,10 @@ export const FieldChip = Node.create({
       fieldName: { default: '' },
       label: { default: '' },
       fieldType: { default: 'text' },
+      ask: { default: '' },
+      importance: { default: 'optional' },
+      required: { default: false },
+      sensitive: { default: false },
     };
   },
 
@@ -54,10 +58,15 @@ export const FieldChip = Node.create({
         tag: 'span[data-field-name]',
         getAttrs: (element) => {
           const el = element as HTMLElement;
+          const imp = el.getAttribute('data-importance') || (el.getAttribute('data-required') === 'true' ? 'essential' : 'optional');
           return {
-            fieldName: el.getAttribute('data-field-name'),
-            label: el.getAttribute('data-label'),
-            fieldType: el.getAttribute('data-field-type'),
+            fieldName: el.getAttribute('data-field-name') || '',
+            label: el.getAttribute('data-label') || el.getAttribute('data-field-name') || '',
+            fieldType: el.getAttribute('data-field-type') || 'text',
+            ask: el.getAttribute('data-ask') || '',
+            importance: imp,
+            required: imp === 'essential' || el.getAttribute('data-required') === 'true',
+            sensitive: el.getAttribute('data-sensitive') === 'true',
           };
         },
       },
@@ -67,16 +76,45 @@ export const FieldChip = Node.create({
   renderHTML({ HTMLAttributes }) {
     const fieldName = HTMLAttributes.fieldName || '';
     const label = HTMLAttributes.label || fieldName;
+    const importance = HTMLAttributes.importance || (HTMLAttributes.required ? 'essential' : 'optional');
+    const badgeText = importance === 'essential' ? 'Essential' : 'Optional';
     return [
       'span',
       mergeAttributes(HTMLAttributes, {
         'data-field-name': fieldName,
         'data-label': label,
         'data-field-type': HTMLAttributes.fieldType || 'text',
+        'data-importance': importance,
+        'data-required': importance === 'essential' ? 'true' : 'false',
+        'data-sensitive': HTMLAttributes.sensitive ? 'true' : 'false',
+        'data-ask': HTMLAttributes.ask || '',
         class:
-          'field-chip inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-300 shadow-sm mx-1 cursor-pointer select-none',
+          'field-chip inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-900 border border-indigo-300 shadow-sm mx-1 cursor-pointer select-none hover:bg-indigo-100',
       }),
       `⚡ ${label}`,
+      [
+        'span',
+        {
+          class: `text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ml-1 ${
+            importance === 'essential'
+              ? 'bg-rose-100 text-rose-700 border border-rose-300'
+              : 'bg-slate-100 text-slate-500 border border-slate-200'
+          }`,
+        },
+        badgeText,
+      ],
+      ...(HTMLAttributes.sensitive
+        ? [
+            [
+              'span',
+              {
+                class:
+                  'text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ml-0.5 bg-amber-100 text-amber-800 border border-amber-300',
+              },
+              '🔒 Sensitive',
+            ],
+          ]
+        : []),
     ];
   },
 });
@@ -366,7 +404,16 @@ export function insertSignatureGrid(editor: any, count = 2, signatures?: any[]) 
   safeInsertBlock(editor, node);
 }
 
-export function insertFieldChip(editor: any, fieldName: string, label?: string, fieldType = 'text') {
+export function insertFieldChip(
+  editor: any,
+  fieldName: string,
+  label?: string,
+  fieldType = 'text',
+  ask = '',
+  importance = 'optional',
+  required = false,
+  sensitive = false
+) {
   editor
     .chain()
     .focus()
@@ -376,6 +423,10 @@ export function insertFieldChip(editor: any, fieldName: string, label?: string, 
         fieldName,
         label: label || fieldName,
         fieldType,
+        ask: ask || `Please provide ${label || fieldName}`,
+        importance,
+        required: importance === 'essential' || required,
+        sensitive,
       },
     })
     .run();

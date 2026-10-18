@@ -10,18 +10,22 @@ repeat_per: null
 fields:
   - key: event_name
     type: text
+    importance: essential
     required: true
     ask: "What event is this reimbursement for?"
-  - key: document_date
-    type: date
-    required: true
-    ask: "Date for the bill summary?"
-  - key: winners
-    type: table
-    required: false
-    ask: "Winners and prize amounts?"
   - key: other_reimbursements
     type: table
+    importance: essential
     required: false
     ask: "Other payees and amounts?"
+  - key: winners
+    type: table
+    importance: optional
+    required: false
+    ask: "Winners and prize amounts?"
+  - key: document_date
+    type: date
+    importance: optional
+    required: false
+    ask: "Date for the bill summary?"
 sections: []

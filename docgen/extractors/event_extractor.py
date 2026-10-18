@@ -251,17 +251,24 @@ class EventExtractor:
             )
         if not title_match:
             title_match = re.search(
-                r'(?:permission|approval|note|request)\s+(?:for|regarding|about)\s+(?:our|the|a|an)?\s*'
+                r'(?:permission|approval|note|request)\s+(?:for|regarding|about)\s+(?:(?:our|the|a|an)\s+)?'
                 r'([A-Za-z0-9\s]+?(?:Workshop|Hackathon|Competition|Seminar|Webinar|Meet|Session|Bootcamp|Conclave|Fest|Conference))',
                 text,
                 re.IGNORECASE,
             )
         if not title_match:
-            title_match = re.match(
-                r'^\s*([A-Za-z0-9\s_-]+?)(?=\s+(?:on|at|from|during)\b|[.,;]|$)',
+            title_match = re.search(
+                r'\bfor\s+(?:(?:our|the|a|an)\s+)?([A-Za-z0-9\s]+?(?:Workshop|Hackathon|Competition|Seminar|Webinar|Meet|Session|Bootcamp|Conclave|Fest|Conference))\b',
                 text,
                 re.IGNORECASE,
             )
+        if not title_match:
+            if not re.match(r'^\s*(?:i need|we need|please|request|can you)\b', text, re.IGNORECASE):
+                title_match = re.match(
+                    r'^\s*([A-Za-z0-9\s_-]+?)(?=\s+(?:on|at|from|during)\b|[.,;]|$)',
+                    text,
+                    re.IGNORECASE,
+                )
         if title_match:
             extracted_name = title_match.group(1).strip()
             if extracted_name.islower():

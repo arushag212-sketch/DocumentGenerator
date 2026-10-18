@@ -23,6 +23,7 @@ from server.app.core.scoped_repo import ScopedRepository
 from server.app.models import Document, DocumentVersion, Event, Template, TemplateVersion
 from server.app.core.event_recommender import EventRecommender, EventRecommendationResponse
 from server.app.core.batch_generator import BatchGenerator
+from server.app.core.doc_retention import prune_document_versions
 
 router = APIRouter(prefix="/clubs/{club_id}/events", tags=["events"])
 
@@ -316,15 +317,7 @@ def update_event(
                     convert_pdf=True,
                 )
 
-                # Generate previews
-                preview_dir = Path("storage/previews") / d.id / f"v{new_v_no}"
-                preview_dir.mkdir(parents=True, exist_ok=True)
-                pdf_doc = pymupdf.open(str(render_result.pdf_path))
-                for idx, page in enumerate(pdf_doc):
-                    pix = page.get_pixmap(dpi=150)
-                    pix.save(str(preview_dir / f"page_{idx + 1}.png"))
-                pdf_doc.close()
-
+                # Previews are served on-demand via get_document_page_preview
                 new_ver = DocumentVersion(
                     id=str(uuid.uuid4()),
                     document_id=d.id,
@@ -338,6 +331,7 @@ def update_event(
                 )
                 db.add(new_ver)
                 d.current_version_id = new_ver.id
+                prune_document_versions(db, d.id)
             except Exception as e:
                 import traceback
                 print(f"[ERROR] Re-rendering document {d.id} failed: {e}")

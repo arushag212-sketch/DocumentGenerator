@@ -41,6 +41,7 @@ class GroupedMissingFieldOut(BaseModel):
     type: str = "text"
     ask: str
     required: bool = True
+    importance: str = "optional"
     defer_ok: bool = False
     sensitive: bool = False
     columns: Optional[list[dict[str, Any]]] = None
@@ -139,6 +140,34 @@ class EventRecommender:
         other_template_recs: list[TemplateRecommendationOut] = []
         parsed_schemas: dict[str, dict[str, Any]] = {}
 
+        BUNDLE_KEYWORDS = re.compile(
+            r"\b(start to finish|full event|entire event|complete event|lifecycle|all documents|bundle|package|all stages)\b",
+            re.IGNORECASE,
+        )
+        is_bundle_intent = bool(BUNDLE_KEYWORDS.search(text))
+
+        # Detect specific simple intent
+        wants_venue_simple = (
+            bool(re.search(r"\b(book|booking|hall|room|seminar hall|venue|permission|lab|ground|auditorium)\b", text, re.IGNORECASE))
+            and not (has_budget or has_winners or has_bills or is_meeting or is_bundle_intent)
+        )
+        wants_meeting_simple = (
+            is_meeting
+            and not (has_budget or has_winners or has_bills or is_bundle_intent or bool(re.search(r"\b(book|booking|seminar hall|auditorium)\b", text, re.IGNORECASE)))
+        )
+        wants_prize_simple = (
+            bool(re.search(r"\b(prize|prize money|winner|winners)\b", text, re.IGNORECASE))
+            and not (has_budget or wants_venue_simple or is_bundle_intent or has_bills)
+        )
+        wants_bills_simple = (
+            has_bills
+            and not (wants_venue_simple or has_winners or is_bundle_intent or has_budget or bool(re.search(r"\b(conduct|organize|book|booking|workshop|hackathon|seminar|permission)\b", text, re.IGNORECASE)))
+        )
+        wants_sanction_simple = (
+            bool(re.search(r"\b(approval note|budget approval|sanction|financial sanction|advance approval)\b", text, re.IGNORECASE))
+            and not (wants_venue_simple or has_winners or has_bills or is_meeting or is_bundle_intent)
+        )
+
         for tmpl in tmpls:
             ver = (
                 db.query(TemplateVersion)
@@ -167,75 +196,79 @@ class EventRecommender:
 
             recommended = False
             reason = ""
-            target_list = template_recs
 
             if not tmpl.is_system:
-                # Custom published club templates: list only if triggers or stage match the event
+                # Custom published club templates: ONLY recommend if explicit trigger word appears in user text
+                # AND never recommend unprompted custom templates when user intent is simple or when a system template matches.
                 matched_trigger = next((tr for tr in triggers if tr in text.lower()), None)
-                matches_stage = (t_stage == detected_stage)
-
-                if matched_trigger:
+                if matched_trigger and not (wants_venue_simple or wants_meeting_simple or wants_prize_simple or wants_bills_simple or wants_sanction_simple):
                     recommended = True
                     reason = f"Matches '{matched_trigger}' trigger in template schema."
-                    target_list = template_recs
-                elif matches_stage:
-                    recommended = True
-                    reason = f"Recommended based on {t_stage.replace('_', ' ')} event stage."
-                    target_list = template_recs
                 else:
                     recommended = False
                     reason = f"Published club template for {tmpl.category or 'official communications'}."
-                    target_list = other_template_recs
             else:
-                # System templates: Dynamic recommendation evaluation based on schema stage & triggers
-                if t_slug == "permission_letter" or "permission" in triggers or (t_stage == "pre_event" and not any(k in triggers for k in ["approval", "sanction", "budget"])):
-                    recommended = True
-                    reason = "Official permission from Head of Department and Faculty Advisor to conduct event on campus."
-
-                elif t_slug == "approval_note" or any(k in triggers for k in ["approval", "sanction", "budget", "finance"]):
-                    if has_budget:
-                        recommended = True
-                        reason = "Financial sanction and advance approval required for budget allocation and expenditures."
-                    else:
-                        recommended = False
-                        reason = "Requires budget allocation or financial sanction to apply."
-
-                elif t_slug == "prize_money_receipt" or repeat_per == "winners" or any(k in triggers for k in ["prize", "winner"]):
-                    if has_winners:
-                        recommended = True
-                        reason = "Individual acknowledgement receipts for prize money disbursement to winners."
-                    else:
-                        recommended = False
-                        reason = "Applicable post-event when student winners and prize amounts are declared."
-
-                elif t_slug == "bill_summary" or any(k in triggers for k in ["bill_summary", "expenditure", "bills"]):
-                    if has_bills:
-                        recommended = True
-                        reason = "Consolidated itemized summary of event expenditures and audit vouchers."
-                    else:
-                        recommended = False
-                        reason = "Applicable post-event when vouchers and expenses are settled."
-
-                elif t_slug == "bill_certificate" or repeat_per == "bills" or any(k in triggers for k in ["certificate", "bc-r"]):
-                    if has_bills:
-                        recommended = True
-                        reason = "Formal expenditure certification (Form BC-R) for incurred expenses."
-                    else:
-                        recommended = False
-                        reason = "Formal reimbursement certification for incurred expenses."
-
-                elif t_slug == "mom" or t_stage == "meeting" or any(k in triggers for k in ["meeting", "minutes"]):
-                    if is_meeting:
-                        recommended = True
-                        reason = "Official minutes of meeting record for committee deliberations and resolutions."
-                    else:
-                        recommended = False
-                        reason = "Applicable for internal committee meetings and formal resolutions."
-
+                # System templates:
+                if wants_venue_simple:
+                    recommended = (t_slug == "permission_letter")
+                    reason = "Official permission required to book and use the venue on campus." if recommended else "Not required for room/venue booking."
+                elif wants_meeting_simple:
+                    recommended = (t_slug == "mom")
+                    reason = "Official minutes of meeting record for committee deliberations and resolutions." if recommended else "Not required for meeting minutes."
+                elif wants_prize_simple:
+                    recommended = (t_slug == "prize_money_receipt")
+                    reason = "Individual acknowledgement receipts for prize money disbursement to winners." if recommended else "Not required for prize money receipt."
+                elif wants_bills_simple:
+                    recommended = (t_slug in ("bill_certificate", "bill_summary"))
+                    reason = "Formal expenditure certification (Form BC-R) and summary for incurred expenses." if recommended else "Not required for bill settlement."
+                elif wants_sanction_simple:
+                    recommended = (t_slug == "approval_note")
+                    reason = "Financial sanction and advance approval required for budget allocation and expenditures." if recommended else "Not required for financial sanction."
                 else:
-                    recommended = False
-                    reason = f"System template for {tmpl.category or 'official communications'}."
+                    # Multi-phase / bundle / general event intent
+                    if (t_slug == "permission_letter" or "permission" in triggers or (t_stage == "pre_event" and not any(k in triggers for k in ["approval", "sanction", "budget"]))) and not (has_bills and not is_bundle_intent):
+                        recommended = True
+                        reason = "Official permission from Head of Department and Faculty Advisor to conduct event on campus."
+                    elif t_slug == "approval_note" or any(k in triggers for k in ["approval", "sanction", "budget", "finance"]):
+                        if has_budget or is_bundle_intent:
+                            recommended = True
+                            reason = "Financial sanction and advance approval required for budget allocation and expenditures."
+                        else:
+                            recommended = False
+                            reason = "Requires budget allocation or financial sanction to apply."
+                    elif t_slug == "prize_money_receipt" or repeat_per == "winners" or any(k in triggers for k in ["prize", "winner"]):
+                        if has_winners:
+                            recommended = True
+                            reason = "Individual acknowledgement receipts for prize money disbursement to winners."
+                        else:
+                            recommended = False
+                            reason = "Applicable post-event when student winners and prize amounts are declared."
+                    elif t_slug == "bill_summary" or any(k in triggers for k in ["bill_summary", "expenditure", "bills"]):
+                        if has_bills or is_bundle_intent:
+                            recommended = True
+                            reason = "Consolidated itemized summary of event expenditures and audit vouchers."
+                        else:
+                            recommended = False
+                            reason = "Applicable post-event when vouchers and expenses are settled."
+                    elif t_slug == "bill_certificate" or repeat_per == "bills" or any(k in triggers for k in ["certificate", "bc-r"]):
+                        if has_bills:
+                            recommended = True
+                            reason = "Formal expenditure certification (Form BC-R) for incurred expenses."
+                        else:
+                            recommended = False
+                            reason = "Formal reimbursement certification for incurred expenses."
+                    elif t_slug == "mom" or t_stage == "meeting" or any(k in triggers for k in ["meeting", "minutes"]):
+                        if is_meeting:
+                            recommended = True
+                            reason = "Official minutes of meeting record for committee deliberations and resolutions."
+                        else:
+                            recommended = False
+                            reason = "Applicable for internal committee meetings and formal resolutions."
+                    else:
+                        recommended = False
+                        reason = f"System template for {tmpl.category or 'official communications'}."
 
+            target_list = template_recs if recommended else other_template_recs
             target_list.append(
                 TemplateRecommendationOut(
                     template_id=tmpl.id,
@@ -302,6 +335,7 @@ class EventRecommender:
                             type=f.get("type", "text"),
                             ask=ask_text,
                             required=bool(f.get("required", False)),
+                            importance=f.get("importance", "essential" if f.get("required") else "optional"),
                             defer_ok=bool(f.get("defer_ok", False)),
                             sensitive=bool(f.get("mask", False) or f.get("sensitive", False)),
                             columns=f.get("columns"),

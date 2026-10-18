@@ -23,6 +23,7 @@ class FieldSchema(BaseModel):
     values: Optional[list[str]] = None  # for enum type
     format: Optional[str] = None  # e.g. "inr" for computed fields
     columns: Optional[list[Any]] = None  # for table type column definitions
+    importance: str = "optional"  # essential | optional
 
 
 class SectionSchema(BaseModel):
@@ -52,6 +53,14 @@ class TemplateSchema(BaseModel):
     def required_field_keys(self) -> list[str]:
         """Return keys of fields where required is True (not conditional)."""
         return [f.key for f in self.fields if f.required is True]
+
+    def essential_field_keys(self) -> list[str]:
+        """Return keys of fields designated as essential."""
+        return [f.key for f in self.fields if getattr(f, "importance", "optional") == "essential"]
+
+    def optional_field_keys(self) -> list[str]:
+        """Return keys of fields designated as optional."""
+        return [f.key for f in self.fields if getattr(f, "importance", "optional") != "essential"]
 
     def all_field_keys(self) -> list[str]:
         return [f.key for f in self.fields]

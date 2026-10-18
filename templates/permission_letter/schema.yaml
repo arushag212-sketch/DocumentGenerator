@@ -13,67 +13,82 @@ repeat_per: null
 fields:
   - key: event_name
     type: text
+    importance: essential
     required: true
     ask: "What is the event title?"
-  - key: ref_no
-    type: text
-    required: true
-    ask: "Reference number (suggested: ACM/{academic_year}/ROOM/{next})?"
-  - key: document_date
-    type: date
-    required: true
-    default_from: config.defaults.today
-    ask: "Date for the letter (default: today)?"
-  - key: submitted_to
-    type: text
-    required: true
-    ask: "Who is this letter addressed to?"
-    default_from: config.venues
   - key: venue
     type: text
+    importance: essential
     required: true
     ask: "Which venue/room do you need?"
   - key: dates
     type: date_range
+    importance: essential
     required: true
     ask: "What are the event dates?"
-  - key: date_start
-    type: date
-    required: true
-    ask: "Start date?"
-  - key: date_end
-    type: date
-    required: true
-    ask: "End date?"
   - key: time_start
     type: text
+    importance: essential
     required: true
     ask: "Start time?"
   - key: time_end
     type: text
+    importance: essential
     required: true
     ask: "End time?"
+  - key: ref_no
+    type: text
+    importance: optional
+    required: false
+    ask: "Reference number (suggested: ACM/{academic_year}/ROOM/{next})?"
+  - key: document_date
+    type: date
+    importance: optional
+    required: false
+    default_from: config.defaults.today
+    ask: "Date for the letter (default: today)?"
+  - key: submitted_to
+    type: text
+    importance: optional
+    required: false
+    ask: "Who is this letter addressed to?"
+    default_from: config.venues
+  - key: date_start
+    type: date
+    importance: optional
+    required: false
+    ask: "Start date?"
+  - key: date_end
+    type: date
+    importance: optional
+    required: false
+    ask: "End date?"
   - key: description
     type: longtext
-    required: true
+    importance: optional
+    required: false
     source_allowed: [user, llm_draft]
     ask: "Brief description of the event?"
   - key: objectives
     type: longtext
+    importance: optional
     required: false
     source_allowed: [user, llm_draft]
     ask: "What are the objectives?"
   - key: expected_participants
     type: int
+    importance: optional
     required: false
     ask: "Expected number of participants?"
   - key: mode
     type: enum
     values: [Offline, Online, Hybrid]
     default_from: config.defaults.mode
+    importance: optional
     required: false
   - key: organizers
     type: text
+    importance: optional
     required: false
     ask: "Who are the event organizers?"
     default_from: config.club_name

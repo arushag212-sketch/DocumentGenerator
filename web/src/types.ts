@@ -77,6 +77,10 @@ export interface TemplateField {
   key: string;
   type: string;
   required: boolean;
+  importance?: 'essential' | 'optional';
+  sensitive?: boolean;
+  label?: string;
+  ai_suggested?: boolean;
   defer_ok?: boolean;
   ask?: string;
   default_value?: any;
@@ -273,6 +277,7 @@ export interface HomeMissingQuestion {
   label: string;
   type: string;
   required: boolean;
+  importance?: 'essential' | 'optional';
   defer_ok: boolean;
   needed_by: string[];
   values?: string[] | null;

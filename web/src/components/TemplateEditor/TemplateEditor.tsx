@@ -30,6 +30,7 @@ interface TemplateField {
   label: string;
   type: string;
   required: boolean;
+  importance?: 'essential' | 'optional';
   ask?: string;
   defer_ok?: boolean;
   sensitive?: boolean;
@@ -123,6 +124,19 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
   // Selection Bubble Menu State
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null);
 
+  // Field Chip Popover State
+  const [chipPopover, setChipPopover] = useState<{
+    top: number;
+    left: number;
+    fieldName: string;
+    label: string;
+    fieldType: string;
+    ask: string;
+    importance: 'essential' | 'optional';
+    required: boolean;
+    sensitive: boolean;
+  } | null>(null);
+
   // AI Review Gate State
   const [unreviewedModal, setUnreviewedModal] = useState<any[] | null>(null);
   const [reviewingAi, setReviewingAi] = useState(false);
@@ -149,6 +163,39 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
       FieldChip,
       PageBreak,
     ],
+    editorProps: {
+      handleClick: (view, pos, event) => {
+        const target = (event.target as HTMLElement).closest('.field-chip');
+        if (target) {
+          const rect = target.getBoundingClientRect();
+          const node = view.state.doc.nodeAt(pos) || (pos > 0 ? view.state.doc.nodeAt(pos - 1) : null);
+          const attrs = node?.type.name === 'fieldChip' ? node.attrs : null;
+          const fieldName = attrs?.fieldName || target.getAttribute('data-field-name') || '';
+          const label = attrs?.label || target.getAttribute('data-label') || fieldName;
+          const fieldType = attrs?.fieldType || target.getAttribute('data-field-type') || 'text';
+          const ask = attrs?.ask || target.getAttribute('data-ask') || `Please provide ${label}`;
+          const importance = (attrs?.importance || target.getAttribute('data-importance') || 'optional') as 'essential' | 'optional';
+          const required = importance === 'essential' || attrs?.required || target.getAttribute('data-required') === 'true';
+          const sensitive = attrs?.sensitive || target.getAttribute('data-sensitive') === 'true';
+
+          setChipPopover({
+            top: Math.min(rect.bottom + 8, window.innerHeight - 320),
+            left: Math.min(Math.max(rect.left, 20), window.innerWidth - 340),
+            fieldName,
+            label,
+            fieldType,
+            ask,
+            importance,
+            required,
+            sensitive,
+          });
+          return true;
+        } else {
+          setChipPopover(null);
+        }
+        return false;
+      },
+    },
     content: { type: 'doc', content: [] },
     onSelectionUpdate: ({ editor: currentEditor }) => {
       const { selection } = currentEditor.state;
@@ -400,6 +447,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
       label: newFieldName.trim(),
       type: newFieldType,
       required: newFieldRequired,
+      importance: newFieldRequired ? 'essential' : 'optional',
       ask: `Enter ${newFieldName.trim()}`,
       defer_ok: false,
       sensitive: false,
@@ -407,9 +455,62 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
 
     const nextFields = [...fields, newF];
     setFields(nextFields);
-    insertFieldChip(editor, cleanKey, newF.label, newF.type);
+    insertFieldChip(
+      editor,
+      cleanKey,
+      newF.label,
+      newF.type,
+      newF.ask,
+      newF.importance,
+      newF.required,
+      false
+    );
     setNewFieldName('');
     setShowAddFieldModal(false);
+    triggerAutosave();
+  };
+
+  const handleToggleChipRequired = (newReq: boolean) => {
+    if (!chipPopover || !editor) return;
+    const newImp = newReq ? 'essential' : 'optional';
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'fieldChip' && node.attrs.fieldName === chipPopover.fieldName) {
+        editor.chain().setNodeSelection(pos).updateAttributes('fieldChip', {
+          importance: newImp,
+          required: newReq,
+        }).run();
+      }
+    });
+    setFields((prev) =>
+      prev.map((f) =>
+        f.key === chipPopover.fieldName
+          ? { ...f, importance: newImp, required: newReq }
+          : f
+      )
+    );
+    setChipPopover((prev) => (prev ? { ...prev, importance: newImp, required: newReq } : null));
+    setSaveStatus('unsaved');
+    triggerAutosave();
+  };
+
+  const handleToggleChipSensitive = (newSens: boolean) => {
+    if (!chipPopover || !editor) return;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'fieldChip' && node.attrs.fieldName === chipPopover.fieldName) {
+        editor.chain().setNodeSelection(pos).updateAttributes('fieldChip', {
+          sensitive: newSens,
+        }).run();
+      }
+    });
+    setFields((prev) =>
+      prev.map((f) =>
+        f.key === chipPopover.fieldName
+          ? { ...f, sensitive: newSens }
+          : f
+      )
+    );
+    setChipPopover((prev) => (prev ? { ...prev, sensitive: newSens } : null));
+    setSaveStatus('unsaved');
     triggerAutosave();
   };
 
@@ -833,6 +934,96 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
                 </div>
               </div>
             )}
+            {/* Field Chip Settings Popover */}
+            {chipPopover && (
+              <div
+                style={{ top: `${chipPopover.top}px`, left: `${chipPopover.left}px` }}
+                className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-2xl p-4 w-80 text-xs animate-in fade-in"
+              >
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-3">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-900 text-sm">
+                    <span className="text-indigo-600">⚡</span>
+                    <span>{chipPopover.label}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setChipPopover(null)}
+                    className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 text-slate-700">
+                  <div>
+                    <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
+                      Field Name
+                    </span>
+                    <span className="font-mono text-slate-800 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">
+                      {chipPopover.fieldName}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
+                      Type
+                    </span>
+                    <span className="font-medium text-slate-800 capitalize">{chipPopover.fieldType}</span>
+                  </div>
+
+                  <div>
+                    <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
+                      Ask / Prompt
+                    </span>
+                    <span className="text-slate-600">{chipPopover.ask || `Please enter ${chipPopover.label}`}</span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 space-y-3">
+                    {/* Toggle: Required to create document */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <label htmlFor="popoverReqToggle" className="font-bold text-slate-800 cursor-pointer block">
+                          Required to create document
+                        </label>
+                        <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
+                          Sets importance to essential. Users must fill this to generate document.
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        id="popoverReqToggle"
+                        checked={chipPopover.required}
+                        onChange={(e) => handleToggleChipRequired(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Toggle: Sensitive */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <label
+                          htmlFor="popoverSensToggle"
+                          className="font-bold text-slate-800 cursor-pointer block flex items-center gap-1"
+                        >
+                          <span>Sensitive</span>
+                          <span className="text-[10px] text-amber-600">🔒</span>
+                        </label>
+                        <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
+                          Sensitive fields (like bank details, PAN) are never visible to editors or unauthorized users.
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        id="popoverSensToggle"
+                        checked={chipPopover.sensitive}
+                        onChange={(e) => handleToggleChipSensitive(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Sidebar: Fields & Template Settings */}
@@ -864,14 +1055,44 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
                       className="p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded border border-slate-200 flex items-center justify-between group transition"
                     >
                       <div className="overflow-hidden">
-                        <div className="text-xs font-semibold text-slate-800 truncate">{f.label || f.key}</div>
-                        <div className="text-[11px] font-mono text-slate-500 truncate">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="text-xs font-semibold text-slate-800 truncate">{f.label || f.key}</span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase tracking-wider ${
+                              f.importance === 'essential' || f.required
+                                ? 'bg-rose-100 text-rose-700'
+                                : 'bg-slate-200/70 text-slate-600'
+                            }`}
+                          >
+                            {f.importance === 'essential' || f.required ? 'Essential' : 'Optional'}
+                          </span>
+                          {f.sensitive && (
+                            <span
+                              className="text-[9px] px-1 py-0.2 rounded font-bold uppercase tracking-wider bg-amber-100 text-amber-800"
+                              title="Sensitive field"
+                            >
+                              🔒
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-500 truncate mt-0.5">
                           {`{{ ${f.key} }}`} • <span className="text-indigo-600">{f.type}</span>
                         </div>
                       </div>
                       <button
-                        onClick={() => insertFieldChip(editor, f.key, f.label, f.type)}
-                        className="px-2 py-1 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded text-xs font-semibold text-indigo-600 shadow-2xs transition"
+                        onClick={() =>
+                          insertFieldChip(
+                            editor,
+                            f.key,
+                            f.label,
+                            f.type,
+                            f.ask,
+                            f.importance || (f.required ? 'essential' : 'optional'),
+                            f.required,
+                            f.sensitive
+                          )
+                        }
+                        className="px-2 py-1 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded text-xs font-semibold text-indigo-600 shadow-2xs transition shrink-0 ml-2 cursor-pointer"
                         title="Insert chip at cursor"
                       >
                         Insert

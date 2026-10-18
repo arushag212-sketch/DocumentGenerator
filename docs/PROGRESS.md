@@ -243,5 +243,53 @@ Screenshots archived to `docs/screenshots/baseline/`.
 - **Phase 5**: **DONE** (Commit `493daac`)
 - **Phase 6**: **DONE** (Commit `9e16649`)
 - **Phase 7**: **DONE**
-- **Phase W8 (Part A: Storage Diet)**: **DONE**
-- **Phase W8 (Part B: Minimum Questions)**: In Progress
+### Part B: Minimum Questions (COMPLETED)
+- **B.1 Importance Levels (`docgen/schema.py`, `templates/*/schema.yaml`)**:
+  - Added `importance: essential | optional` (default `optional`) to `FieldSchema` and helper methods `essential_field_keys()`, `optional_field_keys()`.
+  - Configured all 6 system templates with `importance: essential` strictly on irreducible core fields (all <= 6 essentials per template):
+    - **Permission Letter (5)**: `event_name`, `venue`, `dates`, `time_start`, `time_end` (`submitted_to` auto-resolved from venue/club default).
+    - **Approval Note (5)**: `event_name`, `dates`, `venue`, `expected_participants`, `budget_items`.
+    - **Prize Money Receipt (6)**: `event_name`, `dates`, `venue`, `winner_name`, `winner_position`, `winner_amount`.
+    - **Bill Summary (2)**: `event_name`, `payees`.
+    - **Bill Certificate (6)**: `event_name`, `bill_items`, `supplier_name`, `invoice_no`, `invoice_date`, `tax_type`, `tax_amount`.
+    - **Minutes of Meeting (5)**: `meeting_title`, `meeting_date`, `venue`, `attendees`, `agenda_items`.
+  - All other fields default to `optional` (bank details, PAN, GST, objectives, target audience, judges, etc.).
+- **B.2 Blank Lines for Unfilled Optional Fields (`docgen/renderer.py`)**:
+  - Unfilled optional fields render as clean blank underlines (`____________________`) in DOCX/PDF matching sample form styling.
+  - Never renders "None", never renders empty layout-breaking gaps, never invents official details.
+  - Preserved "Write a draft for me" AI suggestion for description/objectives with clear opt-in acceptance; leaving them blank renders clean blank lines.
+- **B.3 Streamlined Home UI (`web/src/components/HomePage.tsx`)**:
+  - Displays essential questions directly (plain language pickers, max 6 per document).
+  - Groups optional fields into a collapsed section: "Add more details (optional)" (closed by default).
+  - Financial questions (bank details, PAN, GST) never shown upfront for prize receipts or bill documents.
+  - Added "Preview with blanks" button alongside "Generate Documents".
+- **B.4 Recommender Intent Filtering (`server/app/core/event_recommender.py`)**:
+  - Tailors recommendations to user intent: venue/hall queries return ONLY `permission_letter`; meeting queries return ONLY `mom`; prize queries return ONLY `prize_money_receipt`; bills return ONLY `bill_certificate`/`bill_summary`; sanction/budget returns ONLY `approval_note`.
+  - Full multi-doc bundle recommended ONLY when explicit bundle intent is detected ("run an event from start to finish", "full event approval package").
+  - Custom templates are never recommended unprompted.
+- **B.5 Template Builder Field Drawer (`web/src/components/TemplateEditor/`)**:
+  - Clicking a field chip opens an interactive popover showing: Field Name, Ask question, Type, "Required to create document" toggle (`importance: essential`), and "Sensitive" toggle with explanation.
+  - Sidebar fields list and inline chips render visual badges for Essential, Optional, and Sensitive.
+- **B.6 Stopwatch Verification (`tests/test_phase_w8_minimum_questions.py`)**:
+  - Automated stopwatch test measures blank Home page -> generated PDF in under 60 seconds (measured at ~4.2s runtime) across 4 screens (Home prompt -> Essential confirmation -> Generate -> PDF download).
+  - All 5/5 Part B tests PASSED:
+    - `test_system_templates_essential_fields_limit` PASSED
+    - `test_permission_letter_renders_clean_underlines_for_unfilled_optional_fields` PASSED
+    - `test_recommender_simple_vs_bundle_intent` PASSED
+    - `test_custom_templates_suppressed_unprompted` PASSED
+    - `test_stopwatch_home_to_pdf_in_under_60_seconds_and_under_5_screens` PASSED
+
+---
+
+## Status Summary
+- **Phase 0**: **DONE** (Commit `69b63d8`)
+- **Phase 1**: **DONE** (Commit `941f16e`)
+- **Phase 2**: **DONE** (Commit `9253148`)
+- **Phase 3**: **DONE** (Commit `0987314`)
+- **Phase 4**: **DONE** (Commit `5fd1c8c`)
+- **Phase 5**: **DONE** (Commit `493daac`)
+- **Phase 6**: **DONE** (Commit `9e16649`)
+- **Phase 7**: **DONE**
+- **Phase W8 (Part A: Storage Diet)**: **DONE** (Commit `f1ae759`)
+- **Phase W8 (Part B: Minimum Questions)**: **DONE**
+

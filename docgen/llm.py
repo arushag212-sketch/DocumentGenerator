@@ -525,21 +525,7 @@ class GeminiLLMClient(LLMClient):
                     raise AIServiceError(f"AI service error: Network failure ({str(e)})")
 
         if resp.status_code == 429:
-            alt_candidates = [m for m in candidates if m != current_model][:2]
-            for fb_model in alt_candidates:
-                time.sleep(1)
-                fb_url = f"https://generativelanguage.googleapis.com/v1beta/models/{fb_model}:generateContent"
-                try:
-                    fb_resp = requests.post(fb_url, headers=headers, json=payload, timeout=12)
-                    if fb_resp.status_code == 200:
-                        self.model = fb_model
-                        resp = fb_resp
-                        break
-                    elif fb_resp.status_code != 429:
-                        resp = fb_resp
-                        break
-                except Exception:
-                    pass
+            raise AIQuotaError("Gemini API quota exceeded or rate limit reached.")
 
         if resp.status_code in (400, 401, 403):
             raise AIAuthenticationError(f"Gemini API key is invalid or expired. Check your .env.")

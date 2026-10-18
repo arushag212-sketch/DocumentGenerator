@@ -115,6 +115,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [refNumbersAccepted, setRefNumbersAccepted] = useState(false);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [datesConfirmed, setDatesConfirmed] = useState(false);
+  const [showOptionalDetails, setShowOptionalDetails] = useState(false);
 
   // Editable understood fields
   const [eventName, setEventName] = useState('');
@@ -357,6 +358,119 @@ export const HomePage: React.FC<HomePageProps> = ({
     } finally {
       setGenerating(false);
     }
+  };
+
+  const essentialQuestions = missingQuestions
+    .filter((q) => q.importance === 'essential' || q.required)
+    .slice(0, 6);
+
+  const optionalQuestions = missingQuestions.filter(
+    (q) => !essentialQuestions.includes(q)
+  );
+
+  const renderQuestionInput = (q: HomeMissingQuestion) => {
+    const val = answers[q.key] ?? '';
+    return (
+      <div key={q.key} className="space-y-1.5">
+        <label className="block text-xs sm:text-sm font-semibold text-slate-800">
+          {q.question} {q.required && <span className="text-red-500">*</span>}
+          {q.importance === 'optional' && !q.required && (
+            <span className="ml-1.5 text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+              Optional
+            </span>
+          )}
+        </label>
+        <p className="text-[11px] text-slate-400">Needed for: {q.needed_by.join(', ')}</p>
+
+        {/* Widget rendering based on type */}
+        {(q.type === 'enum' || (q.values && q.values.length > 0)) ? (
+          <select
+            value={val}
+            onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+          >
+            <option value="">-- Select {q.label} --</option>
+            {q.values?.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        ) : (q.type === 'person' || q.key.includes('signatory') || q.key.includes('person') || q.key === 'faculty_incharge') && clubPeople.length > 0 ? (
+          <select
+            value={val}
+            onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+          >
+            <option value="">-- Select Person --</option>
+            {clubPeople.map((p) => {
+              const pName = p.full_name || p.name;
+              const pDesig = p.roles?.[0]?.designation_label || p.designation || '';
+              return (
+                <option key={p.id} value={pName}>
+                  {pName} {pDesig ? `(${pDesig})` : ''}
+                </option>
+              );
+            })}
+          </select>
+        ) : q.type === 'time' ? (
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              {val && (
+                <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                  {formatTime12Hour(val)}
+                </span>
+              )}
+            </div>
+            <input
+              type="time"
+              value={val}
+              onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+              className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+            />
+          </div>
+        ) : (q.type === 'money' || q.key === 'budget_items' || q.key.includes('amount') || q.key.includes('budget')) ? (
+          <div>
+            <div className="relative">
+              <span className="absolute left-3 top-2.5 text-slate-500 font-bold text-xs">₹</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={val}
+                onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+                placeholder="e.g. 25000.00"
+                className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+              />
+            </div>
+            {val && !isNaN(Number(val)) && (
+              <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                Formatted: {formatIndianCurrency(val)}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <input
+              type={q.type === 'int' ? 'number' : 'text'}
+              step={q.type === 'int' ? '1' : undefined}
+              min={q.type === 'int' ? '0' : undefined}
+              value={val}
+              onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+              placeholder={
+                q.key === 'judges'
+                  ? 'e.g. Dr. Alok Kumar, Prof. Sharma (or leave blank if none)'
+                  : q.label
+              }
+              className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+            />
+            {q.key === 'judges' && (
+              <p className="text-[10px] text-slate-400 mt-1">
+                Enter comma-separated names of external judges, or leave empty if none.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -641,33 +755,51 @@ export const HomePage: React.FC<HomePageProps> = ({
                 />
               </div>
 
-              {/* Description & Objectives (with AI draft accept button if flagged) */}
+              {/* Description & Objectives (with Write a draft for me and AI draft accept buttons) */}
               {[
                 { label: 'Description', val: description, setVal: setDescription, btnId: 'acceptAiDraftDescription' },
                 { label: 'Objectives', val: objectives, setVal: setObjectives, btnId: 'acceptAiDraftObjectives' },
-              ].map(({ label, val, setVal, btnId }) => val ? (
+              ].map(({ label, val, setVal, btnId }) => (
                 <div key={label} className="sm:col-span-2">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-600">{label}</label>
-                    {val.includes('[AI-drafted') && (
-                      <button
-                        type="button"
-                        id={btnId}
-                        onClick={() => setVal(val.replace(/\[AI-drafted[^\]]*\]\s*/g, '').trim())}
-                        className="text-[11px] font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
-                      >
-                        Accept AI Draft
-                      </button>
-                    )}
+                    <label className="block text-xs font-semibold text-slate-600">{label} (Optional)</label>
+                    <div className="flex items-center gap-2">
+                      {!val && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const draft = label === 'Description'
+                              ? `[AI-drafted] Organized by student coordinators for campus community participation and practical learning.`
+                              : `[AI-drafted] 1. Enhance technical proficiency. 2. Promote hands-on collaborative problem solving.`;
+                            setVal(draft);
+                          }}
+                          className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <Sparkles className="w-3 h-3 text-indigo-600" />
+                          Write a draft for me
+                        </button>
+                      )}
+                      {val && val.includes('[AI-drafted') && (
+                        <button
+                          type="button"
+                          id={btnId}
+                          onClick={() => setVal(val.replace(/\[AI-drafted[^\]]*\]\s*/g, '').trim())}
+                          className="text-[11px] font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                        >
+                          Accept AI Draft
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <textarea
                     rows={2}
                     value={val}
                     onChange={(e) => setVal(e.target.value)}
+                    placeholder={`Leave blank to omit or write a custom ${label.toLowerCase()}...`}
                     className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
                   />
                 </div>
-              ) : null)}
+              ))}
             </div>
           </div>
 
@@ -742,8 +874,8 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           </div>
 
-          {/* 3. Grouped Missing Details Questions */}
-          {missingQuestions.length > 0 && (
+          {/* 3. Grouped Essential Missing Questions */}
+          {essentialQuestions.length > 0 && (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -751,138 +883,45 @@ export const HomePage: React.FC<HomePageProps> = ({
                   Additional details needed
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Please answer these questions so the official documents can be completed accurately.
+                  Essential details required to generate your official document.
                 </p>
               </div>
 
               <div className="space-y-4">
-                {missingQuestions.map((q) => {
-                  const val = answers[q.key] ?? '';
-                  return (
-                    <div key={q.key} className="space-y-1.5">
-                      <label className="block text-xs sm:text-sm font-semibold text-slate-800">
-                        {q.question} {q.required && <span className="text-red-500">*</span>}
-                      </label>
-                      <p className="text-[11px] text-slate-400">Needed for: {q.needed_by.join(', ')}</p>
-
-                      {/* Widget rendering based on type */}
-                      {(q.type === 'enum' || (q.values && q.values.length > 0)) ? (
-                        <select
-                          value={val}
-                          onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                          className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                        >
-                          <option value="">-- Select {q.label} --</option>
-                          {q.values?.map((opt) => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
-                        </select>
-                      ) : (q.type === 'person' || q.key.includes('signatory') || q.key.includes('person') || q.key === 'faculty_incharge') && clubPeople.length > 0 ? (
-                        <select
-                          value={val}
-                          onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                          className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                        >
-                          <option value="">-- Select Person --</option>
-                          {clubPeople.map((p) => {
-                            const pName = p.full_name || p.name;
-                            const pDesig = p.roles?.[0]?.designation_label || p.designation || '';
-                            return (
-                              <option key={p.id} value={pName}>
-                                {pName} {pDesig ? `(${pDesig})` : ''}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      ) : q.type === 'longtext' ? (
-                        <textarea
-                          rows={2}
-                          value={val}
-                          onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                          className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                        />
-                      ) : q.type === 'date' ? (
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[11px] text-slate-400">Date picker</span>
-                            {val && (
-                              <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                {formatDateToIndian(val)}
-                              </span>
-                            )}
-                          </div>
-                          <input
-                            type="date"
-                            min={minDate}
-                            max={maxDate}
-                            value={val}
-                            onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                          />
-                        </div>
-                      ) : q.type === 'time' ? (
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[11px] text-slate-400">24-hour time picker</span>
-                            {val && (
-                              <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                {formatTime12Hour(val)}
-                              </span>
-                            )}
-                          </div>
-                          <input
-                            type="time"
-                            value={val}
-                            onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                          />
-                        </div>
-                      ) : (q.type === 'money' || q.key === 'budget_items' || q.key.includes('amount') || q.key.includes('budget')) ? (
-                        <div>
-                          <div className="relative">
-                            <span className="absolute left-3 top-2.5 text-slate-500 font-bold text-xs">₹</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={val}
-                              onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                              placeholder="e.g. 25000.00"
-                              className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                            />
-                          </div>
-                          {val && !isNaN(Number(val)) && (
-                            <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                              Formatted: {formatIndianCurrency(val)}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <div>
-                          <input
-                            type={q.type === 'int' ? 'number' : 'text'}
-                            step={q.type === 'int' ? '1' : undefined}
-                            min={q.type === 'int' ? '0' : undefined}
-                            value={val}
-                            onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-                            placeholder={
-                              q.key === 'judges'
-                                ? 'e.g. Dr. Alok Kumar, Prof. Sharma (or leave blank if none)'
-                                : q.label
-                            }
-                            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
-                          />
-                          {q.key === 'judges' && (
-                            <p className="text-[10px] text-slate-400 mt-1">
-                              Enter comma-separated names of external judges, or leave empty if none.
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {essentialQuestions.map(renderQuestionInput)}
               </div>
+            </div>
+          )}
+
+          {/* 4. Collapsible Optional Details (Bank, PAN, GST, etc.) */}
+          {optionalQuestions.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <button
+                type="button"
+                id="toggleOptionalDetailsBtn"
+                onClick={() => setShowOptionalDetails(!showOptionalDetails)}
+                className="w-full p-4 sm:p-5 bg-slate-50/70 hover:bg-slate-100/70 flex items-center justify-between text-left transition-colors cursor-pointer"
+              >
+                <div>
+                  <div className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <span>Add more details (optional)</span>
+                    <span className="text-[11px] font-normal text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded-full">
+                      {optionalQuestions.length} optional field{optionalQuestions.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Bank details, account numbers, IFSC, PAN, GST, etc. Unfilled fields render as clean blank lines ready to fill by hand.
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-[#1b365d]">
+                  {showOptionalDetails ? '▲ Hide' : '▼ Show'}
+                </span>
+              </button>
+              {showOptionalDetails && (
+                <div className="p-5 sm:p-6 space-y-4 border-t border-slate-100 bg-white">
+                  {optionalQuestions.map(renderQuestionInput)}
+                </div>
+              )}
             </div>
           )}
 
@@ -899,24 +938,38 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={generating || selectedTemplateIds.length === 0 || !refNumbersAccepted || Boolean(hasUnconfirmedDraft)}
-              className="w-full sm:w-auto px-6 py-3 bg-[#1b365d] hover:bg-[#132742] text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed"
-            >
-              {generating ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Generating Documents...
-                </>
-              ) : (
-                <>
-                  Generate Documents
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                type="button"
+                id="previewWithBlanksBtn"
+                onClick={handleGenerate}
+                disabled={generating || selectedTemplateIds.length === 0 || !refNumbersAccepted || Boolean(hasUnconfirmedDraft)}
+                className="w-full sm:w-auto px-5 py-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-sm rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                title="Generate with clean blank lines for hand-filling"
+              >
+                <FileText className="w-4 h-4 text-slate-600" />
+                Preview with blanks
+              </button>
+              <button
+                type="button"
+                id="generateDocumentsBtn"
+                onClick={handleGenerate}
+                disabled={generating || selectedTemplateIds.length === 0 || !refNumbersAccepted || Boolean(hasUnconfirmedDraft)}
+                className="w-full sm:w-auto px-6 py-3 bg-[#1b365d] hover:bg-[#132742] text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed"
+              >
+                {generating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Generating Documents...
+                  </>
+                ) : (
+                  <>
+                    Generate Documents
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

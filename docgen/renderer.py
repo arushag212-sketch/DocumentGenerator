@@ -21,6 +21,8 @@ from docgen.functions import get_function
 from docgen.models import EventRecord
 from docgen.schema import TemplateSchema, load_schema
 
+BLANK_LINE: str = "____________________"
+
 
 def safe_cap_collections(obj: Any, max_items: int = 1000) -> None:
     """Enforce loop size cap of 1000 items on any collection."""
@@ -363,6 +365,25 @@ class Renderer:
                         val = val.get(part)
                     else:
                         val = getattr(val, part, None) if hasattr(val, part) else None
+                if field.key == "submitted_to":
+                    venue_key = ctx.get("venue")
+                    v_conf = None
+                    if isinstance(val, dict):
+                        if venue_key and venue_key in val:
+                            v_conf = val[venue_key]
+                        elif val:
+                            for vk, vv in val.items():
+                                if venue_key and (vk.lower() in str(venue_key).lower() or (getattr(vv, "short_name", "") and getattr(vv, "short_name", "").lower() in str(venue_key).lower())):
+                                    v_conf = vv
+                                    break
+                            if not v_conf:
+                                v_conf = next(iter(val.values()), None)
+                    if v_conf:
+                        val = getattr(v_conf, "default_addressee", None) or getattr(v_conf, "full_name", None)
+                    elif isinstance(val, dict):
+                        val = "The Head of Department"
+                elif field.type == "text" and isinstance(val, (dict, list)):
+                    val = None
                 if val is not None:
                     ctx[field.key] = val
 
@@ -374,57 +395,61 @@ class Renderer:
         )
         # Merge extra context (e.g., custom form data, winner data for repeat_per)
         if extra_context:
-            ctx.update(extra_context)
+            for ek, ev in extra_context.items():
+                if ev is not None:
+                    ctx[ek] = ev
 
         # Ensure safe defaults for nested winner and reimbursement data structures
         if "winners" in ctx and isinstance(ctx["winners"], list):
             clean_winners = []
             for w in ctx["winners"]:
                 w_dict = w.model_dump() if hasattr(w, "model_dump") else dict(w)
+                BLANK_LINE = "____________________"
                 bank_dict = w_dict.get("bank")
                 if not isinstance(bank_dict, dict) or not bank_dict:
                     bank_dict = {
-                        "account_no": "",
-                        "name_as_per_bank": w_dict.get("name", ""),
-                        "bank_name": "",
-                        "branch": "",
-                        "ifsc": "",
-                        "pan": "",
+                        "account_no": BLANK_LINE,
+                        "name_as_per_bank": w_dict.get("name", "") or BLANK_LINE,
+                        "bank_name": BLANK_LINE,
+                        "branch": BLANK_LINE,
+                        "ifsc": BLANK_LINE,
+                        "pan": BLANK_LINE,
                     }
                 else:
                     bank_dict = dict(bank_dict)
                     for bk in ("account_no", "name_as_per_bank", "bank_name", "branch", "ifsc", "pan"):
-                        if bk not in bank_dict or bank_dict[bk] is None:
-                            bank_dict[bk] = w_dict.get("name", "") if bk == "name_as_per_bank" else ""
+                        if bk not in bank_dict or bank_dict[bk] is None or str(bank_dict[bk]).strip() in ("", "None"):
+                            bank_dict[bk] = w_dict.get("name", "") if bk == "name_as_per_bank" else BLANK_LINE
                 w_dict["bank"] = bank_dict
-                for wk in ("name", "position", "amount", "roll_no", "course_semester", "mobile"):
-                    if wk not in w_dict or w_dict[wk] is None:
-                        w_dict[wk] = ""
+                for wk in ("roll_no", "course_semester", "mobile"):
+                    if wk not in w_dict or w_dict[wk] is None or str(w_dict[wk]).strip() in ("", "None"):
+                        w_dict[wk] = BLANK_LINE
                 clean_winners.append(w_dict)
             ctx["winners"] = clean_winners
 
         if "winner" in ctx and ctx["winner"]:
+            BLANK_LINE = "____________________"
             w = ctx["winner"]
             w_dict = w.model_dump() if hasattr(w, "model_dump") else dict(w)
             bank_dict = w_dict.get("bank")
             if not isinstance(bank_dict, dict) or not bank_dict:
                 bank_dict = {
-                    "account_no": "",
-                    "name_as_per_bank": w_dict.get("name", ""),
-                    "bank_name": "",
-                    "branch": "",
-                    "ifsc": "",
-                    "pan": "",
+                    "account_no": BLANK_LINE,
+                    "name_as_per_bank": w_dict.get("name", "") or BLANK_LINE,
+                    "bank_name": BLANK_LINE,
+                    "branch": BLANK_LINE,
+                    "ifsc": BLANK_LINE,
+                    "pan": BLANK_LINE,
                 }
             else:
                 bank_dict = dict(bank_dict)
                 for bk in ("account_no", "name_as_per_bank", "bank_name", "branch", "ifsc", "pan"):
-                    if bk not in bank_dict or bank_dict[bk] is None:
-                        bank_dict[bk] = w_dict.get("name", "") if bk == "name_as_per_bank" else ""
+                    if bk not in bank_dict or bank_dict[bk] is None or str(bank_dict[bk]).strip() in ("", "None"):
+                        bank_dict[bk] = w_dict.get("name", "") if bk == "name_as_per_bank" else BLANK_LINE
             w_dict["bank"] = bank_dict
-            for wk in ("name", "position", "amount", "roll_no", "course_semester", "mobile"):
-                if wk not in w_dict or w_dict[wk] is None:
-                    w_dict[wk] = ""
+            for wk in ("roll_no", "course_semester", "mobile"):
+                if wk not in w_dict or w_dict[wk] is None or str(w_dict[wk]).strip() in ("", "None"):
+                    w_dict[wk] = BLANK_LINE
             ctx["winner"] = w_dict
 
         if "other_reimbursements" in ctx and isinstance(ctx["other_reimbursements"], list):
@@ -574,10 +599,24 @@ class Renderer:
         # Convert Decimal values (format strictly as INR if field is in money_keys, otherwise keep plain numeric string)
         ctx = self._convert_decimals(ctx, money_keys)
 
-        # Ensure optional/missing schema fields have default empty strings so StrictUndefined succeeds
+        # Ensure optional/missing schema fields have default blank lines for hand-filling
+        BLANK_LINE = "____________________"
         for f in schema.fields:
-            if f.key not in ctx or ctx[f.key] is None:
-                ctx[f.key] = ""
+            is_essential = getattr(f, "importance", "optional") == "essential"
+            val = ctx.get(f.key)
+            if not is_essential:
+                # If optional field is empty or literal "None", render clean blank line for hand-filling
+                if val is None or str(val).strip() in ("", "None", "null"):
+                    if f.type in ("table",):
+                        ctx[f.key] = [] if val is None else val
+                    elif f.key in ("description", "objectives"):
+                        # Keep empty string if unfilled (Permission Letter's venue clause carries meaning)
+                        ctx[f.key] = ""
+                    else:
+                        ctx[f.key] = BLANK_LINE
+            else:
+                if f.key not in ctx or ctx[f.key] is None:
+                    ctx[f.key] = ""
 
         # GLOBAL GUARD (Extended per Requirement 2 & W3.1):
         # 1. Any context value that is callable, a function/method repr, or contains "<function", "<bound", "object at 0x", "[AI-drafted" must raise.
@@ -616,14 +655,15 @@ class Renderer:
 
         walk_ctx(ctx)
 
-        # Check required fields
+        # Check essential required fields
         for f_schema in schema.fields:
             val = ctx.get(f_schema.key)
-            if f_schema.required is True and not f_schema.defer_ok:
+            is_essential = getattr(f_schema, "importance", "optional") == "essential"
+            if f_schema.required is True and not f_schema.defer_ok and is_essential:
                 if val is None or str(val).strip() in ("", "None", "null"):
                     raise ValueError(
                         f"Rendering validation failed for template '{schema.id}': "
-                        f"Required field '{f_schema.key}' is missing or None. "
+                        f"Required essential field '{f_schema.key}' is missing or None. "
                         f"Official templates cannot render empty or 'None' values. "
                         f"(Field prompt: {f_schema.ask})"
                     )
