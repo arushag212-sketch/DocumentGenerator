@@ -22,6 +22,7 @@ class FieldSchema(BaseModel):
     mask: bool = False
     values: Optional[list[str]] = None  # for enum type
     format: Optional[str] = None  # e.g. "inr" for computed fields
+    columns: Optional[list[Any]] = None  # for table type column definitions
 
 
 class SectionSchema(BaseModel):

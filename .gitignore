@@ -2,12 +2,14 @@
 config/club_config.yaml
 *.env
 .env
-data/*.db
+data/*.db*
 storage/
 outputs/
 sample docs/
 node_modules/
+web/node_modules/
 dist/
+web/dist/
 
 # Python
 __pycache__/

@@ -331,6 +331,92 @@ def check_env_vars() -> list[CheckResult]:
     return results
 
 
+def check_ai() -> list[CheckResult]:
+    from server.app.core.config import _load_env_file
+    _load_env_file()
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key or not api_key.strip():
+        return [
+            CheckResult(
+                name="Google Gemini AI Integration",
+                passed=True,
+                message="GEMINI_API_KEY is not set (optional in development; offline mode active). Set GEMINI_API_KEY to enable live AI template drafting.",
+            )
+        ]
+
+    configured_model = os.environ.get("GEMINI_MODEL") or "gemini-2.5-flash"
+    import requests
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models"
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key.strip(),
+    }
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+    except Exception as e:
+        return [
+            CheckResult(
+                name="Google Gemini AI Integration",
+                passed=False,
+                message=f"Network error connecting to Gemini API: {e}",
+                fix_instruction="Check internet connectivity and ensure generativelanguage.googleapis.com is reachable.",
+            )
+        ]
+
+    if resp.status_code != 200:
+        err_msg = ""
+        try:
+            err_msg = resp.json().get("error", {}).get("message", "")
+        except Exception:
+            err_msg = resp.text[:200]
+        return [
+            CheckResult(
+                name="Google Gemini AI Integration",
+                passed=False,
+                message=f"Gemini API returned HTTP {resp.status_code}: {err_msg}",
+                fix_instruction="Verify that your GEMINI_API_KEY is active and valid at https://aistudio.google.com/.",
+            )
+        ]
+
+    try:
+        data = resp.json()
+        models = data.get("models", [])
+        model_names = [m.get("name", "") for m in models]
+        target_name = f"models/{configured_model}" if not configured_model.startswith("models/") else configured_model
+
+        is_in_list = any(m == target_name or m == configured_model for m in model_names)
+        if is_in_list:
+            return [
+                CheckResult(
+                    name="Google Gemini AI Integration",
+                    passed=True,
+                    message=f"Gemini API connected successfully. Configured model '{configured_model}' is available ({len(models)} models listed).",
+                )
+            ]
+        else:
+            avail_sample = [m.replace("models/", "") for m in model_names if "gemini" in m][:5]
+            return [
+                CheckResult(
+                    name="Google Gemini AI Integration",
+                    passed=False,
+                    message=f"Gemini API connected, but configured model '{configured_model}' was not found in available models.",
+                    fix_instruction=f"Set GEMINI_MODEL in .env to a supported model (e.g. gemini-2.5-flash). Available models: {', '.join(avail_sample)}",
+                )
+            ]
+    except Exception as e:
+        return [
+            CheckResult(
+                name="Google Gemini AI Integration",
+                passed=False,
+                message=f"Failed to parse Gemini models list: {e}",
+                fix_instruction="Check Google Generative Language API status.",
+            )
+        ]
+
+
 def main() -> int:
     print(f"\n{BOLD}{BLUE}========================================================================{RESET}")
     print(f"{BOLD}{BLUE}        SVNIT ClubDocs System Health & Readiness Doctor                 {RESET}")
@@ -342,6 +428,7 @@ def main() -> int:
     checks.extend(check_libreoffice())
     checks.extend(check_database())
     checks.extend(check_env_vars())
+    checks.extend(check_ai())
 
     failed_count = 0
     for c in checks:

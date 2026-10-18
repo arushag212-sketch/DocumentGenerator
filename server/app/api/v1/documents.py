@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
+import subprocess
+import tempfile
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -12,11 +15,18 @@ from typing import Any, Optional
 
 import pymupdf
 import yaml
+from docxtpl import DocxTemplate
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
+
+from server.app.core.template_compiler import TemplateCompiler
+from server.app.core.template_generator import (
+    generate_draft_template,
+    resolve_club_logo_by_text,
+)
 
 
 from docgen.config import ClubConfig
@@ -39,8 +49,9 @@ from docgen.models import (
     tf,
     TrackedField,
 )
+from docgen.numbering import compute_short_year, format_reference_number
 from docgen.renderer import Renderer
-from docgen.schema import load_all_schemas, load_schema
+from docgen.schema import TemplateSchema, load_all_schemas, load_schema
 from docgen.sources import DatabaseTemplateSource, build_club_config_from_db
 from server.app.core.audit import log_audit
 from server.app.core.database import get_db
@@ -52,16 +63,24 @@ from server.app.core.permissions import (
 )
 from server.app.core.scoped_repo import ScopedRepository
 from server.app.models import (
+    Asset,
+    AuditLog,
     Club,
     Document,
     DocumentVersion,
     Event,
+    Letterhead,
     NumberingSeries,
     NumberReservation,
     Template,
     TemplateVersion,
     User,
     Venue,
+)
+from server.app.core.dummy_thumbnail import (
+    get_dummy_thumbnail_event_record,
+    get_neutral_placeholder,
+    render_template_thumbnail,
 )
 
 router = APIRouter(prefix="/clubs/{club_id}/documents", tags=["documents"])
@@ -107,6 +126,123 @@ class TemplateDetailOut(BaseModel):
     defaults: dict[str, Any]
     numbering_series: Optional[str] = None
     confirm_numbering: bool = False
+
+
+class TemplateGalleryItemOut(BaseModel):
+    id: str
+    slug: str
+    name: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    stage: Optional[str] = None
+    is_system: bool
+    status: str
+    forked_from_template_id: Optional[str] = None
+    numbering_series: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    can_fork: bool = False
+    can_edit: bool = False
+
+
+class TemplateForkRequest(BaseModel):
+    name: Optional[str] = None
+
+
+class TemplateUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    schema_yaml: Optional[str] = None
+    status: Optional[str] = None
+
+
+class TemplateCreateBlankRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    category: Optional[str] = "Official Event Documents"
+    description: Optional[str] = ""
+    numbering_series: Optional[str] = None
+
+
+class TemplateDraftOut(BaseModel):
+    template_id: str
+    slug: str
+    name: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    status: str
+    is_system: bool
+    version_no: int
+    editor_json: dict[str, Any]
+    fields: list[dict[str, Any]]
+    letterhead_id: Optional[str] = None
+    validation_report: Optional[dict[str, Any]] = None
+    can_edit: bool = False
+
+
+class TemplateDraftSaveRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    editor_json: Optional[dict[str, Any]] = None
+    fields: Optional[list[dict[str, Any]]] = None
+    letterhead_id: Optional[str] = None
+
+
+class TemplateCompileRequest(BaseModel):
+    editor_json: Optional[dict[str, Any]] = None
+    fields: Optional[list[dict[str, Any]]] = None
+    name: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    letterhead_id: Optional[str] = None
+    numbering_series: Optional[str] = None
+    for_publish: Optional[bool] = False
+
+
+class TemplateReviewAIRequest(BaseModel):
+    all: bool = False
+    field_keys: Optional[list[str]] = None
+    block_indices: Optional[list[int]] = None
+
+
+class TemplateCompileResponse(BaseModel):
+    is_valid: bool
+    errors: list[str]
+    warnings: list[str]
+    stats: dict[str, Any]
+    version_no: int
+
+
+class TemplatePreviewResponse(BaseModel):
+    pages: list[str]
+    page_count: int
+
+
+class TemplateDescribeRequest(BaseModel):
+    description: str
+
+
+class TemplateDescribeResponse(BaseModel):
+    template: TemplateGalleryItemOut
+    draft: TemplateDraftOut
+    logo_resolution: dict[str, Any]
+    message: str
+
+
+class ResolveLogoRequest(BaseModel):
+    text: str
+
+
+class LetterheadOut(BaseModel):
+    id: str
+    name: str
+    title_text: Optional[str] = None
+    subtitle_text: Optional[str] = None
+    is_system: bool = False
+    svnit_logo_locked: bool = True
+    club_logo_url: Optional[str] = None
+    svnit_logo_url: Optional[str] = None
+
 
 
 class DocumentVersionOut(BaseModel):
@@ -162,11 +298,8 @@ def get_suggested_ref_no(
         return None
 
     series_key = schema.numbering.series or event_code or "EVENT"
-    academic_year = getattr(club, "academic_year_default", None) or "2026-27"
-    if hasattr(club, "settings") and isinstance(club.settings, dict):
-        academic_year = club.settings.get("academic_year", academic_year)
-    short_year = academic_year.split("-")[-1] if "-" in academic_year else academic_year[-2:]
-    club_prefix = getattr(club, "short_name", None) or getattr(club, "slug", "ACM").upper()
+    academic_year = getattr(club, "academic_year_default", None) or (getattr(club, "settings", {}) or {}).get("academic_year", "")
+    club_prefix = getattr(club, "short_name", None) or getattr(club, "slug", "").upper()
 
     series_repo = ScopedRepository(db, NumberingSeries, club_id=club.id)
     ns = series_repo.find_first(
@@ -175,88 +308,1432 @@ def get_suggested_ref_no(
     )
     next_seq = (ns.last_seq + 1) if ns else 1
     fmt = ns.format if (ns and ns.format) else (schema.numbering.format or f"{club_prefix}/{{academic_year}}/{{series}}/{{seq:03d}}")
-    return fmt.format(
+    return format_reference_number(
+        format_pattern=fmt,
         academic_year=academic_year,
-        short_year=short_year,
-        series=series_key,
-        event_code=event_code or series_key,
+        series_key=series_key,
         seq=next_seq,
+        club_code=club_prefix,
+        event_code=event_code,
     )
 
-
-def allocate_next_sequence(
-    db: Session,
-    club_id: str,
-    series_key: str,
-    academic_year: str = "2026-27",
-    club_code: str = "ACM",
-    format_pattern: Optional[str] = None,
-) -> int:
-    """Safely increment and return the next sequence number under concurrency.
-
-    Uses `SELECT ... FOR UPDATE` on PostgreSQL or atomic `UPDATE ... RETURNING`
-    so that 20 parallel confirmations produce 20 unique, gap-free numbers.
-    """
-    bind = db.get_bind()
-    dialect = getattr(bind.dialect, "name", "")
-    series_repo = ScopedRepository(db, NumberingSeries, club_id=club_id)
-
-    if dialect == "postgresql":
-        # Row-level lock until transaction commits
-        stmt = (
-            select(NumberingSeries)
-            .where(
-                NumberingSeries.club_id == club_id,
-                NumberingSeries.key == series_key,
-                NumberingSeries.academic_year == academic_year,
-            )
-            .with_for_update()
-        )
-        ns = db.scalars(stmt).first()
-        if ns:
-            ns.last_seq += 1
-            db.flush()
-            return ns.last_seq
-
-    # Atomic UPDATE ... RETURNING statement for PostgreSQL / SQLite 3.35+
-    stmt_upd = (
-        update(NumberingSeries)
-        .where(
-            NumberingSeries.club_id == club_id,
-            NumberingSeries.key == series_key,
-            NumberingSeries.academic_year == academic_year,
-        )
-        .values(last_seq=NumberingSeries.last_seq + 1)
-        .returning(NumberingSeries.last_seq)
-    )
-    val = db.execute(stmt_upd).scalar_one_or_none()
-    if val is not None:
-        db.flush()
-        return val
-
-    # If row does not exist yet, find or create
-    ns = series_repo.find_first(
-        NumberingSeries.key == series_key,
-        NumberingSeries.academic_year == academic_year,
-    )
-    if not ns:
-        ns = NumberingSeries(
-            club_id=club_id,
-            key=series_key,
-            format=format_pattern or f"{club_code}/{academic_year}/{series_key}/{{seq:03d}}",
-            academic_year=academic_year,
-            last_seq=1,
-        )
-        db.add(ns)
-        db.flush()
-        return 1
-
-    ns.last_seq += 1
-    db.flush()
-    return ns.last_seq
+from server.app.core.numbering_service import allocate_next_sequence
 
 
 # ---------------- ENDPOINTS ----------------
+
+
+
+@router.get("/templates", response_model=list[TemplateGalleryItemOut])
+def list_template_gallery(
+    category: Optional[str] = None,
+    stage: Optional[str] = None,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Template gallery listing system and club templates with category and numbering series."""
+    # List system templates AND templates created by/forked into this club
+    query = db.query(Template).filter(
+        (Template.club_id.is_(None)) | (Template.club_id == ctx.club.id)
+    )
+    # Hide archived templates from active gallery listing
+    query = query.filter(Template.status != "archived")
+
+    if category:
+        query = query.filter(Template.category == category)
+    if stage:
+        query = query.filter(Template.stage == stage)
+
+    templates = query.order_by(Template.is_system.desc(), Template.name.asc()).all()
+    user_can_manage = ctx.role in (Role.OWNER, Role.ADMIN, Role.EDITOR)
+
+    items = []
+    for t in templates:
+        series_key = None
+        ver = (
+            db.query(TemplateVersion)
+            .filter(TemplateVersion.template_id == t.id)
+            .order_by(TemplateVersion.version_no.desc())
+            .first()
+        )
+        if ver and ver.schema_yaml:
+            try:
+                s_data = yaml.safe_load(ver.schema_yaml)
+                if isinstance(s_data, dict) and "numbering" in s_data and s_data["numbering"]:
+                    series_key = s_data["numbering"].get("series")
+            except Exception:
+                pass
+        if not series_key and (Path("templates") / t.slug / "schema.yaml").exists():
+            try:
+                s_obj = load_schema(t.slug)
+                series_key = s_obj.numbering.series if s_obj.numbering else None
+            except Exception:
+                pass
+
+        items.append(
+            TemplateGalleryItemOut(
+                id=t.id,
+                slug=t.slug,
+                name=t.name,
+                description=t.description,
+                category=t.category or "Official Event Documents",
+                stage=t.stage,
+                is_system=bool(t.is_system),
+                status=t.status,
+                forked_from_template_id=t.forked_from_template_id,
+                numbering_series=series_key or (t.slug.upper() if t.stage == "pre_event" else None),
+                thumbnail_url=f"/api/v1/clubs/{ctx.club.id}/documents/templates/{t.id}/thumbnail",
+                can_fork=bool(t.is_system and user_can_manage),
+                can_edit=bool(not t.is_system and user_can_manage),
+            )
+        )
+    return items
+
+
+@router.get("/templates/{template_id}/thumbnail")
+def get_template_thumbnail(
+    template_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Serve thumbnail image rendered from dummy sample data via LibreOffice & PyMuPDF."""
+    tmpl = db.query(Template).filter(
+        ((Template.id == template_id) | (Template.slug == template_id)),
+        ((Template.club_id.is_(None)) | (Template.club_id == ctx.club.id)),
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == tmpl.id)
+        .order_by(TemplateVersion.version_no.desc())
+        .first()
+    )
+    if not ver:
+        placeholder = get_neutral_placeholder()
+        return FileResponse(placeholder, media_type="image/png")
+
+    thumbnails_dir = Path("storage/thumbnails")
+    thumbnails_dir.mkdir(parents=True, exist_ok=True)
+    thumb_path = thumbnails_dir / f"{ver.id}.png"
+
+    if not thumb_path.exists():
+        thumb_path = render_template_thumbnail(
+            db=db,
+            tmpl=tmpl,
+            ver=ver,
+            club_slug=ctx.club.slug,
+        )
+
+    return FileResponse(thumb_path, media_type="image/png")
+
+
+@router.post("/templates/{template_id}/fork", response_model=TemplateGalleryItemOut, status_code=status.HTTP_201_CREATED)
+def fork_template(
+    template_id: str,
+    payload: Optional[TemplateForkRequest] = None,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Customize (fork) copies the system template into the club as a draft.
+    
+    Creates a new template + version 1 + docx copy + schema copy,
+    editable only by club admins and editors. System templates stay read-only.
+    Duplicate forks of the same template get unique names automatically.
+    """
+    orig = db.query(Template).filter(
+        ((Template.id == template_id) | (Template.slug == template_id)),
+        ((Template.club_id.is_(None)) | (Template.club_id == ctx.club.id)),
+    ).first()
+    if not orig:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    orig_ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == orig.id)
+        .order_by(TemplateVersion.version_no.desc())
+        .first()
+    )
+
+    storage_templates_dir = Path("storage/templates")
+    storage_templates_dir.mkdir(parents=True, exist_ok=True)
+    new_tmpl_id = str(uuid.uuid4())
+    dest_docx = storage_templates_dir / f"{new_tmpl_id}_v1.docx"
+
+    src_docx = None
+    if orig_ver and orig_ver.docx_storage_key and Path(orig_ver.docx_storage_key).exists():
+        src_docx = Path(orig_ver.docx_storage_key)
+    elif (Path("templates") / orig.slug / "template.docx").exists():
+        src_docx = Path("templates") / orig.slug / "template.docx"
+
+    if src_docx and src_docx.exists():
+        shutil.copy2(src_docx, dest_docx)
+    else:
+        dest_docx.touch()
+
+    if orig_ver and orig_ver.schema_yaml:
+        schema_yaml_str = orig_ver.schema_yaml
+    elif (Path("templates") / orig.slug / "schema.yaml").exists():
+        schema_yaml_str = (Path("templates") / orig.slug / "schema.yaml").read_text(encoding="utf-8")
+    else:
+        schema_yaml_str = "id: custom\nname: Custom Template\n"
+
+    # Compute unique fork name
+    existing_club_templates = (
+        db.query(Template)
+        .filter(Template.club_id == ctx.club.id, Template.status != "archived")
+        .all()
+    )
+    existing_names = {t.name for t in existing_club_templates}
+
+    if payload and payload.name and payload.name.strip():
+        desired = payload.name.strip()
+        if desired not in existing_names:
+            forked_name = desired
+        else:
+            idx = 2
+            while f"{desired} ({idx})" in existing_names:
+                idx += 1
+            forked_name = f"{desired} ({idx})"
+    else:
+        base_name = f"{orig.name} (Custom)"
+        if base_name not in existing_names:
+            forked_name = base_name
+        else:
+            idx = 2
+            while f"{orig.name} (Custom {idx})" in existing_names:
+                idx += 1
+            forked_name = f"{orig.name} (Custom {idx})"
+
+    forked_slug = f"{orig.slug}-custom-{uuid.uuid4().hex[:6]}"
+    forked_tmpl = Template(
+        id=new_tmpl_id,
+        club_id=ctx.club.id,
+        slug=forked_slug,
+        name=forked_name,
+        description=orig.description,
+        category=orig.category,
+        stage=orig.stage,
+        is_system=False,
+        forked_from_template_id=orig.id,
+        status="draft",
+    )
+    db.add(forked_tmpl)
+    db.flush()
+
+    forked_editor_json = None
+    if orig_ver and orig_ver.editor_json:
+        forked_editor_json = copy.deepcopy(orig_ver.editor_json)
+    else:
+        fields_for_editor = []
+        try:
+            parsed = yaml.safe_load(schema_yaml_str)
+            if isinstance(parsed, dict) and "fields" in parsed:
+                fields_for_editor = parsed["fields"]
+        except Exception:
+            pass
+
+        doc_content = [
+            {"type": "heading", "attrs": {"level": 1, "textAlign": "center"}, "content": [{"type": "text", "text": forked_name}]},
+            {"type": "paragraph", "content": [{"type": "text", "text": f"This official document is generated for {orig.name}."}]}
+        ]
+        if fields_for_editor:
+            chips = []
+            for f in fields_for_editor:
+                f_key = f.get("key")
+                if f_key:
+                    chips.append({"type": "text", "text": f" {f.get('ask') or f_key.replace('_', ' ').title()}: "})
+                    chips.append({"type": "fieldChip", "attrs": {"fieldName": f_key, "label": f.get("ask") or f_key.replace("_", " ").title(), "fieldType": f.get("type", "text")}})
+                    chips.append({"type": "text", "text": " | "})
+            doc_content.append({"type": "paragraph", "content": chips})
+
+        doc_content.append({
+            "type": "signatureGrid",
+            "attrs": {
+                "columns": 3,
+                "signatures": [
+                    {"label": "Student Coordinator", "designation": "ACM Student Chapter"},
+                    {"label": "Faculty Advisor", "designation": "DoCSE, SVNIT"},
+                    {"label": "Head of Department", "designation": "DoCSE, SVNIT"},
+                ]
+            }
+        })
+        forked_editor_json = {"type": "doc", "content": doc_content}
+
+    forked_ver = TemplateVersion(
+        id=str(uuid.uuid4()),
+        template_id=forked_tmpl.id,
+        version_no=1,
+        schema_yaml=schema_yaml_str,
+        editor_json=forked_editor_json,
+        docx_storage_key=str(dest_docx),
+        created_by=ctx.user.id,
+        change_note=f"Forked from {orig.name}",
+    )
+    db.add(forked_ver)
+    db.flush()
+    forked_tmpl.current_version_id = forked_ver.id
+    db.commit()
+    db.refresh(forked_tmpl)
+
+    log_audit(
+        db=db,
+        action="template_forked",
+        entity_type="template",
+        entity_id=forked_tmpl.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"source_template_id": orig.id, "source_template_name": orig.name, "forked_name": forked_name},
+    )
+
+    if orig_ver:
+        orig_thumb = Path("storage/thumbnails") / f"{orig_ver.id}.png"
+        if orig_thumb.exists():
+            shutil.copy2(orig_thumb, Path("storage/thumbnails") / f"{forked_ver.id}.png")
+
+    series_key = None
+    try:
+        parsed_yaml = yaml.safe_load(schema_yaml_str)
+        if isinstance(parsed_yaml, dict):
+            series_key = parsed_yaml.get("numbering", {}).get("series")
+    except Exception:
+        pass
+    if not series_key and (Path("templates") / orig.slug / "schema.yaml").exists():
+        try:
+            s_obj = load_schema(orig.slug)
+            series_key = s_obj.numbering.series if s_obj.numbering else None
+        except Exception:
+            pass
+
+    return TemplateGalleryItemOut(
+        id=forked_tmpl.id,
+        slug=forked_tmpl.slug,
+        name=forked_tmpl.name,
+        description=forked_tmpl.description,
+        category=forked_tmpl.category,
+        stage=forked_tmpl.stage,
+        is_system=False,
+        status=forked_tmpl.status,
+        forked_from_template_id=orig.id,
+        numbering_series=series_key or (orig.slug.upper() if orig.stage == "pre_event" else None),
+        thumbnail_url=f"/api/v1/clubs/{ctx.club.id}/documents/templates/{forked_tmpl.id}/thumbnail",
+        can_fork=False,
+        can_edit=True,
+    )
+
+
+@router.put("/templates/{template_id}", response_model=TemplateGalleryItemOut)
+def update_template(
+    template_id: str,
+    payload: TemplateUpdateRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Edit/Rename a forked draft template. System templates stay read-only."""
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id)
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if tmpl.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System templates stay read-only and cannot be modified. Fork the template first.",
+        )
+
+    if tmpl.club_id != ctx.club.id:
+        raise HTTPException(status_code=403, detail="Template belongs to another club")
+
+    if payload.name is not None and payload.name.strip():
+        new_name = payload.name.strip()
+        conflict = (
+            db.query(Template)
+            .filter(
+                Template.id != tmpl.id,
+                ((Template.club_id == ctx.club.id) | (Template.club_id.is_(None))),
+                Template.status != "archived",
+            )
+            .all()
+        )
+        if any(t.name.strip().lower() == new_name.lower() for t in conflict):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "DUPLICATE_TEMPLATE_NAME",
+                    "message": f"A template named '{new_name}' already exists in this club. Please choose a unique name.",
+                },
+            )
+        tmpl.name = new_name
+    if payload.description is not None:
+        tmpl.description = payload.description
+    if payload.category is not None:
+        tmpl.category = payload.category
+    if payload.status is not None:
+        tmpl.status = payload.status
+
+    ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == tmpl.id)
+        .order_by(TemplateVersion.version_no.desc())
+        .first()
+    )
+    if payload.schema_yaml is not None and ver:
+        ver.schema_yaml = payload.schema_yaml
+
+    db.commit()
+    db.refresh(tmpl)
+
+    log_audit(
+        db=db,
+        action="template_updated",
+        entity_type="template",
+        entity_id=tmpl.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"updated_name": tmpl.name, "updated_status": tmpl.status},
+    )
+
+    series_key = None
+    if ver and ver.schema_yaml:
+        try:
+            parsed = yaml.safe_load(ver.schema_yaml)
+            if isinstance(parsed, dict):
+                series_key = parsed.get("numbering", {}).get("series")
+        except Exception:
+            pass
+
+    return TemplateGalleryItemOut(
+        id=tmpl.id,
+        slug=tmpl.slug,
+        name=tmpl.name,
+        description=tmpl.description,
+        category=tmpl.category,
+        stage=tmpl.stage,
+        is_system=False,
+        status=tmpl.status,
+        forked_from_template_id=tmpl.forked_from_template_id,
+        numbering_series=series_key,
+        thumbnail_url=f"/api/v1/clubs/{ctx.club.id}/documents/templates/{tmpl.id}/thumbnail",
+        can_fork=False,
+        can_edit=True,
+    )
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_or_archive_template(
+    template_id: str,
+    hard_delete: bool = False,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Archive or delete a club draft template. System templates stay read-only."""
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id)
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if tmpl.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System templates stay read-only and cannot be archived or deleted.",
+        )
+
+    if tmpl.club_id != ctx.club.id:
+        raise HTTPException(status_code=403, detail="Template belongs to another club")
+
+    if hard_delete:
+        db.delete(tmpl)
+    else:
+        tmpl.status = "archived"
+    db.commit()
+
+    log_audit(
+        db=db,
+        action="template_deleted" if hard_delete else "template_archived",
+        entity_type="template",
+        entity_id=tmpl.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"template_name": tmpl.name, "hard_delete": hard_delete},
+    )
+    return None
+
+
+@router.post("/templates/blank", response_model=TemplateGalleryItemOut, status_code=status.HTTP_201_CREATED)
+def create_blank_template(
+    payload: TemplateCreateBlankRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Create a new blank template draft for the club."""
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Template name cannot be empty")
+
+    existing_templates = (
+        db.query(Template)
+        .filter(
+            ((Template.club_id == ctx.club.id) | (Template.club_id.is_(None))),
+            Template.status != "archived",
+        )
+        .all()
+    )
+    if any(t.name.strip().lower() == name.lower() for t in existing_templates):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "DUPLICATE_TEMPLATE_NAME",
+                "message": f"A template named '{name}' already exists in this club. Please choose a unique name.",
+            },
+        )
+    unique_name = name
+
+    new_id = str(uuid.uuid4())
+    slug = f"custom-{uuid.uuid4().hex[:8]}"
+
+    initial_json = {
+        "type": "doc",
+        "content": [
+            {"type": "heading", "attrs": {"level": 1, "textAlign": "center"}, "content": [{"type": "text", "text": unique_name}]},
+            {"type": "paragraph", "content": [
+                {"type": "text", "text": "This document serves as an official communication for "},
+                {"type": "fieldChip", "attrs": {"fieldName": "event_name", "label": "Event Name", "fieldType": "text"}},
+                {"type": "text", "text": " scheduled on "},
+                {"type": "fieldChip", "attrs": {"fieldName": "event_date", "label": "Event Date", "fieldType": "date"}},
+                {"type": "text", "text": " at "},
+                {"type": "fieldChip", "attrs": {"fieldName": "venue", "label": "Venue", "fieldType": "text"}},
+                {"type": "text", "text": "."}
+            ]},
+            {"type": "signatureGrid", "attrs": {
+                "columns": 3,
+                "signatures": [
+                    {"label": "Student Coordinator", "designation": "ACM Student Chapter"},
+                    {"label": "Faculty Advisor", "designation": "DoCSE, SVNIT"},
+                    {"label": "Head of Department", "designation": "DoCSE, SVNIT"}
+                ]
+            }}
+        ]
+    }
+    initial_fields = [
+        {"key": "event_name", "label": "Event Name", "type": "text", "required": True, "ask": "What is the event name?"},
+        {"key": "event_date", "label": "Event Date", "type": "date", "required": True, "ask": "What is the event date?"},
+        {"key": "venue", "label": "Venue", "type": "text", "required": True, "ask": "What is the event venue?"},
+    ]
+
+    storage_templates_dir = Path("storage/templates")
+    storage_templates_dir.mkdir(parents=True, exist_ok=True)
+    dest_docx = storage_templates_dir / f"{new_id}_v1.docx"
+
+    docx_bytes, schema_yaml, report = TemplateCompiler.compile(
+        editor_json=initial_json,
+        fields=initial_fields,
+        template_meta={
+            "id": new_id,
+            "name": unique_name,
+            "category": payload.category or "Official Event Documents",
+            "description": payload.description or "",
+            "numbering_series": payload.numbering_series,
+        },
+        club_slug=ctx.club.slug,
+    )
+    dest_docx.write_bytes(docx_bytes)
+
+    tmpl = Template(
+        id=new_id,
+        club_id=ctx.club.id,
+        slug=slug,
+        name=unique_name,
+        description=payload.description or "",
+        category=payload.category or "Official Event Documents",
+        stage="custom",
+        is_system=False,
+        status="draft",
+    )
+    db.add(tmpl)
+    db.flush()
+
+    ver = TemplateVersion(
+        id=str(uuid.uuid4()),
+        template_id=tmpl.id,
+        version_no=1,
+        editor_json=initial_json,
+        schema_yaml=schema_yaml,
+        docx_storage_key=str(dest_docx),
+        validation_report=report,
+        created_by=ctx.user.id,
+        change_note="Initial blank template",
+    )
+    db.add(ver)
+    db.flush()
+    tmpl.current_version_id = ver.id
+    db.commit()
+    db.refresh(tmpl)
+
+    log_audit(
+        db=db,
+        action="template_created",
+        entity_type="template",
+        entity_id=tmpl.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"template_name": tmpl.name},
+    )
+
+    return TemplateGalleryItemOut(
+        id=tmpl.id,
+        slug=tmpl.slug,
+        name=tmpl.name,
+        description=tmpl.description,
+        category=tmpl.category,
+        stage=tmpl.stage,
+        is_system=False,
+        status=tmpl.status,
+        numbering_series=payload.numbering_series,
+        thumbnail_url=f"/api/v1/clubs/{ctx.club.id}/documents/templates/{tmpl.id}/thumbnail",
+        can_fork=False,
+        can_edit=True,
+    )
+
+
+@router.post("/templates/ai-draft", response_model=TemplateDescribeResponse, status_code=status.HTTP_201_CREATED)
+def ai_draft_template(
+    payload: TemplateDescribeRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Generate a draft template from plain text description using AI."""
+    tmpl, ver, logo_res = generate_draft_template(
+        description=payload.description,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        db=db,
+    )
+    fields_list = []
+    if ver.schema_yaml:
+        try:
+            s_dict = yaml.safe_load(ver.schema_yaml)
+            if isinstance(s_dict, dict) and "fields" in s_dict:
+                for f in s_dict["fields"]:
+                    fields_list.append({
+                        "key": f.get("key"),
+                        "label": f.get("ask") or f.get("key", "").replace("_", " ").title(),
+                        "type": f.get("type", "text"),
+                        "required": bool(f.get("required", False)),
+                        "ask": f.get("ask"),
+                        "defer_ok": bool(f.get("defer_ok", False)),
+                        "sensitive": bool(f.get("mask", False)),
+                        "values": f.get("values"),
+                        "ai_suggested": True,
+                    })
+        except Exception:
+            pass
+
+    tmpl_out = TemplateGalleryItemOut(
+        id=tmpl.id,
+        slug=tmpl.slug,
+        name=tmpl.name,
+        category=tmpl.category,
+        stage="custom",
+        description=tmpl.description or "",
+        is_system=False,
+        status=tmpl.status,
+        numbering_series=None,
+        thumbnail_url=f"/api/v1/clubs/{ctx.club.id}/documents/templates/{tmpl.id}/thumbnail",
+        can_fork=False,
+        can_edit=True,
+    )
+    draft_out = TemplateDraftOut(
+        template_id=tmpl.id,
+        slug=tmpl.slug,
+        name=tmpl.name,
+        description=tmpl.description,
+        category=tmpl.category,
+        status=tmpl.status,
+        is_system=False,
+        version_no=ver.version_no,
+        editor_json=ver.editor_json or {},
+        fields=fields_list,
+        letterhead_id=ver.letterhead_id,
+        validation_report=ver.validation_report,
+        can_edit=True,
+    )
+    return TemplateDescribeResponse(
+        template=tmpl_out,
+        draft=draft_out,
+        logo_resolution=logo_res,
+        message="AI draft generated successfully. Review and adjust fields in the editor, then Compile & Validate before publishing.",
+    )
+
+
+@router.post("/assets/resolve-logo")
+def resolve_logo(
+    payload: ResolveLogoRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Resolve a club logo from a natural text description or name."""
+    return resolve_club_logo_by_text(ctx.club.id, payload.text, db)
+
+
+@router.get("/templates/{template_id}/draft", response_model=TemplateDraftOut)
+def get_template_draft(
+    template_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Fetch draft template details, editor JSON, and fields schema."""
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id)
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if tmpl.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System templates are immutable and cannot be edited. Fork the template first to customize it.",
+        )
+
+    if tmpl.club_id != ctx.club.id:
+        raise HTTPException(status_code=403, detail="Template belongs to another club")
+
+    ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == tmpl.id)
+        .order_by(TemplateVersion.version_no.desc())
+        .first()
+    )
+    if not ver:
+        raise HTTPException(status_code=404, detail="Template has no version")
+
+    editor_json = ver.editor_json
+    fields_list = []
+    if ver.schema_yaml:
+        try:
+            s_dict = yaml.safe_load(ver.schema_yaml)
+            if isinstance(s_dict, dict) and "fields" in s_dict:
+                for f in s_dict["fields"]:
+                    fields_list.append({
+                        "key": f.get("key"),
+                        "label": f.get("ask") or f.get("key", "").replace("_", " ").title(),
+                        "type": f.get("type", "text"),
+                        "required": bool(f.get("required", False)),
+                        "ask": f.get("ask"),
+                        "defer_ok": bool(f.get("defer_ok", False)),
+                        "sensitive": bool(f.get("mask", False)),
+                        "values": f.get("values"),
+                        "computed": f.get("computed"),
+                        "format": f.get("format"),
+                        "ai_suggested": bool(f.get("ai_suggested", False)),
+                    })
+        except Exception:
+            pass
+
+    if not editor_json:
+        editor_json = {
+            "type": "doc",
+            "content": [
+                {"type": "heading", "attrs": {"level": 1, "textAlign": "center"}, "content": [{"type": "text", "text": tmpl.name}]},
+                {"type": "paragraph", "content": [
+                    {"type": "text", "text": "This document is for "},
+                    {"type": "fieldChip", "attrs": {"fieldName": "event_name", "label": "Event Name", "fieldType": "text"}},
+                    {"type": "text", "text": "."}
+                ]}
+            ]
+        }
+        if not fields_list:
+            fields_list = [
+                {"key": "event_name", "label": "Event Name", "type": "text", "required": True, "ask": "What is the event title?"}
+            ]
+
+    can_edit = ctx.role in (Role.EDITOR, Role.ADMIN, Role.OWNER)
+
+    return TemplateDraftOut(
+        template_id=tmpl.id,
+        slug=tmpl.slug,
+        name=tmpl.name,
+        description=tmpl.description,
+        category=tmpl.category,
+        status=tmpl.status,
+        is_system=False,
+        version_no=ver.version_no,
+        editor_json=editor_json,
+        fields=fields_list,
+        letterhead_id=ver.letterhead_id,
+        validation_report=ver.validation_report,
+        can_edit=can_edit,
+    )
+
+
+@router.put("/templates/{template_id}/draft", response_model=TemplateDraftOut)
+def save_template_draft(
+    template_id: str,
+    payload: TemplateDraftSaveRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Save editor draft (autosave / manual save). Published templates get a new version."""
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id)
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if tmpl.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System templates are immutable and cannot be edited.",
+        )
+
+    if tmpl.club_id != ctx.club.id:
+        raise HTTPException(status_code=403, detail="Template belongs to another club")
+
+    try:
+        from server.app.core.template_compiler import validate_template_identifiers
+        validate_template_identifiers(payload.editor_json, payload.fields)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    latest_ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == tmpl.id)
+        .order_by(TemplateVersion.version_no.desc())
+        .first()
+    )
+
+    # If currently published, create a new draft version
+    target_ver = latest_ver
+    if tmpl.status == "published":
+        next_ver_no = (latest_ver.version_no + 1) if latest_ver else 1
+        target_ver = TemplateVersion(
+            id=str(uuid.uuid4()),
+            template_id=tmpl.id,
+            version_no=next_ver_no,
+            editor_json=latest_ver.editor_json if latest_ver else None,
+            schema_yaml=latest_ver.schema_yaml if latest_ver else "",
+            docx_storage_key=latest_ver.docx_storage_key if latest_ver else "",
+            letterhead_id=latest_ver.letterhead_id if latest_ver else None,
+            created_by=ctx.user.id,
+            change_note=f"Draft version {next_ver_no}",
+        )
+        db.add(target_ver)
+        tmpl.status = "draft"
+        tmpl.current_version_id = target_ver.id
+        db.flush()
+
+    if payload.name:
+        new_name = payload.name.strip()
+        conflict = (
+            db.query(Template)
+            .filter(
+                Template.id != tmpl.id,
+                ((Template.club_id == ctx.club.id) | (Template.club_id.is_(None))),
+                Template.status != "archived",
+            )
+            .all()
+        )
+        if any(t.name.strip().lower() == new_name.lower() for t in conflict):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "DUPLICATE_TEMPLATE_NAME",
+                    "message": f"A template named '{new_name}' already exists in this club. Please choose a unique name.",
+                },
+            )
+        tmpl.name = new_name
+    if payload.description is not None:
+        tmpl.description = payload.description
+    if payload.category:
+        tmpl.category = payload.category
+
+    if payload.editor_json is not None:
+        target_ver.editor_json = payload.editor_json
+    if payload.letterhead_id is not None:
+        target_ver.letterhead_id = payload.letterhead_id
+
+    fields_to_return = payload.fields or []
+    if payload.fields is not None:
+        prev_num = None
+        if target_ver.schema_yaml:
+            try:
+                parsed_prev = yaml.safe_load(target_ver.schema_yaml)
+                if isinstance(parsed_prev, dict) and "numbering" in parsed_prev:
+                    prev_num = parsed_prev["numbering"]
+            except Exception:
+                pass
+
+        s_dict = {
+            "id": tmpl.id,
+            "name": tmpl.name,
+            "category": tmpl.category,
+            "description": tmpl.description or "",
+            "stage": tmpl.stage or "custom",
+            "letterhead": "acm",
+            "numbering": prev_num or {
+                "series": "DOC",
+                "format": f"{ctx.club.slug.upper()}/{{short_year}}/DOC/{{seq:03d}}",
+                "confirm": True,
+            },
+            "fields": [
+                {
+                    "key": f["key"],
+                    "type": f.get("type", "text"),
+                    "required": bool(f.get("required", False)),
+                    "ask": f.get("ask") or f.get("label"),
+                    **({"defer_ok": True} if f.get("defer_ok") else {}),
+                    **({"mask": True} if f.get("sensitive") else {}),
+                    **({"values": f.get("values")} if f.get("values") else {}),
+                    **({"computed": f.get("computed")} if f.get("computed") else {}),
+                    **({"format": f.get("format")} if f.get("format") else {}),
+                }
+                for f in payload.fields if f.get("key")
+            ],
+        }
+        target_ver.schema_yaml = yaml.dump(s_dict, sort_keys=False)
+
+    db.commit()
+    db.refresh(tmpl)
+    db.refresh(target_ver)
+
+    return TemplateDraftOut(
+        template_id=tmpl.id,
+        slug=tmpl.slug,
+        name=tmpl.name,
+        description=tmpl.description,
+        category=tmpl.category,
+        status=tmpl.status,
+        is_system=False,
+        version_no=target_ver.version_no,
+        editor_json=target_ver.editor_json or {},
+        fields=fields_to_return,
+        letterhead_id=target_ver.letterhead_id,
+        validation_report=target_ver.validation_report,
+        can_edit=True,
+    )
+
+
+@router.post("/templates/{template_id}/compile", response_model=TemplateCompileResponse)
+def compile_template(
+    template_id: str,
+    payload: TemplateCompileRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Compile TipTap JSON into template.docx and schema.yaml with strict validation."""
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id)
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if tmpl.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System templates are immutable and cannot be compiled or edited.",
+        )
+
+    if tmpl.club_id != ctx.club.id:
+        raise HTTPException(status_code=403, detail="Template belongs to another club")
+
+    ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == tmpl.id)
+        .order_by(TemplateVersion.version_no.desc())
+        .first()
+    )
+    if not ver:
+        raise HTTPException(status_code=404, detail="Template version not found")
+
+    editor_json = payload.editor_json or ver.editor_json or {"type": "doc", "content": []}
+    fields = payload.fields or []
+    if not fields and ver.schema_yaml:
+        try:
+            s_dict = yaml.safe_load(ver.schema_yaml)
+            raw_fields = s_dict.get("fields", [])
+            fields = raw_fields if isinstance(raw_fields, list) else []
+        except Exception:
+            pass
+
+    if payload.for_publish:
+        from server.app.core.template_compiler import find_unreviewed_ai_items
+        unreviewed = find_unreviewed_ai_items(editor_json, fields)
+        if unreviewed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "UNREVIEWED_AI_CONTENT",
+                    "message": f"Cannot compile for publish: contains {len(unreviewed)} unreviewed AI-suggested item(s). Please review all AI-suggested content first.",
+                    "unreviewed_items": unreviewed,
+                },
+            )
+
+    try:
+        from server.app.core.template_compiler import validate_template_identifiers
+        validate_template_identifiers(editor_json, fields)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    template_name = payload.name or tmpl.name
+    category = payload.category or tmpl.category
+    description = payload.description if payload.description is not None else tmpl.description
+
+    letterhead_cfg = {}
+    letterhead_id = payload.letterhead_id or ver.letterhead_id
+    if letterhead_id:
+        lh = db.query(Letterhead).filter(Letterhead.id == letterhead_id).first()
+        if lh:
+            letterhead_cfg = {
+                "title_text": lh.title_text,
+                "subtitle_text": lh.subtitle_text,
+            }
+            target_asset_id = lh.right_logo_asset_id or lh.left_logo_asset_id
+            if target_asset_id:
+                asset_rec = db.query(Asset).filter(Asset.id == target_asset_id).first()
+                if asset_rec and Path(asset_rec.storage_key).exists():
+                    letterhead_cfg["club_logo_path"] = asset_rec.storage_key
+
+    existing_series = None
+    if ver.schema_yaml:
+        try:
+            parsed = yaml.safe_load(ver.schema_yaml)
+            if isinstance(parsed, dict):
+                existing_series = parsed.get("numbering", {}).get("series")
+        except Exception:
+            pass
+
+    from server.app.core.template_generator import derive_unique_series_key
+    if payload.numbering_series:
+        num_series = derive_unique_series_key(payload.numbering_series, ctx.club.id, db, exclude_template_id=tmpl.id)
+    elif existing_series:
+        num_series = existing_series
+    else:
+        num_series = derive_unique_series_key(template_name, ctx.club.id, db, exclude_template_id=tmpl.id)
+
+    docx_bytes, schema_yaml, report = TemplateCompiler.compile(
+        editor_json=editor_json,
+        fields=fields,
+        template_meta={
+            "id": tmpl.id,
+            "name": template_name,
+            "category": category,
+            "description": description,
+            "numbering_series": num_series,
+        },
+        club_slug=ctx.club.slug,
+        letterhead_cfg=letterhead_cfg,
+    )
+
+    storage_templates_dir = Path("storage/templates")
+    storage_templates_dir.mkdir(parents=True, exist_ok=True)
+    docx_dest = storage_templates_dir / f"{tmpl.id}_v{ver.version_no}.docx"
+    docx_dest.write_bytes(docx_bytes)
+
+    ver.docx_storage_key = str(docx_dest)
+    ver.schema_yaml = schema_yaml
+    ver.editor_json = editor_json
+    ver.validation_report = report
+    ver.letterhead_id = letterhead_id
+    tmpl.name = template_name
+    tmpl.category = category
+    tmpl.description = description
+
+    thumbnails_dir = Path("storage/thumbnails")
+    thumbnails_dir.mkdir(parents=True, exist_ok=True)
+    thumb_path = thumbnails_dir / f"{ver.id}.png"
+    if thumb_path.exists():
+        thumb_path.unlink()
+
+    db.commit()
+
+    return TemplateCompileResponse(
+        is_valid=report["is_valid"],
+        errors=report.get("errors", []),
+        warnings=report.get("warnings", []),
+        stats=report.get("stats", {}),
+        version_no=ver.version_no,
+    )
+
+
+@router.post("/templates/{template_id}/preview", response_model=TemplatePreviewResponse)
+def preview_template(
+    template_id: str,
+    payload: TemplateCompileRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Render live preview of template with synthetic dummy data only."""
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id)
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if tmpl.club_id and tmpl.club_id != ctx.club.id:
+        raise HTTPException(status_code=403, detail="Template belongs to another club")
+
+    ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == tmpl.id)
+        .order_by(TemplateVersion.version_no.desc())
+        .first()
+    )
+
+    editor_json = payload.editor_json or (ver.editor_json if ver else None) or {"type": "doc", "content": []}
+    fields = payload.fields or []
+    if not fields and ver and ver.schema_yaml:
+        try:
+            s_dict = yaml.safe_load(ver.schema_yaml)
+            raw_fields = s_dict.get("fields", [])
+            fields = raw_fields if isinstance(raw_fields, list) else []
+        except Exception:
+            pass
+
+    try:
+        from server.app.core.template_compiler import validate_template_identifiers
+        validate_template_identifiers(editor_json, fields)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    letterhead_cfg = {}
+    letterhead_id = payload.letterhead_id or (ver.letterhead_id if ver else None)
+    if letterhead_id:
+        lh = db.query(Letterhead).filter(Letterhead.id == letterhead_id).first()
+        if lh:
+            letterhead_cfg = {
+                "title_text": lh.title_text,
+                "subtitle_text": lh.subtitle_text,
+            }
+            target_asset_id = lh.right_logo_asset_id or lh.left_logo_asset_id
+            if target_asset_id:
+                asset_rec = db.query(Asset).filter(Asset.id == target_asset_id).first()
+                if asset_rec and Path(asset_rec.storage_key).exists():
+                    letterhead_cfg["club_logo_path"] = asset_rec.storage_key
+
+    docx_bytes, schema_yaml, report = TemplateCompiler.compile(
+        editor_json=editor_json,
+        fields=fields,
+        template_meta={
+            "id": tmpl.id,
+            "name": payload.name or tmpl.name,
+            "category": payload.category or tmpl.category,
+            "description": payload.description or tmpl.description,
+        },
+        club_slug=ctx.club.slug,
+        letterhead_cfg=letterhead_cfg,
+    )
+
+    pages_base64: list[str] = []
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp_dir = Path(td)
+        tmpl_docx = tmp_dir / "template.docx"
+        tmpl_docx.write_bytes(docx_bytes)
+
+        schema_dict = yaml.safe_load(schema_yaml)
+        schema_obj = TemplateSchema(**schema_dict)
+        from server.app.core.template_compiler import _build_editor_dummy_context, safe_render_docx
+        dummy_ctx = _build_editor_dummy_context(schema_obj, fields, editor_json)
+
+        doc = DocxTemplate(str(tmpl_docx))
+        safe_render_docx(doc, dummy_ctx, timeout=30.0)
+        rendered_docx = tmp_dir / "rendered.docx"
+        doc.save(str(rendered_docx))
+
+        from docgen.renderer import Renderer
+        renderer = Renderer()
+        try:
+            pdf_path, _ = renderer._convert_to_pdf(rendered_docx)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"PDF conversion failed: {e}")
+
+        pdf_doc = pymupdf.open(str(pdf_path))
+        for page in pdf_doc:
+            pix = page.get_pixmap(dpi=150)
+            png_bytes = pix.tobytes("png")
+            b64 = base64.b64encode(png_bytes).decode("ascii")
+            pages_base64.append(f"data:image/png;base64,{b64}")
+        pdf_doc.close()
+
+    return TemplatePreviewResponse(
+        pages=pages_base64,
+        page_count=len(pages_base64),
+    )
+
+
+@router.post("/templates/{template_id}/publish", response_model=TemplateGalleryItemOut)
+def publish_template(
+    template_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Publish a draft template into an immutable published version."""
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id)
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    if tmpl.is_system:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System templates are already published and cannot be modified.",
+        )
+
+    if tmpl.club_id != ctx.club.id:
+        raise HTTPException(status_code=403, detail="Template belongs to another club")
+
+    ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == tmpl.id)
+        .order_by(TemplateVersion.version_no.desc())
+        .first()
+    )
+    if not ver:
+        raise HTTPException(status_code=404, detail="Template has no version to publish")
+
+    conflict = (
+        db.query(Template)
+        .filter(
+            Template.id != tmpl.id,
+            ((Template.club_id == ctx.club.id) | (Template.club_id.is_(None))),
+            Template.status != "archived",
+        )
+        .all()
+    )
+    existing_names = {t.name.strip().lower() for t in conflict}
+    if tmpl.name.strip().lower() in existing_names:
+        base_name = tmpl.name.strip()
+        idx = 2
+        while f"{base_name} ({idx})".lower() in existing_names:
+            idx += 1
+        tmpl.name = f"{base_name} ({idx})"
+
+    fields = []
+    if ver.schema_yaml:
+        try:
+            s_dict = yaml.safe_load(ver.schema_yaml)
+            raw_fields = s_dict.get("fields", [])
+            fields = raw_fields if isinstance(raw_fields, list) else []
+        except Exception:
+            pass
+
+    from server.app.core.template_compiler import find_unreviewed_ai_items
+    unreviewed = find_unreviewed_ai_items(ver.editor_json, fields)
+    if unreviewed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "UNREVIEWED_AI_CONTENT",
+                "message": f"Cannot publish template: contains {len(unreviewed)} unreviewed AI-suggested item(s). Please review all AI-suggested content before publishing.",
+                "unreviewed_items": unreviewed,
+            },
+        )
+
+    if not ver.validation_report or not ver.validation_report.get("is_valid"):
+        docx_bytes, schema_yaml, report = TemplateCompiler.compile(
+            editor_json=ver.editor_json or {"type": "doc", "content": []},
+            fields=fields,
+            template_meta={"id": tmpl.id, "name": tmpl.name, "category": tmpl.category, "description": tmpl.description},
+            club_slug=ctx.club.slug,
+        )
+        if not report["is_valid"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "TEMPLATE_VALIDATION_FAILED",
+                    "message": "Cannot publish template: validation failed.",
+                    "errors": report.get("errors", []),
+                },
+            )
+        storage_templates_dir = Path("storage/templates")
+        storage_templates_dir.mkdir(parents=True, exist_ok=True)
+        docx_dest = storage_templates_dir / f"{tmpl.id}_v{ver.version_no}.docx"
+        docx_dest.write_bytes(docx_bytes)
+        ver.docx_storage_key = str(docx_dest)
+        ver.schema_yaml = schema_yaml
+        ver.validation_report = report
+
+    tmpl.status = "published"
+    tmpl.current_version_id = ver.id
+    db.commit()
+    db.refresh(tmpl)
+
+    log_audit(
+        db=db,
+        action="template_published",
+        entity_type="template",
+        entity_id=tmpl.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"version_no": ver.version_no, "template_name": tmpl.name},
+    )
+
+    series_key = None
+    if ver.schema_yaml:
+        try:
+            parsed = yaml.safe_load(ver.schema_yaml)
+            if isinstance(parsed, dict):
+                series_key = parsed.get("numbering", {}).get("series")
+        except Exception:
+            pass
+
+    return TemplateGalleryItemOut(
+        id=tmpl.id,
+        slug=tmpl.slug,
+        name=tmpl.name,
+        description=tmpl.description,
+        category=tmpl.category,
+        stage=tmpl.stage,
+        is_system=False,
+        status="published",
+        forked_from_template_id=tmpl.forked_from_template_id,
+        numbering_series=series_key,
+        thumbnail_url=f"/api/v1/clubs/{ctx.club.id}/documents/templates/{tmpl.id}/thumbnail",
+        can_fork=False,
+        can_edit=True,
+    )
+
+
+@router.post("/templates/{template_id}/review-ai")
+def review_ai_template_content(
+    template_id: str,
+    payload: TemplateReviewAIRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Mark AI-suggested fields and blocks as reviewed by editor/owner."""
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id)
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if tmpl.is_system:
+        raise HTTPException(status_code=403, detail="System templates cannot be modified")
+    if tmpl.club_id != ctx.club.id:
+        raise HTTPException(status_code=403, detail="Template belongs to another club")
+
+    ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == tmpl.id)
+        .order_by(TemplateVersion.version_no.desc())
+        .first()
+    )
+    if not ver:
+        raise HTTPException(status_code=404, detail="Template version not found")
+
+    fields = []
+    schema_dict = {}
+    if ver.schema_yaml:
+        try:
+            schema_dict = yaml.safe_load(ver.schema_yaml) or {}
+            raw_fields = schema_dict.get("fields", [])
+            fields = raw_fields if isinstance(raw_fields, list) else []
+        except Exception:
+            pass
+
+    from server.app.core.template_compiler import clear_ai_suggested_flags, find_unreviewed_ai_items
+    new_editor, new_fields = clear_ai_suggested_flags(
+        editor_json=ver.editor_json,
+        fields=fields,
+        review_all=payload.all,
+        field_keys=payload.field_keys,
+        block_indices=payload.block_indices,
+    )
+
+    ver.editor_json = new_editor
+    if schema_dict:
+        schema_dict["fields"] = new_fields
+        ver.schema_yaml = yaml.dump(schema_dict, sort_keys=False)
+
+    db.commit()
+    db.refresh(ver)
+
+    remaining = find_unreviewed_ai_items(ver.editor_json, new_fields)
+    return {
+        "reviewed": True,
+        "remaining_unreviewed_count": len(remaining),
+        "unreviewed_items": remaining,
+    }
+
+
+@router.get("/letterheads", response_model=list[LetterheadOut])
+def list_letterheads(
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """List available letterheads for the club (system + club custom)."""
+    letterheads = db.query(Letterhead).filter(
+        (Letterhead.club_id.is_(None)) | (Letterhead.club_id == ctx.club.id)
+    ).all()
+    out = []
+
+    # Check if club has an active logo asset
+    club_custom_logo = (
+        db.query(Asset)
+        .filter(Asset.club_id == ctx.club.id, Asset.kind == "logo")
+        .first()
+    )
+
+    for lh in letterheads:
+        # Determine club logo url: right_logo_asset_id or club's logo asset or fallback
+        target_asset_id = lh.right_logo_asset_id
+        club_asset = None
+        if target_asset_id:
+            club_asset = db.query(Asset).filter(Asset.id == target_asset_id).first()
+        elif club_custom_logo:
+            club_asset = club_custom_logo
+
+        if club_asset:
+            if club_asset.filename in ("permission_page1_img2.png", "permission_page2_img1.png", "permission_page2_img2.png"):
+                club_logo_url = f"/assets/{club_asset.filename}"
+            else:
+                club_logo_url = f"/api/v1/assets/{club_asset.id}/content"
+        else:
+            club_logo_url = "/assets/permission_page1_img2.png"
+
+        # SVNIT logo is locked to SVNIT emblem
+        svnit_asset_id = lh.institute_logo_asset_id or lh.left_logo_asset_id
+        svnit_logo_url = "/assets/permission_page1_img1.png"
+        if svnit_asset_id:
+            svnit_asset = db.query(Asset).filter(Asset.id == svnit_asset_id).first()
+            if svnit_asset:
+                if svnit_asset.filename == "permission_page1_img1.png":
+                    svnit_logo_url = f"/assets/{svnit_asset.filename}"
+                else:
+                    svnit_logo_url = f"/api/v1/assets/{svnit_asset.id}/content"
+
+        out.append(
+            LetterheadOut(
+                id=lh.id,
+                name=lh.name,
+                title_text=lh.title_text,
+                subtitle_text=lh.subtitle_text,
+                is_system=(lh.club_id is None),
+                svnit_logo_locked=True,
+                club_logo_url=club_logo_url,
+                svnit_logo_url=svnit_logo_url,
+            )
+        )
+    return out
+
+
+@router.get("/assets/{asset_id}/content")
+def get_asset_content(
+    asset_id: str,
+    db: Session = Depends(get_db),
+):
+    """Serve asset file content by ID."""
+    asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    f_path = Path(asset.storage_key)
+    if not f_path.exists():
+        raise HTTPException(status_code=404, detail="Asset file not found on disk")
+    from fastapi.responses import FileResponse
+    return FileResponse(str(f_path), media_type=asset.mime)
 
 
 
@@ -267,13 +1744,36 @@ def get_template_schema_and_defaults(
     db: Session = Depends(get_db),
 ):
     """Retrieve template schema fields and live club defaults for form generation."""
-    try:
-        schema = load_schema(template_id)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "TEMPLATE_NOT_FOUND", "message": f"Template '{template_id}' not found: {e}"},
-        )
+    tmpl_row = db.query(Template).filter(
+        ((Template.id == template_id) | (Template.slug == template_id)),
+        ((Template.club_id.is_(None)) | (Template.club_id == ctx.club.id)),
+    ).first()
+    schema = None
+    if tmpl_row:
+        tmpl_ver = None
+        if tmpl_row.current_version_id:
+            tmpl_ver = db.query(TemplateVersion).filter(TemplateVersion.id == tmpl_row.current_version_id).first()
+        if not tmpl_ver:
+            tmpl_ver = (
+                db.query(TemplateVersion)
+                .filter(TemplateVersion.template_id == tmpl_row.id)
+                .order_by(TemplateVersion.version_no.desc())
+                .first()
+            )
+        if tmpl_ver and tmpl_ver.schema_yaml:
+            s_dict = yaml.safe_load(tmpl_ver.schema_yaml)
+            schema = TemplateSchema(**s_dict)
+        elif (Path("templates") / tmpl_row.slug / "schema.yaml").exists():
+            schema = load_schema(tmpl_row.slug)
+
+    if not schema:
+        try:
+            schema = load_schema(template_id)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "TEMPLATE_NOT_FOUND", "message": f"Template '{template_id}' not found: {e}"},
+            )
 
     venue_repo = ScopedRepository(db, Venue, club_id=ctx.club.id)
     venues = venue_repo.all()
@@ -302,8 +1802,8 @@ def get_template_schema_and_defaults(
     }
 
     fields_out = []
-    academic_year = ctx.club.academic_year_default or "2026-27"
-    short_year = academic_year.split("-")[-1] if "-" in academic_year else academic_year[-2:]
+    academic_year = ctx.club.academic_year_default or (ctx.club.settings or {}).get("academic_year") or ""
+    short_year = compute_short_year(academic_year)
     db_config = build_club_config_from_db(db, ctx.club.slug)
 
     for f in schema.fields:
@@ -371,9 +1871,9 @@ def extract_event_from_text(
     extractor = EventExtractor(config=db_config)
     event_record = extractor.extract_from_text(payload.text)
 
-    # Detect missing fields against permission_letter & approval_note
+    # Detect missing fields against pre-event schemas
     all_schemas = load_all_schemas()
-    relevant_schemas = [s for k, s in all_schemas.items() if k in ("permission_letter", "approval_note")]
+    relevant_schemas = [s for s in all_schemas.values() if s.stage == "pre_event"]
     missing_report = detect_missing_fields(event_record, relevant_schemas)
 
     extracted_dict = event_record.flat_dict()
@@ -413,7 +1913,10 @@ def generate_document(
     tmpl_slug = payload.template_id
 
     # 1. Verify template exists & load schema
-    tmpl = db.query(Template).filter(Template.slug == tmpl_slug).first()
+    tmpl = db.query(Template).filter(
+        ((Template.id == tmpl_slug) | (Template.slug == tmpl_slug)),
+        ((Template.club_id.is_(None)) | (Template.club_id == club_id)),
+    ).first()
     if not tmpl:
         raise HTTPException(status_code=404, detail=f"Template '{tmpl_slug}' not found")
 
@@ -426,7 +1929,25 @@ def generate_document(
     if not tmpl_version:
         raise HTTPException(status_code=404, detail=f"Template '{tmpl_slug}' has no published version")
 
-    tmpl_schema = load_schema(tmpl_slug)
+    if tmpl_version.schema_yaml:
+        s_data = yaml.safe_load(tmpl_version.schema_yaml)
+        tmpl_schema = TemplateSchema(**s_data)
+    else:
+        tmpl_schema = load_schema(tmpl.slug)
+
+    # Whitelist identifiers: validate event_data keys and schema field keys on render (reject with 422)
+    try:
+        from server.app.core.template_compiler import validate_identifier
+        for k in payload.event_data.keys():
+            validate_identifier(k, "Event data field")
+        if tmpl_schema and tmpl_schema.fields:
+            for f in tmpl_schema.fields:
+                validate_identifier(f.key, "Schema field")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
 
     # 2. Strict AI draft guard: reject if any field contains literal draft badge or is unconfirmed
     for k, v in payload.event_data.items():
@@ -573,7 +2094,7 @@ def generate_document(
     event.advance = data.get("advance") if data.get("advance") is not None else club_defaults.get("advance", "NiL")
     event.laboratory_office = data.get("laboratory_office") if data.get("laboratory_office") is not None else club_defaults.get("laboratory_office", "Student Council")
 
-    if tmpl_slug == "mom" or "meeting_title" in data or "agenda_items" in data:
+    if tmpl_schema.stage == "meeting" or "meeting_title" in data or "agenda_items" in data:
         event.meeting = MeetingBlock(
             title=data.get("meeting_title") or event.event_name.value,
             ref_no=ref_no,
@@ -583,13 +2104,18 @@ def generate_document(
             venue=data.get("venue"),
             mode=data.get("mode", "Offline"),
             chaired_by=data.get("chaired_by"),
-            attendees=data.get("attendees", []),
-            absentees=data.get("absentees", []),
+            attendees=[(it if isinstance(it, str) else it.get("name", str(it))) for it in data.get("attendees", [])],
+            absentees=[(it if isinstance(it, str) else it.get("name", str(it))) for it in data.get("absentees", [])],
             agenda_items=[AgendaItem(**it) if isinstance(it, dict) else it for it in data.get("agenda_items", [])],
             action_items=[ActionItem(**it) if isinstance(it, dict) else it for it in data.get("action_items", [])],
             prepared_by=data.get("prepared_by"),
             approved_by=data.get("approved_by"),
         )
+
+    # Populate custom fields from data on event so detect_missing_fields and flat_dict find them
+    for k, v in data.items():
+        if not hasattr(event, k):
+            setattr(event, k, user_field(v, k))
 
     # 4. Check existing Event for shared context linking:
     # "Bill Certificate and Bill Summary take approval note number & date
@@ -602,14 +2128,15 @@ def generate_document(
     elif event.event_name.value:
         event_row = event_repo.find_first(Event.title == event.event_name.value)
 
-    if tmpl_slug in ("bill_certificate", "bill_summary"):
+    if tmpl_schema.depends_on:
         appr_doc = None
         if event_row:
-            appr_tmpl = db.query(Template).filter(Template.slug == "approval_note").first()
-            if appr_tmpl:
+            dep_tmpls = db.query(Template).filter(Template.slug.in_(tmpl_schema.depends_on)).all()
+            dep_ids = [t.id for t in dep_tmpls]
+            if dep_ids:
                 appr_doc = doc_repo.find_first(
                     Document.event_id == event_row.id,
-                    Document.template_id == appr_tmpl.id,
+                    Document.template_id.in_(dep_ids),
                 )
         if appr_doc:
             appr_ver = (
@@ -700,7 +2227,12 @@ def generate_document(
                     "message": "Reference number reservation belongs to another user.",
                 },
             )
-        if reservation.series_key != expected_series:
+        allowed_series = {expected_series}
+        if tmpl_schema.numbering and tmpl_schema.numbering.series:
+            allowed_series.add(tmpl_schema.numbering.series)
+        if tmpl_schema.id:
+            allowed_series.add(tmpl_schema.id)
+        if reservation.series_key not in allowed_series:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -789,10 +2321,26 @@ def generate_document(
     renderer = Renderer(config=db_config, template_source=db_source, outputs_dir=out_dir)
 
     extra_ctx: dict[str, Any] = {}
-    if tmpl_slug == "prize_money_receipt" and event.winners:
-        extra_ctx["winner"] = event.winners[0]
-        from docgen.functions import fn_amount_in_words_inr
-        extra_ctx["amount_in_words"] = fn_amount_in_words_inr(event.winners[0].amount)
+    extra_ctx.update(data)
+    if tmpl_slug == "prize_money_receipt":
+        if event.winners:
+            w0 = event.winners[0]
+            extra_ctx["winner"] = w0
+            from docgen.functions import fn_amount_in_words_inr
+            amt = getattr(w0, "amount", None) or (w0.get("amount") if isinstance(w0, dict) else 0)
+            if amt:
+                try:
+                    extra_ctx["amount_in_words"] = fn_amount_in_words_inr(amt)
+                except Exception:
+                    pass
+        elif data.get("winner_amount") or data.get("winner_name"):
+            from docgen.functions import fn_amount_in_words_inr
+            amt = data.get("winner_amount") or 0
+            if amt:
+                try:
+                    extra_ctx["amount_in_words"] = fn_amount_in_words_inr(amt)
+                except Exception:
+                    pass
 
     render_result = renderer.render(
         template_id=tmpl_slug,
@@ -833,20 +2381,6 @@ def generate_document(
     db.add(ver_record)
     doc_record.current_version_id = ver_record.id
 
-    # 7. Increment Numbering counter if confirmed (concurrency-safe)
-    if payload.ref_no_confirmed:
-        if tmpl_slug == "permission_letter":
-            allocate_next_sequence(db, club_id, "ROOM", "2026-27")
-        elif tmpl_slug == "mom":
-            allocate_next_sequence(db, club_id, "MOM", "2026-27")
-        else:
-            series_repo = ScopedRepository(db, NumberingSeries, club_id=club_id)
-            ns = series_repo.find_first(
-                NumberingSeries.key.in_(["approval_note", "event_approval"]),
-                NumberingSeries.academic_year == "2026-27",
-            )
-            s_key = ns.key if ns else "approval_note"
-            allocate_next_sequence(db, club_id, s_key, "2026-27")
 
     db.commit()
 
@@ -887,6 +2421,193 @@ def generate_document(
             )
         ],
         record_snapshot=event.flat_dict(),
+    )
+
+
+class DocumentListItemOut(BaseModel):
+    id: str
+    club_id: str
+    template_id: str
+    template_slug: str
+    template_name: str
+    event_id: Optional[str] = None
+    event_title: Optional[str] = None
+    title: str
+    ref_no: Optional[str] = None
+    status: str
+    created_at: datetime
+    created_by: Optional[str] = None
+    current_version_no: int
+    page_count: int = 1
+    docx_url: str
+    pdf_url: str
+
+
+class DocumentListResponse(BaseModel):
+    items: list[DocumentListItemOut]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+@router.get("", response_model=DocumentListResponse)
+def list_documents(
+    q: Optional[str] = Query(None, description="Search term for title or reference number"),
+    template_id: Optional[str] = Query(None, description="Filter by template id or slug"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    event_id: Optional[str] = Query(None, description="Filter by event id"),
+    date_from: Optional[date] = Query(None, description="Filter documents created on or after date"),
+    date_to: Optional[date] = Query(None, description="Filter documents created on or before date"),
+    sort_by: str = Query("created_at", description="Field to sort by: created_at, title, ref_no, status"),
+    sort_order: str = Query("desc", description="Sort direction: asc or desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """List documents for the active club with search, filtering, sorting, and pagination."""
+    doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
+    ev_repo = ScopedRepository(db, Event, club_id=ctx.club.id)
+
+    filters = []
+    # Search filter
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        filters.append((Document.title.ilike(term)) | (Document.ref_no.ilike(term)))
+
+    # Template filter
+    if template_id and template_id.strip():
+        tmpl_match = (
+            db.query(Template)
+            .filter((Template.id == template_id.strip()) | (Template.slug == template_id.strip()))
+            .first()
+        )
+        if tmpl_match:
+            filters.append(Document.template_id == tmpl_match.id)
+        else:
+            filters.append(Document.template_id == template_id.strip())
+
+    # Status filter
+    if status and status.strip():
+        filters.append(Document.status == status.strip())
+
+    # Event filter
+    if event_id and event_id.strip():
+        filters.append(Document.event_id == event_id.strip())
+
+    # Date range filters
+    if date_from:
+        start_dt = datetime.combine(date_from, datetime.min.time())
+        filters.append(Document.created_at >= start_dt)
+    if date_to:
+        end_dt = datetime.combine(date_to, datetime.max.time())
+        filters.append(Document.created_at <= end_dt)
+
+    # Sorting
+    sort_col = Document.created_at
+    if sort_by == "title":
+        sort_col = Document.title
+    elif sort_by == "ref_no":
+        sort_col = Document.ref_no
+    elif sort_by == "status":
+        sort_col = Document.status
+
+    if sort_order.lower() == "asc":
+        order_clause = sort_col.asc()
+    else:
+        order_clause = sort_col.desc()
+
+    total = doc_repo.count(*filters)
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+    offset = (page - 1) * page_size
+    docs = doc_repo.list(skip=offset, limit=page_size, filters=filters, order_by=order_clause)
+
+    items: list[DocumentListItemOut] = []
+    for d in docs:
+        tmpl = db.query(Template).filter(Template.id == d.template_id).first()
+        ev = ev_repo.get(d.event_id) if d.event_id else None
+        latest_ver = (
+            db.query(DocumentVersion)
+            .filter(DocumentVersion.document_id == d.id)
+            .order_by(DocumentVersion.version_no.desc())
+            .first()
+        )
+        v_no = latest_ver.version_no if latest_ver else 1
+
+        # Check page preview count
+        preview_dir = Path("storage/previews") / d.id / f"v{v_no}"
+        page_count = 1
+        if preview_dir.exists():
+            pngs = list(preview_dir.glob("page_*.png"))
+            if pngs:
+                page_count = len(pngs)
+
+        items.append(
+            DocumentListItemOut(
+                id=d.id,
+                club_id=d.club_id,
+                template_id=d.template_id,
+                template_slug=tmpl.slug if tmpl else "document",
+                template_name=tmpl.name if tmpl else "Document",
+                event_id=d.event_id,
+                event_title=ev.title if ev else None,
+                title=d.title,
+                ref_no=d.ref_no,
+                status=d.status,
+                created_at=d.created_at,
+                created_by=d.created_by,
+                current_version_no=v_no,
+                page_count=page_count,
+                docx_url=f"/api/v1/clubs/{ctx.club.id}/documents/{d.id}/download?format=docx",
+                pdf_url=f"/api/v1/clubs/{ctx.club.id}/documents/{d.id}/download?format=pdf",
+            )
+        )
+
+    return DocumentListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
+@router.get("/batch/{batch_id}/download-zip")
+def download_batch_zip(
+    batch_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Download ZIP archive of batch-generated documents with cross-club protection."""
+    audit_repo = ScopedRepository(db, AuditLog, club_id=ctx.club.id)
+    audit_entries = audit_repo.all(AuditLog.action == "documents_batch_generated")
+    matching_log = next(
+        (l for l in audit_entries if l.meta and l.meta.get("batch_id") == batch_id),
+        None,
+    )
+    if not matching_log:
+        raise HTTPException(
+            status_code=404,
+            detail="Batch archive not found or access denied for this club.",
+        )
+
+    batch_dir = Path("storage/batches") / batch_id
+    if not batch_dir.exists():
+        raise HTTPException(status_code=404, detail="Batch folder not found on storage.")
+
+    zip_files = list(batch_dir.glob("*.zip"))
+    if not zip_files:
+        raise HTTPException(status_code=404, detail="ZIP archive not found in batch folder.")
+
+    zip_file = zip_files[0]
+    zip_filename = matching_log.meta.get("zip_filename") or zip_file.name
+
+    return FileResponse(
+        path=zip_file,
+        media_type="application/zip",
+        filename=zip_filename,
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
     )
 
 
@@ -963,6 +2684,25 @@ def get_document_page_preview(
     """Serve high-resolution rasterized PNG page preview of rendered document."""
     page_file = Path("storage/previews") / doc_id / f"v{v}" / f"page_{page_no}.png"
     if not page_file.exists():
+        query = db.query(DocumentVersion).filter(
+            DocumentVersion.document_id == doc_id,
+            DocumentVersion.version_no == v,
+        )
+        version = query.first()
+        if version and version.pdf_key and Path(version.pdf_key).exists():
+            try:
+                import pymupdf
+                page_file.parent.mkdir(parents=True, exist_ok=True)
+                pdf_doc = pymupdf.open(version.pdf_key)
+                if 1 <= page_no <= len(pdf_doc):
+                    page = pdf_doc[page_no - 1]
+                    pix = page.get_pixmap(dpi=150)
+                    pix.save(str(page_file))
+                pdf_doc.close()
+            except Exception:
+                pass
+
+    if not page_file.exists():
         raise HTTPException(status_code=404, detail="Page preview image not found")
     return FileResponse(page_file, media_type="image/png")
 
@@ -972,6 +2712,7 @@ def download_document_file(
     doc_id: str,
     format: str = Query("pdf", pattern="^(pdf|docx)$"),
     v: Optional[int] = None,
+    disposition: str = Query("attachment", pattern="^(attachment|inline)$"),
     ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
     db: Session = Depends(get_db),
 ):
@@ -1002,9 +2743,45 @@ def download_document_file(
     if not file_path or not file_path.exists():
         raise HTTPException(status_code=404, detail=f"File not available on storage ({format.upper()})")
 
+    disp = "inline" if disposition == "inline" and format == "pdf" else "attachment"
     return FileResponse(
         path=file_path,
         media_type=media_type,
         filename=filename,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'{disp}; filename="{filename}"'},
     )
+
+
+@router.get("/{doc_id}/pdf")
+def download_document_pdf(
+    doc_id: str,
+    v: Optional[int] = None,
+    disposition: str = Query("inline", pattern="^(attachment|inline)$"),
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Download or view generated document in official PDF format."""
+    return download_document_file(doc_id=doc_id, format="pdf", v=v, disposition=disposition, ctx=ctx, db=db)
+
+
+@router.get("/{doc_id}/docx")
+def download_document_docx(
+    doc_id: str,
+    v: Optional[int] = None,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Download generated document in editable DOCX format."""
+    return download_document_file(doc_id=doc_id, format="docx", v=v, disposition="attachment", ctx=ctx, db=db)
+
+
+@router.get("/{doc_id}/preview")
+def get_document_preview_page1(
+    doc_id: str,
+    v: int = Query(1),
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Serve high-resolution rasterized PNG page preview of rendered document."""
+    return get_document_page_preview(doc_id=doc_id, page_no=1, v=v, ctx=ctx, db=db)
+

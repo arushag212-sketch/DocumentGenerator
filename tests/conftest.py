@@ -26,9 +26,24 @@ from server.app.main import app
 from server.scripts.seed import seed
 
 
+import hashlib
+
+DEV_DB_PATH = Path("data/clubdocs.db")
+INITIAL_DEV_DB_HASH: str | None = None
+if DEV_DB_PATH.exists():
+    try:
+        INITIAL_DEV_DB_HASH = hashlib.sha256(DEV_DB_PATH.read_bytes()).hexdigest()
+    except Exception:
+        pass
+
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_isolated_test_database():
     """Create and seed the isolated test database, ensuring dev DB is never touched."""
+    global INITIAL_DEV_DB_HASH
+    if DEV_DB_PATH.exists() and INITIAL_DEV_DB_HASH is None:
+        INITIAL_DEV_DB_HASH = hashlib.sha256(DEV_DB_PATH.read_bytes()).hexdigest()
+
     TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     if TEST_DB_PATH.exists():
         try:
@@ -59,7 +74,14 @@ def setup_isolated_test_database():
 
     yield
 
-    # Teardown
+    # Teardown: Verify dev database was NEVER touched
+    if DEV_DB_PATH.exists() and INITIAL_DEV_DB_HASH is not None:
+        final_hash = hashlib.sha256(DEV_DB_PATH.read_bytes()).hexdigest()
+        assert final_hash == INITIAL_DEV_DB_HASH, (
+            "CRITICAL TEST ISOLATION FAILURE: data/clubdocs.db was altered during the test run! "
+            "Tests must strictly run against the isolated test database."
+        )
+
     test_engine.dispose()
     if TEST_DB_PATH.exists():
         try:

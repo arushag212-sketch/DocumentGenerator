@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from server.app.core.audit import log_audit
@@ -17,32 +18,58 @@ from server.app.core.permissions import (
     get_current_user,
     require_club_access,
 )
+import re
 from server.app.core.scoped_repo import ScopedRepository
 from server.app.core.security import decrypt_field, encrypt_field, mask_sensitive_field
 from server.app.models import (
+    Asset,
     AuditLog,
     Club,
+    Invite,
+    JoinRequest,
+    Letterhead,
     Membership,
     NumberingSeries,
     NumberReservation,
     Person,
     RoleHeld,
+    Template,
+    TemplateVersion,
     User,
     Venue,
 )
 from server.app.schemas.audit import AuditLogOut
 from server.app.schemas.club import (
     AddMemberRequest,
+    ApproveJoinRequest,
+    AssetOut,
     ClubCreate,
     ClubMemberOut,
     ClubOut,
     ClubPermissionsOut,
+    ClubSearchOut,
     ClubUpdate,
+    InviteCreate,
+    InviteOut,
+    JoinRequestCreate,
+    JoinRequestOut,
+    LetterheadCreate,
+    LetterheadOut,
+    LetterheadUpdate,
+    NumberingSeriesCreate,
+    NumberingSeriesOut,
+    NumberingSeriesUpdate,
     PersonCreate,
     PersonOut,
     PersonUpdate,
+    RoleHeldCreate,
+    RoleHeldOut,
+    RoleHeldUpdate,
     SetupWizardRequest,
     UpdateMemberRoleRequest,
+    VenueCreate,
+    VenueOut,
+    VenueUpdate,
 )
 
 router = APIRouter(prefix="/clubs", tags=["clubs"])
@@ -53,11 +80,10 @@ def _club_to_out(club: Club, my_role: Optional[str], db: Session) -> ClubOut:
     member_count = membership_repo.count(Membership.status == "active")
 
     series_repo = ScopedRepository(db, NumberingSeries, club_id=club.id)
-    room_s = series_repo.find_first(NumberingSeries.key == "ROOM")
-    evt_s = series_repo.find_first(NumberingSeries.key == "EVT")
-    mom_s = series_repo.find_first(NumberingSeries.key == "MOM")
+    all_series = {s.key: s.last_seq for s in series_repo.all()}
 
     settings_dict = club.settings or {}
+    ay = club.academic_year_default or (settings_dict.get("academic_year") if isinstance(settings_dict, dict) else None)
     return ClubOut(
         id=club.id,
         name=club.name,
@@ -72,11 +98,260 @@ def _club_to_out(club: Club, my_role: Optional[str], db: Session) -> ClubOut:
         created_at=club.created_at,
         code=club.short_name,
         department=settings_dict.get("department", "Computer Science & Engineering"),
-        academic_year=club.academic_year_default,
-        room_counter=room_s.last_seq if room_s else 0,
-        event_counter=evt_s.last_seq if evt_s else 0,
-        mom_counter=mom_s.last_seq if mom_s else 0,
+        academic_year=ay,
+        room_counter=all_series.get("ROOM", 0),
+        event_counter=all_series.get("EVT", all_series.get("EVENT", 0)),
+        mom_counter=all_series.get("MOM", 0),
     )
+
+
+from sqlalchemy import func
+
+FIXED_POSITIONS: dict[str, str] = {
+    "Student Head/Chairperson": "student_head",
+    "Student Secretary": "student_secretary",
+    "Treasurer": "treasurer",
+    "Faculty Chairman": "faculty_chairman",
+    "Faculty Co-Chairman": "faculty_co_chairman",
+    "Core member": "core_member",
+    "Member": "member",
+    "Other": "member",
+}
+
+SIGNATORY_ROLES: set[str] = {
+    "student_head",
+    "student_secretary",
+    "treasurer",
+    "faculty_chairman",
+    "faculty_co_chairman",
+}
+
+
+def validate_and_normalize_position(raw_position: str) -> tuple[str, str, Optional[str]]:
+    """Validate and normalize user-provided position.
+    
+    Returns: (stored_position, role_key, display_note)
+    - If in FIXED_POSITIONS: returns normalized position and mapped role_key.
+    - If 'Other' or custom text: validates max 60 chars, letters/spaces/-&/ only.
+      Role key is ALWAYS 'member' and NEVER maps to a signatory role.
+    """
+    if not raw_position or not str(raw_position).strip():
+        return ("Member", "member", None)
+    
+    pos = str(raw_position).strip()
+    if pos in FIXED_POSITIONS:
+        if pos == "Other":
+            return ("Other", "member", None)
+        return (pos, FIXED_POSITIONS[pos], None)
+    
+    # Custom / 'Other' note (e.g. 'Other: Head of Marketing' or 'Head of Marketing')
+    note = pos.split(":", 1)[1].strip() if pos.lower().startswith("other:") else pos
+    if len(note) > 60:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "INVALID_POSITION",
+                "message": "Custom position note must not exceed 60 characters.",
+            },
+        )
+    if not re.match(r"^[A-Za-z\s\-&/]+$", note):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "INVALID_POSITION",
+                "message": "Custom position note can only contain letters, spaces, hyphens, ampersands, or slashes.",
+            },
+        )
+    return (f"Other: {note}", "member", note)
+
+
+def sync_membership_position_to_role_held(
+    db: Session,
+    club: Club,
+    user: User,
+    position: Optional[str],
+    is_signatory: bool = False,
+    signatory_role: Optional[str] = None,
+    conflict_resolution: Optional[str] = None,
+) -> Optional[RoleHeld]:
+    """Map a member's position into Person and RoleHeld records for signature blocks.
+    
+    Rules:
+    - Only signatory roles (student_head, student_secretary, treasurer, faculty_chairman, faculty_co_chairman)
+      create or update a Person and RoleHeld.
+    - ONLY when is_signatory is True (ticked by admin).
+    - Members with non-signatory positions create NO Person record.
+    - 'Other' never maps to a signatory role.
+    - If another active holder exists for the academic year:
+      - Admin must explicitly choose 'replace' or 'keep_both'.
+      - Otherwise 409 conflict is raised.
+    - Uses club.academic_year_default (no hardcoded fallback). Fails clearly if not configured.
+    """
+    if not is_signatory:
+        return None
+
+    stored_pos, mapped_role, note = validate_and_normalize_position(position or "Member")
+    target_role = signatory_role or mapped_role
+
+    if target_role not in SIGNATORY_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "INVALID_SIGNATORY_POSITION",
+                "message": f"Position '{position}' cannot be designated as an official signatory.",
+            },
+        )
+
+    ay = club.academic_year_default
+    if not ay or not str(ay).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "ACADEMIC_YEAR_REQUIRED",
+                "message": f"Club '{club.name}' has no configured academic year for signatories.",
+            },
+        )
+
+    # Active existing holders of this role in the club for the academic year
+    active_holders = (
+        db.query(RoleHeld)
+        .filter(
+            RoleHeld.club_id == club.id,
+            RoleHeld.role_key == target_role,
+            RoleHeld.academic_year == ay,
+            RoleHeld.valid_to.is_(None),
+        )
+        .all()
+    )
+
+    person_repo = ScopedRepository(db, Person, club_id=club.id)
+    user_person = person_repo.find_first((Person.email == user.email) | (Person.full_name == user.name))
+
+    other_holders = [ah for ah in active_holders if not user_person or ah.person_id != user_person.id]
+
+    if other_holders:
+        if not conflict_resolution:
+            other_person = person_repo.get(other_holders[0].person_id)
+            existing_name = other_person.full_name if other_person else "Existing holder"
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "SIGNATORY_ROLE_CONFLICT",
+                    "existing_holder": existing_name,
+                    "role_key": target_role,
+                    "academic_year": ay,
+                    "message": f"{existing_name} already holds the '{target_role}' signatory role for {ay}. Please explicitly choose to replace {existing_name} or keep both.",
+                },
+            )
+        elif conflict_resolution == "replace":
+            now_dt = datetime.utcnow()
+            for ah in other_holders:
+                ah.valid_to = now_dt
+            db.flush()
+
+    # Create Person record only when is_signatory is True
+    if not user_person:
+        user_person = Person(
+            club_id=club.id,
+            full_name=user.name,
+            email=user.email,
+        )
+        db.add(user_person)
+        db.flush()
+
+    if target_role == "student_head":
+        label = f"Chairperson, {club.short_name}"
+    elif target_role == "student_secretary":
+        label = f"Student Secretary, {club.short_name}"
+    elif target_role == "treasurer":
+        label = f"Treasurer, {club.short_name}"
+    elif target_role == "faculty_chairman":
+        label = f"Chairman, {club.name}"
+    elif target_role == "faculty_co_chairman":
+        label = f"Co-Chairman, {club.name}"
+    else:
+        label = f"{target_role.replace('_', ' ').title()}, {club.short_name}"
+
+    existing_for_this_user = [ah for ah in active_holders if user_person and ah.person_id == user_person.id]
+    if existing_for_this_user:
+        existing_rh = existing_for_this_user[0]
+        existing_rh.designation_label = label
+        existing_rh.valid_to = None
+        db.flush()
+        return existing_rh
+    else:
+        new_rh = RoleHeld(
+            club_id=club.id,
+            person_id=user_person.id,
+            role_key=target_role,
+            designation_label=label,
+            academic_year=ay,
+            valid_from=datetime.utcnow(),
+            valid_to=None,
+        )
+        db.add(new_rh)
+        db.flush()
+        return new_rh
+
+
+@router.get("/search", response_model=list[ClubSearchOut])
+def search_clubs(
+    q: str = Query("", description="Search term for club name, short name or slug"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Searchable list of clubs with current user's membership and join request status."""
+    query = db.query(Club).filter(Club.disabled_at.is_(None))
+    term = q.strip().lower()
+    if term:
+        like_term = f"%{term}%"
+        query = query.filter(
+            (Club.name.ilike(like_term)) |
+            (Club.short_name.ilike(like_term)) |
+            (Club.slug.ilike(like_term)) |
+            (Club.chapter_code.ilike(like_term))
+        )
+    clubs = query.order_by(Club.name.asc()).all()
+
+    # Pre-fetch user's memberships and join requests
+    memberships = {m.club_id: m for m in db.scalars(select(Membership).where(Membership.user_id == current_user.id)).all()}
+    join_requests = {jr.club_id: jr for jr in db.query(JoinRequest).filter(JoinRequest.user_id == current_user.id).order_by(JoinRequest.created_at.desc()).all()}
+
+    results = []
+    for c in clubs:
+        m = memberships.get(c.id)
+        jr = join_requests.get(c.id)
+        m_repo = ScopedRepository(db, Membership, club_id=c.id)
+        m_count = m_repo.count(Membership.status == "active")
+
+        # Find an admin / owner name for the club
+        admin_membership = m_repo.find_first(
+            Membership.status == "active",
+            Membership.role.in_(["owner", "admin"]),
+        )
+        admin_name = None
+        if admin_membership:
+            admin_user = db.query(User).filter(User.id == admin_membership.user_id).first()
+            if admin_user:
+                admin_name = admin_user.name
+
+        results.append(
+            ClubSearchOut(
+                id=c.id,
+                name=c.name,
+                short_name=c.short_name,
+                slug=c.slug,
+                chapter_code=c.chapter_code,
+                academic_year_default=c.academic_year_default,
+                members_count=m_count,
+                membership_role=m.role if (m and m.status == "active") else None,
+                membership_status=m.status if m else None,
+                membership_position=m.position if m else None,
+                join_request_status=jr.status if jr else None,
+                admin_name=admin_name,
+            )
+        )
+    return results
 
 
 @router.get("/", response_model=list[ClubOut])
@@ -93,13 +368,27 @@ def list_clubs(
             for c in clubs
         ]
 
-    # Standard user: only list clubs where user is an active member
+    # Standard user: list clubs where user is an active member or has a pending join request
     active_memberships = [m for m in current_user.memberships if m.status == "active"]
     clubs_out = []
+    included_ids = set()
     for m in active_memberships:
         club = db.query(Club).filter(Club.id == m.club_id, Club.disabled_at.is_(None)).first()
         if club:
             clubs_out.append(_club_to_out(club, m.role, db))
+            included_ids.add(club.id)
+
+    pending_jrs = db.query(JoinRequest).filter(
+        JoinRequest.user_id == current_user.id,
+        JoinRequest.status == "pending",
+    ).all()
+    for jr in pending_jrs:
+        if jr.club_id not in included_ids:
+            club = db.query(Club).filter(Club.id == jr.club_id, Club.disabled_at.is_(None)).first()
+            if club:
+                clubs_out.append(_club_to_out(club, None, db))
+                included_ids.add(club.id)
+
     return clubs_out
 
 
@@ -110,18 +399,64 @@ def create_club(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Create a new club. The creator is assigned 'owner' via ScopedRepository."""
-    existing_slug = db.query(Club).filter(Club.slug == payload.slug.lower().strip()).first()
-    if existing_slug:
+    """Create a new club. The creator is assigned 'owner' via ScopedRepository immediately."""
+    # 1. Name uniqueness (case-insensitive)
+    name_stripped = payload.name.strip()
+    existing_name = db.query(Club).filter(func.lower(Club.name) == name_stripped.lower()).first()
+    if existing_name:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "SLUG_EXISTS", "message": f"Club with identifier '{payload.slug}' already exists"},
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "CLUB_NAME_EXISTS",
+                "message": f"A club named '{name_stripped}' already exists. Did you mean to join it instead?",
+            },
         )
 
+    # 2. Rate limit: maximum 3 clubs created per user per day
+    one_day_ago = datetime.utcnow() - timedelta(days=1)
+    clubs_created_24h = (
+        db.scalar(
+            select(func.count(AuditLog.id)).where(
+                AuditLog.user_id == current_user.id,
+                AuditLog.action == "club_created",
+                AuditLog.created_at >= one_day_ago,
+            )
+        )
+        or 0
+    )
+    if clubs_created_24h >= 3:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "Club creation limit exceeded (maximum 3 clubs per day).",
+            },
+        )
+
+    # 3. Position validation
+    stored_pos, mapped_role, note = validate_and_normalize_position(payload.position or "Student Head/Chairperson")
+
+    slug = payload.slug
+    if not slug or not slug.strip():
+        base_slug = re.sub(r'[^a-z0-9]+', '-', (payload.short_name or payload.name).lower()).strip('-')
+        slug = base_slug or "club"
+        counter = 1
+        while db.query(Club).filter(Club.slug == slug).first():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+    else:
+        slug = slug.lower().strip()
+        existing_slug = db.query(Club).filter(Club.slug == slug).first()
+        if existing_slug:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "SLUG_EXISTS", "message": f"Club with identifier '{slug}' already exists"},
+            )
+
     club = Club(
-        name=payload.name.strip(),
+        name=name_stripped,
         short_name=payload.short_name.strip(),
-        slug=payload.slug.lower().strip(),
+        slug=slug,
         chapter_code=payload.chapter_code,
         head_of_account=payload.head_of_account,
         academic_year_default=payload.academic_year_default,
@@ -135,8 +470,17 @@ def create_club(
     membership_repo.create(
         user_id=current_user.id,
         role=Role.OWNER,
+        position=stored_pos,
         status="active",
     )
+    if payload.is_signatory:
+        sync_membership_position_to_role_held(
+            db=db,
+            club=club,
+            user=current_user,
+            position=stored_pos,
+            is_signatory=True,
+        )
 
     client_ip = request.client.host if request.client else None
     log_audit(
@@ -146,11 +490,389 @@ def create_club(
         entity_id=club.id,
         club_id=club.id,
         user_id=current_user.id,
-        meta={"name": club.name, "slug": club.slug},
+        meta={"name": club.name, "slug": club.slug, "position": stored_pos},
         ip=client_ip,
     )
 
     return _club_to_out(club, Role.OWNER, db)
+
+
+# ---------------- JOIN REQUEST ENDPOINTS ----------------
+
+
+@router.post("/{club_id}/join-requests", response_model=JoinRequestOut, status_code=status.HTTP_201_CREATED)
+def create_join_request(
+    club_id: str,
+    payload: JoinRequestCreate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Submit a join request with a chosen position for the club."""
+    club = db.query(Club).filter(Club.id == club_id, Club.disabled_at.is_(None)).first()
+    if not club:
+        raise HTTPException(status_code=404, detail={"code": "CLUB_NOT_FOUND", "message": "Club not found"})
+
+    # 1. Position validation & normalization
+    stored_pos, mapped_role, note = validate_and_normalize_position(payload.position)
+
+    # 2. Rate limits: maximum 5/hour, 20/day per user
+    now = datetime.utcnow()
+    one_hour_ago = now - timedelta(hours=1)
+    one_day_ago = now - timedelta(days=1)
+
+    hourly_requests = db.query(JoinRequest).filter(
+        JoinRequest.user_id == current_user.id,
+        JoinRequest.created_at >= one_hour_ago,
+    ).count()
+    if hourly_requests >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "Join request hourly rate limit exceeded (maximum 5 requests per hour).",
+            },
+        )
+
+    daily_requests = db.query(JoinRequest).filter(
+        JoinRequest.user_id == current_user.id,
+        JoinRequest.created_at >= one_day_ago,
+    ).count()
+    if daily_requests >= 20:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "Join request daily rate limit exceeded (maximum 20 requests per day).",
+            },
+        )
+
+    # 3. 24-hour cooldown after rejection
+    last_rejection = (
+        db.query(JoinRequest)
+        .filter(
+            JoinRequest.club_id == club.id,
+            JoinRequest.user_id == current_user.id,
+            JoinRequest.status == "rejected",
+        )
+        .order_by(JoinRequest.reviewed_at.desc(), JoinRequest.created_at.desc())
+        .first()
+    )
+    if last_rejection and last_rejection.reviewed_at:
+        seconds_since = (now - last_rejection.reviewed_at).total_seconds()
+        if seconds_since < 24 * 3600:
+            hours_left = int((24 * 3600 - seconds_since) // 3600) + 1
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "REJECTION_COOLDOWN",
+                    "message": f"You can submit a new join request 24 hours after a previous rejection (please wait {hours_left} more hour(s)).",
+                },
+            )
+
+    # Check if already an active member
+    m_repo = ScopedRepository(db, Membership, club_id=club_id)
+    m = m_repo.find_first(Membership.user_id == current_user.id, Membership.status == "active")
+    if m:
+        raise HTTPException(status_code=400, detail={"code": "ALREADY_MEMBER", "message": "You are already an active member of this club"})
+
+    # Check existing pending join request
+    existing_jr = db.query(JoinRequest).filter(
+        JoinRequest.club_id == club_id,
+        JoinRequest.user_id == current_user.id,
+        JoinRequest.status == "pending",
+    ).first()
+    if existing_jr:
+        admin_membership = m_repo.find_first(Membership.status == "active", Membership.role.in_(["owner", "admin"]))
+        admin_user = db.query(User).filter(User.id == admin_membership.user_id).first() if admin_membership else None
+        return JoinRequestOut(
+            id=existing_jr.id,
+            club_id=club.id,
+            club_name=club.name,
+            user_id=current_user.id,
+            user_name=current_user.name,
+            user_email=current_user.email,
+            position=existing_jr.position,
+            status=existing_jr.status,
+            admin_name=admin_user.name if admin_user else None,
+            created_at=existing_jr.created_at,
+        )
+
+    jr = JoinRequest(
+        club_id=club.id,
+        user_id=current_user.id,
+        position=stored_pos,
+        status="pending",
+    )
+    db.add(jr)
+    db.flush()
+
+    admin_membership = m_repo.find_first(Membership.status == "active", Membership.role.in_(["owner", "admin"]))
+    admin_user = db.query(User).filter(User.id == admin_membership.user_id).first() if admin_membership else None
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="join_request_created",
+        entity_type="join_request",
+        entity_id=jr.id,
+        club_id=club.id,
+        user_id=current_user.id,
+        meta={"position": jr.position},
+        ip=client_ip,
+    )
+
+    return JoinRequestOut(
+        id=jr.id,
+        club_id=club.id,
+        club_name=club.name,
+        user_id=current_user.id,
+        user_name=current_user.name,
+        user_email=current_user.email,
+        position=jr.position,
+        status=jr.status,
+        admin_name=admin_user.name if admin_user else None,
+        created_at=jr.created_at,
+    )
+
+
+@router.get("/{club_id}/join-requests/my", response_model=Optional[JoinRequestOut])
+def get_my_join_request(
+    club_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieve current user's latest join request for this club."""
+    club = db.query(Club).filter(Club.id == club_id, Club.disabled_at.is_(None)).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found")
+
+    jr = (
+        db.query(JoinRequest)
+        .filter(JoinRequest.club_id == club_id, JoinRequest.user_id == current_user.id)
+        .order_by(JoinRequest.created_at.desc())
+        .first()
+    )
+    if not jr:
+        return None
+
+    admin_membership = ScopedRepository(db, Membership, club_id=club.id).find_first(Membership.status == "active", Membership.role.in_(["owner", "admin"]))
+    admin_user = db.query(User).filter(User.id == admin_membership.user_id).first() if admin_membership else None
+
+    return JoinRequestOut(
+        id=jr.id,
+        club_id=club.id,
+        club_name=club.name,
+        user_id=current_user.id,
+        user_name=current_user.name,
+        user_email=current_user.email,
+        position=jr.position,
+        status=jr.status,
+        admin_name=admin_user.name if admin_user else None,
+        reviewed_by=jr.reviewed_by,
+        reviewed_at=jr.reviewed_at,
+        created_at=jr.created_at,
+    )
+
+
+@router.get("/{club_id}/join-requests", response_model=list[JoinRequestOut])
+def list_join_requests(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """List join requests for the club (admins only)."""
+    query = db.query(JoinRequest).filter(JoinRequest.club_id == ctx.club.id)
+    if status_filter:
+        query = query.filter(JoinRequest.status == status_filter)
+    requests = query.order_by(JoinRequest.created_at.desc()).all()
+
+    out = []
+    for r in requests:
+        u = db.query(User).filter(User.id == r.user_id).first()
+        out.append(
+            JoinRequestOut(
+                id=r.id,
+                club_id=ctx.club.id,
+                club_name=ctx.club.name,
+                user_id=r.user_id,
+                user_name=u.name if u else "Unknown",
+                user_email=u.email if u else "unknown@svnit.ac.in",
+                position=r.position,
+                status=r.status,
+                reviewed_by=r.reviewed_by,
+                reviewed_at=r.reviewed_at,
+                created_at=r.created_at,
+            )
+        )
+    return out
+
+
+@router.post("/{club_id}/join-requests/{request_id}/approve", response_model=JoinRequestOut)
+def approve_join_request(
+    club_id: str,
+    request_id: str,
+    payload: ApproveJoinRequest,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Approve a pending join request with an assigned role (admin+)."""
+    jr = db.query(JoinRequest).filter(JoinRequest.id == request_id, JoinRequest.club_id == ctx.club.id).first()
+    if not jr:
+        raise HTTPException(status_code=404, detail="Join request not found")
+    if jr.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Join request is already {jr.status}")
+
+    from server.app.core.permissions import ROLE_RANKS
+    if ROLE_RANKS.get(payload.role, 0) > ROLE_RANKS.get(ctx.role, 0) and not ctx.user.is_platform_admin:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Cannot grant role '{payload.role}' which exceeds your own role '{ctx.role}'",
+        )
+
+    target_user = db.query(User).filter(User.id == jr.user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # If signatory is ticked, sync before approving so conflict raises 409 and request stays pending
+    if payload.is_signatory:
+        sync_membership_position_to_role_held(
+            db=db,
+            club=ctx.club,
+            user=target_user,
+            position=jr.position,
+            is_signatory=True,
+            signatory_role=payload.signatory_role,
+            conflict_resolution=payload.conflict_resolution,
+        )
+
+    jr.status = "approved"
+    jr.reviewed_by = ctx.user.id
+    jr.reviewed_at = datetime.utcnow()
+
+    # Create or update membership
+    membership_repo = ScopedRepository(db, Membership, club_id=ctx.club.id)
+    m = membership_repo.find_first(Membership.user_id == jr.user_id)
+    if m:
+        m.role = payload.role
+        m.status = "active"
+        m.position = jr.position
+    else:
+        membership_repo.create(
+            user_id=jr.user_id,
+            role=payload.role,
+            position=jr.position,
+            status="active",
+        )
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="join_request_approved",
+        entity_type="join_request",
+        entity_id=jr.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"assigned_role": payload.role, "position": jr.position, "target_user_id": jr.user_id},
+        ip=client_ip,
+    )
+
+    return JoinRequestOut(
+        id=jr.id,
+        club_id=ctx.club.id,
+        club_name=ctx.club.name,
+        user_id=jr.user_id,
+        user_name=target_user.name if target_user else "Unknown",
+        user_email=target_user.email if target_user else "unknown@svnit.ac.in",
+        position=jr.position,
+        status=jr.status,
+        reviewed_by=jr.reviewed_by,
+        reviewed_at=jr.reviewed_at,
+        created_at=jr.created_at,
+    )
+
+
+@router.post("/{club_id}/join-requests/{request_id}/reject", response_model=JoinRequestOut)
+def reject_join_request(
+    club_id: str,
+    request_id: str,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Reject a pending join request (admin+)."""
+    jr = db.query(JoinRequest).filter(JoinRequest.id == request_id, JoinRequest.club_id == ctx.club.id).first()
+    if not jr:
+        raise HTTPException(status_code=404, detail="Join request not found")
+    if jr.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Join request is already {jr.status}")
+
+    jr.status = "rejected"
+    jr.reviewed_by = ctx.user.id
+    jr.reviewed_at = datetime.utcnow()
+
+    target_user = db.query(User).filter(User.id == jr.user_id).first()
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="join_request_rejected",
+        entity_type="join_request",
+        entity_id=jr.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"target_user_id": jr.user_id},
+        ip=client_ip,
+    )
+
+    return JoinRequestOut(
+        id=jr.id,
+        club_id=ctx.club.id,
+        club_name=ctx.club.name,
+        user_id=jr.user_id,
+        user_name=target_user.name if target_user else "Unknown",
+        user_email=target_user.email if target_user else "unknown@svnit.ac.in",
+        position=jr.position,
+        status=jr.status,
+        reviewed_by=jr.reviewed_by,
+        reviewed_at=jr.reviewed_at,
+        created_at=jr.created_at,
+    )
+
+
+@router.post("/{club_id}/join-requests/{request_id}/cancel", response_model=JoinRequestOut)
+def cancel_join_request(
+    club_id: str,
+    request_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """User cancels their own pending join request."""
+    jr = db.query(JoinRequest).filter(
+        JoinRequest.id == request_id,
+        JoinRequest.club_id == club_id,
+        JoinRequest.user_id == current_user.id,
+    ).first()
+    if not jr:
+        raise HTTPException(status_code=404, detail="Join request not found")
+    if jr.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Cannot cancel request with status '{jr.status}'")
+
+    jr.status = "cancelled"
+    db.flush()
+
+    club = db.query(Club).filter(Club.id == club_id).first()
+    return JoinRequestOut(
+        id=jr.id,
+        club_id=club_id,
+        club_name=club.name if club else "Club",
+        user_id=current_user.id,
+        user_name=current_user.name,
+        user_email=current_user.email,
+        position=jr.position,
+        status=jr.status,
+        created_at=jr.created_at,
+    )
 
 
 @router.get("/{club_id}", response_model=ClubOut)
@@ -301,6 +1023,7 @@ def list_members(
                     email=user.email,
                     name=user.name,
                     role=m.role,
+                    position=m.position,
                     status=m.status,
                     joined_at=m.created_at,
                 )
@@ -481,7 +1204,23 @@ def list_people(
 ):
     """List people strictly through ScopedRepository with field masking and reveal permission."""
     person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+    role_repo = ScopedRepository(db, RoleHeld, club_id=ctx.club.id)
+
     people = person_repo.all()
+    all_roles = role_repo.all()
+
+    roles_by_person: dict[str, list[RoleHeldOut]] = {}
+    for r in all_roles:
+        roles_by_person.setdefault(r.person_id, []).append(
+            RoleHeldOut(
+                id=r.id,
+                person_id=r.person_id,
+                role_key=r.role_key,
+                designation_label=r.designation_label,
+                academic_year=r.academic_year,
+                created_at=r.created_at,
+            )
+        )
 
     can_reveal = reveal and ctx.is_admin
 
@@ -489,6 +1228,8 @@ def list_people(
     for p in people:
         decrypted_mobile = decrypt_field(p.mobile)
         display_mobile = decrypted_mobile if can_reveal else mask_sensitive_field(decrypted_mobile)
+        p_roles = roles_by_person.get(p.id, [])
+        primary_desig = p_roles[0].designation_label if p_roles else (p.notes or p.department)
 
         out.append(
             PersonOut(
@@ -500,10 +1241,11 @@ def list_people(
                 roll_number=p.roll_no,
                 branch=p.branch,
                 department=p.department,
-                designation=p.notes or p.department,
+                designation=primary_desig,
                 mobile=display_mobile,
                 email=p.email,
                 notes=p.notes,
+                roles=p_roles,
                 created_at=p.created_at,
             )
         )
@@ -513,10 +1255,11 @@ def list_people(
 @router.post("/{club_id}/people", response_model=PersonOut, status_code=status.HTTP_201_CREATED)
 def create_person(
     payload: PersonCreate,
+    request: Request,
     ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    """Create a person with mobile encrypted at rest via ScopedRepository."""
+    """Create a person with mobile encrypted at rest via ScopedRepository (admin only)."""
     person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
     encrypted_mob = encrypt_field(payload.mobile) if payload.mobile else None
 
@@ -530,6 +1273,18 @@ def create_person(
         notes=payload.notes,
     )
 
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="person_created",
+        entity_type="person",
+        entity_id=person.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"full_name": person.full_name, "department": person.department},
+        ip=client_ip,
+    )
+
     return PersonOut(
         id=person.id,
         club_id=person.club_id,
@@ -540,8 +1295,240 @@ def create_person(
         mobile=mask_sensitive_field(payload.mobile) if payload.mobile else None,
         email=person.email,
         notes=person.notes,
+        roles=[],
         created_at=person.created_at,
     )
+
+
+@router.put("/{club_id}/people/{person_id}", response_model=PersonOut)
+def update_person(
+    club_id: str,
+    person_id: str,
+    payload: PersonUpdate,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Update person details (admin only)."""
+    person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+    person = person_repo.get(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "PERSON_NOT_FOUND", "message": "Person not found in this club"},
+        )
+
+    if payload.full_name is not None:
+        person.full_name = payload.full_name.strip()
+    if payload.roll_no is not None:
+        person.roll_no = payload.roll_no.strip() if payload.roll_no else None
+    if payload.branch is not None:
+        person.branch = payload.branch.strip() if payload.branch else None
+    if payload.department is not None:
+        person.department = payload.department.strip() if payload.department else None
+    if payload.email is not None:
+        person.email = payload.email.strip() if payload.email else None
+    if payload.notes is not None:
+        person.notes = payload.notes
+    if payload.mobile is not None:
+        person.mobile = encrypt_field(payload.mobile) if payload.mobile else None
+
+    db.commit()
+    db.refresh(person)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="person_updated",
+        entity_type="person",
+        entity_id=person.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"full_name": person.full_name},
+        ip=client_ip,
+    )
+
+    dec_mob = decrypt_field(person.mobile)
+    return PersonOut(
+        id=person.id,
+        club_id=person.club_id,
+        full_name=person.full_name,
+        roll_no=person.roll_no,
+        branch=person.branch,
+        department=person.department,
+        mobile=mask_sensitive_field(dec_mob) if dec_mob else None,
+        email=person.email,
+        notes=person.notes,
+        created_at=person.created_at,
+    )
+
+
+@router.delete("/{club_id}/people/{person_id}")
+def delete_person(
+    club_id: str,
+    person_id: str,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Delete a person and associated role assignments (admin only)."""
+    person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+    person = person_repo.get(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "PERSON_NOT_FOUND", "message": "Person not found in this club"},
+        )
+
+    # Delete roles held first
+    role_repo = ScopedRepository(db, RoleHeld, club_id=ctx.club.id)
+    roles = role_repo.all(RoleHeld.person_id == person_id)
+    for r in roles:
+        db.delete(r)
+
+    person_repo.delete(person_id)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="person_deleted",
+        entity_type="person",
+        entity_id=person_id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"deleted_person_id": person_id},
+        ip=client_ip,
+    )
+    return {"message": "Person deleted successfully"}
+
+
+@router.post("/{club_id}/roles", response_model=RoleHeldOut, status_code=status.HTTP_201_CREATED)
+def assign_role_held(
+    club_id: str,
+    payload: RoleHeldCreate,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Assign a signatory role and designation label to a person (admin only)."""
+    person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+    person = person_repo.get(payload.person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "PERSON_NOT_FOUND", "message": "Person not found in this club"},
+        )
+
+    role_repo = ScopedRepository(db, RoleHeld, club_id=ctx.club.id)
+    r = role_repo.create(
+        person_id=payload.person_id,
+        role_key=payload.role_key.strip(),
+        designation_label=payload.designation_label.strip(),
+        academic_year=payload.academic_year.strip(),
+    )
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="role_assigned",
+        entity_type="role_held",
+        entity_id=r.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"role_key": r.role_key, "person_id": r.person_id, "designation": r.designation_label},
+        ip=client_ip,
+    )
+
+    return RoleHeldOut(
+        id=r.id,
+        person_id=r.person_id,
+        role_key=r.role_key,
+        designation_label=r.designation_label,
+        academic_year=r.academic_year,
+        created_at=r.created_at,
+    )
+
+
+@router.put("/{club_id}/roles/{role_id}", response_model=RoleHeldOut)
+def update_role_held(
+    club_id: str,
+    role_id: str,
+    payload: RoleHeldUpdate,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Update a role assignment designation or academic year (admin only)."""
+    role_repo = ScopedRepository(db, RoleHeld, club_id=ctx.club.id)
+    r = role_repo.get(role_id)
+    if not r:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "ROLE_NOT_FOUND", "message": "Role assignment not found in this club"},
+        )
+
+    if payload.role_key is not None:
+        r.role_key = payload.role_key.strip()
+    if payload.designation_label is not None:
+        r.designation_label = payload.designation_label.strip()
+    if payload.academic_year is not None:
+        r.academic_year = payload.academic_year.strip()
+
+    db.commit()
+    db.refresh(r)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="role_updated",
+        entity_type="role_held",
+        entity_id=r.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"role_key": r.role_key, "designation": r.designation_label},
+        ip=client_ip,
+    )
+
+    return RoleHeldOut(
+        id=r.id,
+        person_id=r.person_id,
+        role_key=r.role_key,
+        designation_label=r.designation_label,
+        academic_year=r.academic_year,
+        created_at=r.created_at,
+    )
+
+
+@router.delete("/{club_id}/roles/{role_id}")
+def delete_role_held(
+    club_id: str,
+    role_id: str,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Delete a role assignment (admin only)."""
+    role_repo = ScopedRepository(db, RoleHeld, club_id=ctx.club.id)
+    r = role_repo.get(role_id)
+    if not r:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "ROLE_NOT_FOUND", "message": "Role assignment not found in this club"},
+        )
+    role_repo.delete(role_id)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="role_removed",
+        entity_type="role_held",
+        entity_id=role_id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"role_id": role_id},
+        ip=client_ip,
+    )
+    return {"message": "Role assignment deleted successfully"}
 
 
 # ---------------- FIRST-RUN SETUP WIZARD (ScopedRepository) ----------------
@@ -616,21 +1603,24 @@ def run_setup_wizard(
             addressee_default=f"The Head of Department, {payload.chairman_dept}",
         )
 
-    # 6. Numbering Series (ROOM, MOM, EVENT)
-    cs = ctx.club.short_name
-    ay = payload.academic_year
-    num_repo.create(
-        key="ROOM",
-        format=f"{cs}/{ay}/ROOM/{{seq:03d}}",
-        academic_year=ay,
-        last_seq=0,
-    )
-    num_repo.create(
-        key="MOM",
-        format=f"{cs}/{ay}/MOM/{{seq:03d}}",
-        academic_year=ay,
-        last_seq=0,
-    )
+    # 6. Numbering Series from template schemas
+    ay = payload.academic_year or ctx.club.academic_year_default
+    from docgen.schema import load_all_schemas
+    all_schemas = load_all_schemas()
+    for s in all_schemas.values():
+        if s.numbering and s.numbering.format:
+            s_key = s.numbering.series or "EVENT"
+            existing_s = num_repo.find_first(
+                NumberingSeries.key == s_key,
+                NumberingSeries.academic_year == ay,
+            )
+            if not existing_s:
+                num_repo.create(
+                    key=s_key,
+                    format=s.numbering.format,
+                    academic_year=ay,
+                    last_seq=0,
+                )
 
     client_ip = request.client.host if request.client else None
     log_audit(
@@ -676,62 +1666,59 @@ def reserve_reference_number(
     Academic year is strictly taken from club settings, never hardcoded.
     """
     from docgen.schema import load_schema
-    from server.app.api.v1.documents import allocate_next_sequence
+    from server.app.core.numbering_service import reserve_number_for_document
 
-    academic_year = ctx.club.academic_year_default or (ctx.club.settings or {}).get("academic_year") or "2026-27"
-    short_year = academic_year.split("-")[-1] if "-" in academic_year else academic_year[-2:]
+    academic_year = ctx.club.academic_year_default or (ctx.club.settings or {}).get("academic_year") or ""
     club_prefix = ctx.club.short_name or ctx.club.slug.upper()
 
     format_pattern = None
     if payload and payload.template_id:
         try:
-            tmpl_schema = load_schema(payload.template_id)
-            if tmpl_schema.numbering and tmpl_schema.numbering.format:
-                format_pattern = tmpl_schema.numbering.format
+            tmpl_row = db.query(Template).filter(
+                (Template.id == payload.template_id) | (Template.slug == payload.template_id)
+            ).first()
+            if tmpl_row:
+                ver = (
+                    db.query(TemplateVersion)
+                    .filter(TemplateVersion.template_id == tmpl_row.id)
+                    .order_by(TemplateVersion.version_no.desc())
+                    .first()
+                )
+                if ver and ver.schema_yaml:
+                    import yaml
+                    s_dict = yaml.safe_load(ver.schema_yaml)
+                    num_cfg = s_dict.get("numbering", {})
+                    if num_cfg and num_cfg.get("format"):
+                        format_pattern = num_cfg["format"]
+            if not format_pattern:
+                tmpl_schema = load_schema(payload.template_id)
+                if tmpl_schema.numbering and tmpl_schema.numbering.format:
+                    format_pattern = tmpl_schema.numbering.format
         except Exception:
             pass
 
-    # Atomically allocate sequence number using DB lock/atomic returning
-    seq = allocate_next_sequence(
-        db=db,
-        club_id=ctx.club.id,
-        series_key=series_key,
-        academic_year=academic_year,
-        club_code=club_prefix,
-        format_pattern=format_pattern,
-    )
-
-    series_repo = ScopedRepository(db, NumberingSeries, club_id=ctx.club.id)
-    ns = series_repo.find_first(
-        NumberingSeries.key == series_key,
-        NumberingSeries.academic_year == academic_year,
-    )
-    fmt = ns.format if (ns and ns.format) else (format_pattern or f"{club_prefix}/{{academic_year}}/{{series}}/{{seq:03d}}")
     event_code_val = (payload.event_code if payload and payload.event_code else series_key)
-    ref_no = fmt.format(
-        academic_year=academic_year,
-        short_year=short_year,
-        series=series_key,
-        event_code=event_code_val,
-        seq=seq,
-    )
-
-    now = datetime.utcnow()
-    expires = now + timedelta(minutes=30)
-    reservation = NumberReservation(
-        id=str(uuid.uuid4()),
-        club_id=ctx.club.id,
-        user_id=ctx.user.id,
-        series_key=series_key,
-        academic_year=academic_year,
-        sequence_num=seq,
-        ref_no=ref_no,
-        expires_at=expires,
-        status="reserved",
-    )
-    db.add(reservation)
-    db.commit()
-    db.refresh(reservation)
+    try:
+        reservation, ref_no = reserve_number_for_document(
+            db=db,
+            club_id=ctx.club.id,
+            user_id=ctx.user.id,
+            series_key=series_key,
+            academic_year=academic_year,
+            event_code=event_code_val,
+            format_pattern=format_pattern,
+            expiry_minutes=30,
+            status="reserved",
+            allow_create=True,
+        )
+        db.commit()
+        db.refresh(reservation)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "NUMBERING_SERIES_NOT_FOUND", "message": str(e)},
+        )
 
     return ReserveNumberResponse(
         reservation_id=reservation.id,
@@ -755,3 +1742,734 @@ def get_club_audit_log(
     """View audit trail strictly via ScopedRepository."""
     audit_repo = ScopedRepository(db, AuditLog, club_id=ctx.club.id)
     return audit_repo.list(skip=skip, limit=limit, order_by=AuditLog.created_at.desc())
+
+
+@router.post("/{club_id}/logo")
+async def upload_club_logo(
+    club_id: str,
+    file: UploadFile = File(...),
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Upload and normalize a club logo (compositing RGBA onto white canvas)."""
+    import hashlib
+    from pathlib import Path
+    from server.app.models import Asset, Letterhead
+    from server.app.core.template_compiler import normalize_logo_image
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    try:
+        normalized_bytes = normalize_logo_image(content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image format: {e}")
+
+    asset_id = str(uuid.uuid4())
+    storage_dir = Path("storage/assets")
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = storage_dir / f"{asset_id}.png"
+    dest_path.write_bytes(normalized_bytes)
+
+    sha256 = hashlib.sha256(normalized_bytes).hexdigest()
+    asset = Asset(
+        id=asset_id,
+        club_id=ctx.club.id,
+        kind="logo",
+        filename=file.filename or "logo.png",
+        mime="image/png",
+        sha256=sha256,
+        size=len(normalized_bytes),
+        storage_key=str(dest_path),
+        uploaded_by=ctx.user.id,
+        is_system=False,
+    )
+    db.add(asset)
+
+    # Associate with club letterhead
+    lh = (
+        db.query(Letterhead)
+        .filter(Letterhead.club_id == ctx.club.id)
+        .first()
+    )
+    if not lh:
+        system_lh = db.query(Letterhead).filter(Letterhead.club_id.is_(None)).first()
+        lh = Letterhead(
+            id=str(uuid.uuid4()),
+            club_id=ctx.club.id,
+            name=f"{ctx.club.name} Official Letterhead",
+            left_logo_asset_id=system_lh.left_logo_asset_id if system_lh else None,
+            right_logo_asset_id=asset.id,
+            institute_logo_asset_id=system_lh.institute_logo_asset_id if system_lh else None,
+            title_text=ctx.club.name.upper(),
+            subtitle_text="Sardar Vallabhbhai National Institute of Technology, Surat",
+            colors={"primary": "#1E5B94"},
+            fonts={"primary": "Times New Roman"},
+            layout={"type": "dual_logo_single_line"},
+        )
+        db.add(lh)
+    else:
+        lh.right_logo_asset_id = asset.id
+
+    ctx.club.default_letterhead_id = lh.id
+    settings_dict = dict(ctx.club.settings or {})
+    settings_dict["logo_asset_id"] = asset.id
+    ctx.club.settings = settings_dict
+
+    db.commit()
+    db.refresh(asset)
+
+    log_audit(
+        db=db,
+        action="club_logo_uploaded",
+        entity_type="asset",
+        entity_id=asset.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"filename": asset.filename, "size": asset.size},
+    )
+
+    return {
+        "asset_id": asset.id,
+        "filename": asset.filename,
+        "url": f"/api/v1/assets/{asset.id}/content",
+        "letterhead_id": lh.id,
+    }
+
+
+# ---------------- INVITES (Club Admins create/list/revoke) ----------------
+
+
+@router.post("/{club_id}/invites", response_model=InviteOut, status_code=status.HTTP_201_CREATED)
+def create_club_invite(
+    club_id: str,
+    payload: InviteCreate,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Create an invite (link/code with role and expiry, single-use or limited uses). Admin only."""
+    import secrets
+    from server.app.core.permissions import ROLE_RANKS
+
+    target_role = payload.role.lower().strip()
+    inviter_rank = ROLE_RANKS.get(ctx.role, 0)
+    target_rank = ROLE_RANKS.get(target_role, 0)
+    if not ctx.user.is_platform_admin and target_rank > inviter_rank:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "ROLE_EXCEEDS_INVITER", "message": "Cannot create an invite with a role higher than your own role."},
+        )
+
+    import hashlib
+    raw_code = secrets.token_urlsafe(16)
+    code_hash = hashlib.sha256(raw_code.encode("utf-8")).hexdigest()
+    expiry_days = payload.expiry_days or 7
+    expires_at = datetime.utcnow() + timedelta(days=expiry_days)
+    max_uses = payload.max_uses if (payload.max_uses and payload.max_uses > 0) else 1
+
+    invite = Invite(
+        id=str(uuid.uuid4()),
+        club_id=ctx.club.id,
+        code_hash=code_hash,
+        code=None,
+        email_or_code=None,
+        role=target_role,
+        created_by=ctx.user.id,
+        max_uses=max_uses,
+        use_count=0,
+        revoked=False,
+        expires_at=expires_at,
+    )
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="invite_created",
+        entity_type="invite",
+        entity_id=invite.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"code_hash": code_hash[:16], "role": invite.role, "max_uses": invite.max_uses, "expires_at": str(invite.expires_at)},
+        ip=client_ip,
+    )
+
+    return InviteOut(
+        id=invite.id,
+        club_id=invite.club_id,
+        code=raw_code,
+        role=invite.role,
+        created_by=invite.created_by,
+        max_uses=invite.max_uses,
+        use_count=invite.use_count,
+        revoked=invite.revoked,
+        expires_at=invite.expires_at,
+        accepted_at=invite.accepted_at,
+        invite_link=f"/?invite={raw_code}",
+        created_at=invite.created_at,
+    )
+
+
+@router.get("/{club_id}/invites", response_model=list[InviteOut])
+def list_club_invites(
+    club_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """List all invites for the club. Admin only."""
+    invites = (
+        db.query(Invite)
+        .filter(Invite.club_id == ctx.club.id)
+        .order_by(Invite.created_at.desc())
+        .all()
+    )
+    return [
+        InviteOut(
+            id=i.id,
+            club_id=i.club_id,
+            code=f"{i.code_hash[:8]}..." if i.code_hash else (i.code or "••••••••"),
+            role=i.role,
+            created_by=i.created_by,
+            max_uses=i.max_uses,
+            use_count=i.use_count,
+            revoked=i.revoked,
+            expires_at=i.expires_at,
+            accepted_at=i.accepted_at,
+            invite_link=f"/?invite={i.code_hash[:8]}...",
+            created_at=i.created_at,
+        )
+        for i in invites
+    ]
+
+
+@router.post("/{club_id}/invites/{invite_id}/revoke")
+def revoke_club_invite(
+    club_id: str,
+    invite_id: str,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Revoke an invite. Admin only."""
+    invite = (
+        db.query(Invite)
+        .filter(Invite.id == invite_id, Invite.club_id == ctx.club.id)
+        .first()
+    )
+    if not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "INVITE_NOT_FOUND", "message": "Invite not found in this club"},
+        )
+    invite.revoked = True
+    db.commit()
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="invite_revoked",
+        entity_type="invite",
+        entity_id=invite.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"code": invite.code},
+        ip=client_ip,
+    )
+    return {"message": "Invite revoked successfully"}
+
+
+# ---------------- VENUES (Editors view, Admins change) ----------------
+
+
+@router.get("/{club_id}/venues", response_model=list[VenueOut])
+def list_venues(
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """List venues for the club (editors/viewers can view)."""
+    venue_repo = ScopedRepository(db, Venue, club_id=ctx.club.id)
+    person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+    venues = venue_repo.all()
+    people = {p.id: p.full_name for p in person_repo.all()}
+
+    return [
+        VenueOut(
+            id=v.id,
+            club_id=v.club_id,
+            name=v.name,
+            short_name=v.short_name,
+            addressee_default=v.addressee_default,
+            tech_assistant_person_id=v.tech_assistant_person_id,
+            tech_assistant_name=people.get(v.tech_assistant_person_id) if v.tech_assistant_person_id else None,
+            faculty_incharge_person_id=v.faculty_incharge_person_id,
+            faculty_incharge_name=people.get(v.faculty_incharge_person_id) if v.faculty_incharge_person_id else None,
+            created_at=v.created_at,
+        )
+        for v in venues
+    ]
+
+
+@router.post("/{club_id}/venues", response_model=VenueOut, status_code=status.HTTP_201_CREATED)
+def create_venue(
+    club_id: str,
+    payload: VenueCreate,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Create a new venue (admin only)."""
+    venue_repo = ScopedRepository(db, Venue, club_id=ctx.club.id)
+    person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+
+    venue = venue_repo.create(
+        name=payload.name.strip(),
+        short_name=payload.short_name.strip() if payload.short_name else None,
+        addressee_default=payload.addressee_default.strip() if payload.addressee_default else None,
+        tech_assistant_person_id=payload.tech_assistant_person_id,
+        faculty_incharge_person_id=payload.faculty_incharge_person_id,
+    )
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="venue_created",
+        entity_type="venue",
+        entity_id=venue.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"name": venue.name},
+        ip=client_ip,
+    )
+
+    ta = person_repo.get(venue.tech_assistant_person_id) if venue.tech_assistant_person_id else None
+    fi = person_repo.get(venue.faculty_incharge_person_id) if venue.faculty_incharge_person_id else None
+
+    return VenueOut(
+        id=venue.id,
+        club_id=venue.club_id,
+        name=venue.name,
+        short_name=venue.short_name,
+        addressee_default=venue.addressee_default,
+        tech_assistant_person_id=venue.tech_assistant_person_id,
+        tech_assistant_name=ta.full_name if ta else None,
+        faculty_incharge_person_id=venue.faculty_incharge_person_id,
+        faculty_incharge_name=fi.full_name if fi else None,
+        created_at=venue.created_at,
+    )
+
+
+@router.put("/{club_id}/venues/{venue_id}", response_model=VenueOut)
+def update_venue(
+    club_id: str,
+    venue_id: str,
+    payload: VenueUpdate,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Update venue details (admin only)."""
+    venue_repo = ScopedRepository(db, Venue, club_id=ctx.club.id)
+    person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+    venue = venue_repo.get(venue_id)
+    if not venue:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "VENUE_NOT_FOUND", "message": "Venue not found in this club"},
+        )
+
+    if payload.name is not None:
+        venue.name = payload.name.strip()
+    if payload.short_name is not None:
+        venue.short_name = payload.short_name.strip() if payload.short_name else None
+    if payload.addressee_default is not None:
+        venue.addressee_default = payload.addressee_default.strip() if payload.addressee_default else None
+    if payload.tech_assistant_person_id is not None:
+        venue.tech_assistant_person_id = payload.tech_assistant_person_id or None
+    if payload.faculty_incharge_person_id is not None:
+        venue.faculty_incharge_person_id = payload.faculty_incharge_person_id or None
+
+    db.commit()
+    db.refresh(venue)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="venue_updated",
+        entity_type="venue",
+        entity_id=venue.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"name": venue.name},
+        ip=client_ip,
+    )
+
+    ta = person_repo.get(venue.tech_assistant_person_id) if venue.tech_assistant_person_id else None
+    fi = person_repo.get(venue.faculty_incharge_person_id) if venue.faculty_incharge_person_id else None
+
+    return VenueOut(
+        id=venue.id,
+        club_id=venue.club_id,
+        name=venue.name,
+        short_name=venue.short_name,
+        addressee_default=venue.addressee_default,
+        tech_assistant_person_id=venue.tech_assistant_person_id,
+        tech_assistant_name=ta.full_name if ta else None,
+        faculty_incharge_person_id=venue.faculty_incharge_person_id,
+        faculty_incharge_name=fi.full_name if fi else None,
+        created_at=venue.created_at,
+    )
+
+
+@router.delete("/{club_id}/venues/{venue_id}")
+def delete_venue(
+    club_id: str,
+    venue_id: str,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Delete a venue (admin only)."""
+    venue_repo = ScopedRepository(db, Venue, club_id=ctx.club.id)
+    venue = venue_repo.get(venue_id)
+    if not venue:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "VENUE_NOT_FOUND", "message": "Venue not found in this club"},
+        )
+    venue_repo.delete(venue_id)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="venue_deleted",
+        entity_type="venue",
+        entity_id=venue_id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"venue_id": venue_id},
+        ip=client_ip,
+    )
+    return {"message": "Venue deleted successfully"}
+
+
+# ---------------- NUMBERING SERIES (Editors view, Admins change) ----------------
+
+
+@router.get("/{club_id}/numbering", response_model=list[NumberingSeriesOut])
+def list_numbering_series(
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """List all numbering series, current counter values, and format patterns (editors/viewers can view)."""
+    series_repo = ScopedRepository(db, NumberingSeries, club_id=ctx.club.id)
+    series = series_repo.all()
+    return [
+        NumberingSeriesOut(
+            id=s.id,
+            club_id=s.club_id,
+            key=s.key,
+            format=s.format,
+            academic_year=s.academic_year,
+            last_seq=s.last_seq,
+            created_at=s.created_at,
+        )
+        for s in series
+    ]
+
+
+@router.post("/{club_id}/numbering", response_model=NumberingSeriesOut, status_code=status.HTTP_201_CREATED)
+def create_numbering_series(
+    club_id: str,
+    payload: NumberingSeriesCreate,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Create a new numbering series (admin only)."""
+    series_repo = ScopedRepository(db, NumberingSeries, club_id=ctx.club.id)
+    existing = series_repo.find_first(
+        NumberingSeries.key == payload.key.strip(),
+        NumberingSeries.academic_year == payload.academic_year.strip(),
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "SERIES_EXISTS", "message": f"Numbering series '{payload.key}' already exists for academic year '{payload.academic_year}'"},
+        )
+
+    s = series_repo.create(
+        key=payload.key.strip(),
+        format=payload.format.strip(),
+        academic_year=payload.academic_year.strip(),
+        last_seq=payload.last_seq,
+    )
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="numbering_series_created",
+        entity_type="numbering_series",
+        entity_id=s.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"key": s.key, "format": s.format, "academic_year": s.academic_year},
+        ip=client_ip,
+    )
+
+    return NumberingSeriesOut(
+        id=s.id,
+        club_id=s.club_id,
+        key=s.key,
+        format=s.format,
+        academic_year=s.academic_year,
+        last_seq=s.last_seq,
+        created_at=s.created_at,
+    )
+
+
+@router.put("/{club_id}/numbering/{series_key}", response_model=NumberingSeriesOut)
+def update_numbering_series_format(
+    club_id: str,
+    series_key: str,
+    payload: NumberingSeriesUpdate,
+    academic_year: Optional[str] = Query(None),
+    request: Request = None,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Update format pattern of a numbering series. Changing format NEVER rewrites existing numbers (admin only)."""
+    ay = academic_year or ctx.club.academic_year_default or ""
+    series_repo = ScopedRepository(db, NumberingSeries, club_id=ctx.club.id)
+    s = series_repo.find_first(
+        NumberingSeries.key == series_key,
+        NumberingSeries.academic_year == ay,
+    )
+    if not s:
+        matches = series_repo.filter(NumberingSeries.key == series_key)
+        if matches:
+            s = matches[0]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "SERIES_NOT_FOUND", "message": f"Numbering series '{series_key}' not found"},
+            )
+
+    old_format = s.format
+    s.format = payload.format.strip()
+    db.commit()
+    db.refresh(s)
+
+    client_ip = request.client.host if request and request.client else None
+    log_audit(
+        db=db,
+        action="numbering_series_format_updated",
+        entity_type="numbering_series",
+        entity_id=s.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"key": s.key, "old_format": old_format, "new_format": s.format},
+        ip=client_ip,
+    )
+
+    return NumberingSeriesOut(
+        id=s.id,
+        club_id=s.club_id,
+        key=s.key,
+        format=s.format,
+        academic_year=s.academic_year,
+        last_seq=s.last_seq,
+        created_at=s.created_at,
+    )
+
+
+# ---------------- LETTERHEADS & ASSETS (Editors view, Admins change) ----------------
+
+
+@router.get("/{club_id}/letterheads", response_model=list[LetterheadOut])
+def list_club_letterheads(
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """List club letterheads and system default letterheads (editors/viewers can view)."""
+    lhs = (
+        db.query(Letterhead)
+        .filter((Letterhead.club_id == ctx.club.id) | (Letterhead.club_id.is_(None)))
+        .order_by(Letterhead.club_id.desc(), Letterhead.created_at.desc())
+        .all()
+    )
+    return [
+        LetterheadOut(
+            id=lh.id,
+            club_id=lh.club_id,
+            name=lh.name,
+            left_logo_asset_id=lh.left_logo_asset_id,
+            right_logo_asset_id=lh.right_logo_asset_id,
+            institute_logo_asset_id=lh.institute_logo_asset_id,
+            title_text=lh.title_text,
+            subtitle_text=lh.subtitle_text,
+            colors=lh.colors or {},
+            fonts=lh.fonts or {},
+            layout=lh.layout or {},
+            created_at=lh.created_at,
+        )
+        for lh in lhs
+    ]
+
+
+@router.post("/{club_id}/letterheads", response_model=LetterheadOut, status_code=status.HTTP_201_CREATED)
+def create_club_letterhead(
+    club_id: str,
+    payload: LetterheadCreate,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Create a new letterhead configuration (admin only)."""
+    system_lh = db.query(Letterhead).filter(Letterhead.club_id.is_(None)).first()
+    inst_crest = system_lh.institute_logo_asset_id if system_lh else None
+
+    lh = Letterhead(
+        id=str(uuid.uuid4()),
+        club_id=ctx.club.id,
+        name=payload.name.strip(),
+        left_logo_asset_id=payload.left_logo_asset_id or inst_crest,
+        right_logo_asset_id=payload.right_logo_asset_id,
+        institute_logo_asset_id=inst_crest,
+        title_text=payload.title_text or ctx.club.name.upper(),
+        subtitle_text=payload.subtitle_text or "Sardar Vallabhbhai National Institute of Technology, Surat",
+        colors=payload.colors or {"primary": "#1E5B94"},
+        fonts=payload.fonts or {"primary": "Times New Roman"},
+        layout=payload.layout or {"type": "dual_logo_single_line"},
+    )
+    db.add(lh)
+    db.commit()
+    db.refresh(lh)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="letterhead_created",
+        entity_type="letterhead",
+        entity_id=lh.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"name": lh.name},
+        ip=client_ip,
+    )
+
+    return LetterheadOut(
+        id=lh.id,
+        club_id=lh.club_id,
+        name=lh.name,
+        left_logo_asset_id=lh.left_logo_asset_id,
+        right_logo_asset_id=lh.right_logo_asset_id,
+        institute_logo_asset_id=lh.institute_logo_asset_id,
+        title_text=lh.title_text,
+        subtitle_text=lh.subtitle_text,
+        colors=lh.colors or {},
+        fonts=lh.fonts or {},
+        layout=lh.layout or {},
+        created_at=lh.created_at,
+    )
+
+
+@router.put("/{club_id}/letterheads/{letterhead_id}", response_model=LetterheadOut)
+def update_club_letterhead(
+    club_id: str,
+    letterhead_id: str,
+    payload: LetterheadUpdate,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Update letterhead configuration (admin only)."""
+    lh = (
+        db.query(Letterhead)
+        .filter(Letterhead.id == letterhead_id, Letterhead.club_id == ctx.club.id)
+        .first()
+    )
+    if not lh:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "LETTERHEAD_NOT_FOUND", "message": "Letterhead not found in this club"},
+        )
+
+    if payload.name is not None:
+        lh.name = payload.name.strip()
+    if payload.left_logo_asset_id is not None:
+        lh.left_logo_asset_id = payload.left_logo_asset_id or None
+    if payload.right_logo_asset_id is not None:
+        lh.right_logo_asset_id = payload.right_logo_asset_id or None
+    if payload.title_text is not None:
+        lh.title_text = payload.title_text
+    if payload.subtitle_text is not None:
+        lh.subtitle_text = payload.subtitle_text
+    if payload.colors is not None:
+        lh.colors = payload.colors
+    if payload.fonts is not None:
+        lh.fonts = payload.fonts
+    if payload.layout is not None:
+        lh.layout = payload.layout
+
+    db.commit()
+    db.refresh(lh)
+
+    client_ip = request.client.host if request.client else None
+    log_audit(
+        db=db,
+        action="letterhead_updated",
+        entity_type="letterhead",
+        entity_id=lh.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"name": lh.name},
+        ip=client_ip,
+    )
+
+    return LetterheadOut(
+        id=lh.id,
+        club_id=lh.club_id,
+        name=lh.name,
+        left_logo_asset_id=lh.left_logo_asset_id,
+        right_logo_asset_id=lh.right_logo_asset_id,
+        institute_logo_asset_id=lh.institute_logo_asset_id,
+        title_text=lh.title_text,
+        subtitle_text=lh.subtitle_text,
+        colors=lh.colors or {},
+        fonts=lh.fonts or {},
+        layout=lh.layout or {},
+        created_at=lh.created_at,
+    )
+
+
+@router.get("/{club_id}/assets", response_model=list[AssetOut])
+def list_club_assets(
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """List club and system assets (logos, letterhead crests). Editors/viewers can view."""
+    assets = (
+        db.query(Asset)
+        .filter((Asset.club_id == ctx.club.id) | (Asset.is_system.is_(True)))
+        .order_by(Asset.created_at.desc())
+        .all()
+    )
+    return [
+        AssetOut(
+            id=a.id,
+            club_id=a.club_id,
+            kind=a.kind,
+            filename=a.filename,
+            mime=a.mime,
+            size=a.size,
+            is_system=a.is_system,
+            url=f"/api/v1/assets/{a.id}/content",
+            created_at=a.created_at,
+        )
+        for a in assets
+    ]
+

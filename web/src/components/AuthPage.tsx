@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
-import { Lock, Mail, User, KeyRound, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Lock, Mail, User, KeyRound, ShieldAlert, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react';
 
 export const AuthPage: React.FC = () => {
   const { login } = useAuth();
-  const [tab, setTab] = useState<'login' | 'register' | 'forgot' | 'reset'>('login');
+  const initialInvite = new URLSearchParams(window.location.search).get('invite') || '';
+  const [tab, setTab] = useState<'login' | 'register' | 'forgot' | 'reset'>(initialInvite ? 'register' : 'login');
 
   // Form states
   const [email, setEmail] = useState('');
@@ -13,10 +14,28 @@ export const AuthPage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState(initialInvite);
+  const [invitePreview, setInvitePreview] = useState<{
+    code: string;
+    club_name: string;
+    role: string;
+    is_valid: boolean;
+    status: string;
+  } | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (inviteCode.trim()) {
+      api.invites.preview(inviteCode.trim())
+        .then((data) => setInvitePreview(data))
+        .catch(() => setInvitePreview(null));
+    } else {
+      setInvitePreview(null);
+    }
+  }, [inviteCode]);
 
   const resetFormFeedback = () => {
     setError(null);
@@ -33,6 +52,15 @@ export const AuthPage: React.FC = () => {
       params.append('username', email.trim());
       params.append('password', password);
       await login(params);
+
+      // If logging in via an invite link, accept the invite
+      if (inviteCode.trim()) {
+        try {
+          await api.invites.accept(inviteCode.trim());
+        } catch {
+          // Continue if already a member or handled
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -55,6 +83,7 @@ export const AuthPage: React.FC = () => {
         email: email.trim(),
         password,
         full_name: fullName.trim(),
+        invite_code: inviteCode.trim() || undefined,
       });
       // Automatically log in after registration
       const params = new URLSearchParams();
@@ -177,6 +206,33 @@ export const AuthPage: React.FC = () => {
               Forgot Key
             </button>
           </div>
+
+          {invitePreview && (
+            <div className={`mb-4 p-3 rounded-lg border text-xs flex items-start gap-2.5 ${
+              invitePreview.is_valid
+                ? 'bg-blue-50 border-blue-200 text-[#1b365d]'
+                : 'bg-amber-50 border-amber-200 text-amber-800'
+            }`}>
+              <Sparkles className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+              <div>
+                {invitePreview.is_valid ? (
+                  <>
+                    <p className="font-bold">You've been invited!</p>
+                    <p className="mt-0.5">
+                      Join <span className="font-semibold">{invitePreview.club_name}</span> as{' '}
+                      <span className="font-semibold capitalize">{invitePreview.role}</span>.
+                      Register or sign in to join immediately.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold">Invite {invitePreview.status}</p>
+                    <p className="mt-0.5">This invite is no longer active ({invitePreview.status}). Please request a new invite.</p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-start gap-2">
@@ -306,6 +362,22 @@ export const AuthPage: React.FC = () => {
                 <p className="text-[10px] text-slate-400 mt-1">
                   Enforces strong password policy. Common dictionary passwords are automatically rejected.
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Club Invite Code (Optional)
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. ACM-A7B8C9"
+                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 uppercase"
+                  />
+                </div>
               </div>
 
               <button

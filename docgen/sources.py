@@ -68,6 +68,7 @@ class DatabaseTemplateSource:
         for tmpl, ver in versions:
             docx_path = Path(ver.docx_storage_key)
             self.data_store[tmpl.slug] = (ver.schema_yaml, docx_path)
+            self.data_store[tmpl.id] = (ver.schema_yaml, docx_path)
 
     def get_template_docx_stream(self, template_id: str) -> io.BytesIO | Path:
         if template_id not in self.data_store:

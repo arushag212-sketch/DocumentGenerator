@@ -74,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setClubs(clubList);
   };
 
-  const activeClub = clubs.find(c => c.id === activeClubId) || null;
+  const activeClub = clubs.find(c => String(c.id) === String(activeClubId)) || null;
 
   return (
     <AuthContext.Provider

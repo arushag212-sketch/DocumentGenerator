@@ -13,13 +13,30 @@ class ClubMembershipSummary(BaseModel):
     club_slug: str
     club_short: str
     role: str
+    position: Optional[str] = None
     status: str
+
+
+from pydantic import BaseModel, EmailStr, Field, model_validator
+from typing import Any, Optional
 
 
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=10, description="Password must be at least 10 characters")
-    name: str = Field(..., min_length=2, max_length=100)
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    invite_code: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_name(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            val = data.get("name") or data.get("full_name")
+            if val:
+                data["name"] = str(val).strip()
+                data["full_name"] = str(val).strip()
+        return data
 
 
 class UserLogin(BaseModel):
@@ -42,6 +59,11 @@ class TokenResponse(BaseModel):
     csrf_token: str
     token_type: str = "bearer"
     access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: Optional[str] = None
 
 
 class ForgotPasswordRequest(BaseModel):

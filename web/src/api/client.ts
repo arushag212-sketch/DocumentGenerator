@@ -1,4 +1,4 @@
-import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult } from '../types';
+import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Letterhead, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse } from '../types';
 
 function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`;
@@ -7,10 +7,55 @@ function getCookie(name: string): string | null {
   return null;
 }
 
+let refreshPromise: Promise<boolean> | null = null;
+
+async function attemptTokenRefresh(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      const storedRefreshToken = localStorage.getItem('refresh_token');
+      const res = await fetch('/api/v1/auth/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(storedRefreshToken ? { 'X-Refresh-Token': storedRefreshToken } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ refresh_token: storedRefreshToken || undefined }),
+      });
+
+      if (!res.ok) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        return false;
+      }
+
+      const data = await res.json();
+      if (data.access_token) localStorage.setItem('access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
+      if (data.csrf_token) localStorage.setItem('csrf_token', data.csrf_token);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {});
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
+  }
+
+  // Include Bearer token from localStorage as reliable backup
+  const storedAccessToken = localStorage.getItem('access_token');
+  if (storedAccessToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${storedAccessToken}`);
   }
 
   // Include CSRF token for state-changing requests
@@ -22,7 +67,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     }
   }
 
-  const res = await fetch(`/api/v1${endpoint}`, {
+  let res = await fetch(`/api/v1${endpoint}`, {
     ...options,
     headers,
     credentials: 'include', // sends cookies
@@ -34,14 +79,60 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     localStorage.setItem('csrf_token', newCsrf);
   }
 
+  // Auto-refresh token on 401 for non-auth endpoints
+  const isAuthRoute = endpoint.startsWith('/auth/');
+  if (res.status === 401 && !isAuthRoute) {
+    const refreshed = await attemptTokenRefresh();
+    if (refreshed) {
+      // Retry the original request with refreshed credentials
+      const retryHeaders = new Headers(options.headers || {});
+      if (!retryHeaders.has('Content-Type') && !(options.body instanceof FormData)) {
+        retryHeaders.set('Content-Type', 'application/json');
+      }
+      const newAccessToken = localStorage.getItem('access_token');
+      if (newAccessToken) {
+        retryHeaders.set('Authorization', `Bearer ${newAccessToken}`);
+      }
+      const newCsrfToken = getCookie('csrf_token') || localStorage.getItem('csrf_token');
+      if (newCsrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        retryHeaders.set('X-CSRF-Token', newCsrfToken);
+      }
+
+      res = await fetch(`/api/v1${endpoint}`, {
+        ...options,
+        headers: retryHeaders,
+        credentials: 'include',
+      });
+    }
+  }
+
   if (!res.ok) {
     let errorDetail = 'Request failed';
     try {
       const data = await res.json();
-      errorDetail = data.detail || JSON.stringify(data);
+      if (typeof data.detail === 'string') {
+        errorDetail = data.detail;
+      } else if (data.detail && typeof data.detail === 'object') {
+        if (Array.isArray(data.detail)) {
+          errorDetail = data.detail.map((err: any) => err.msg || err.message || JSON.stringify(err)).join('; ');
+        } else if (data.detail.message) {
+          errorDetail = data.detail.message;
+        } else {
+          errorDetail = JSON.stringify(data.detail);
+        }
+      } else if (typeof data.message === 'string') {
+        errorDetail = data.message;
+      } else {
+        errorDetail = JSON.stringify(data);
+      }
     } catch {
       errorDetail = `${res.status} ${res.statusText}`;
     }
+
+    if (res.status === 401 && !isAuthRoute) {
+      errorDetail = 'Your session has expired. Please sign in again.';
+    }
+
     throw new Error(errorDetail);
   }
 
@@ -55,17 +146,33 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
 export const api = {
   auth: {
     me: () => apiFetch<User>('/auth/me'),
-    login: (formData: URLSearchParams) =>
-      apiFetch<{ message: string; user: User }>('/auth/token', {
+    login: async (formData: URLSearchParams) => {
+      const res = await apiFetch<{ message: string; user: User; access_token?: string; refresh_token?: string; csrf_token?: string }>('/auth/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString(),
-      }),
-    register: (data: { email: string; password: string; full_name: string }) =>
-      apiFetch<{ message: string; user: User }>('/auth/register', {
+      });
+      if (res.access_token) localStorage.setItem('access_token', res.access_token);
+      if (res.refresh_token) localStorage.setItem('refresh_token', res.refresh_token);
+      if (res.csrf_token) localStorage.setItem('csrf_token', res.csrf_token);
+      return res;
+    },
+    register: async (data: { email: string; password: string; full_name: string; invite_code?: string }) => {
+      const res = await apiFetch<{ message: string; user: User; access_token?: string; refresh_token?: string; csrf_token?: string }>('/auth/register', {
         method: 'POST',
-        body: JSON.stringify(data),
-      }),
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          full_name: data.full_name,
+          name: data.full_name,
+          invite_code: data.invite_code,
+        }),
+      });
+      if (res.access_token) localStorage.setItem('access_token', res.access_token);
+      if (res.refresh_token) localStorage.setItem('refresh_token', res.refresh_token);
+      if (res.csrf_token) localStorage.setItem('csrf_token', res.csrf_token);
+      return res;
+    },
     forgotPassword: (email: string) =>
       apiFetch<{ message: string }>('/auth/forgot-password', {
         method: 'POST',
@@ -76,14 +183,67 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ token, new_password }),
       }),
-    logout: () =>
-      apiFetch<{ message: string }>('/auth/logout', {
+    logout: async () => {
+      try {
+        await apiFetch<{ message: string }>('/auth/logout', {
+          method: 'POST',
+        });
+      } finally {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('csrf_token');
+        localStorage.removeItem('activeClubId');
+      }
+    },
+  },
+
+  invites: {
+    preview: (code: string) =>
+      apiFetch<{
+        code: string;
+        club_id: string;
+        club_name: string;
+        club_slug: string;
+        role: string;
+        expires_at?: string;
+        max_uses: number;
+        use_count: number;
+        is_valid: boolean;
+        status: string;
+      }>(`/invites/${code}`),
+    accept: (code: string, clubId?: string) =>
+      apiFetch<{ message: string; club_id: string; role: string }>(`/invites/${code}/accept`, {
         method: 'POST',
+        body: JSON.stringify(clubId ? { club_id: clubId } : {}),
       }),
   },
 
   clubs: {
     list: () => apiFetch<Club[]>('/clubs/'),
+    search: (q: string = '') => apiFetch<ClubSearchResult[]>(`/clubs/search?q=${encodeURIComponent(q)}`),
+    createClub: (data: { name: string; short_name: string; chapter_code?: string; position?: string; is_signatory?: boolean }) =>
+      apiFetch<Club>('/clubs', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    joinRequest: (clubId: string | number, data: { position: string }) =>
+      apiFetch<JoinRequest>(`/clubs/${clubId}/join-requests`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getMyJoinRequest: (clubId: string | number) =>
+      apiFetch<JoinRequest | null>(`/clubs/${clubId}/join-requests/my`),
+    listJoinRequests: (clubId: string | number) =>
+      apiFetch<JoinRequest[]>(`/clubs/${clubId}/join-requests`),
+    approveJoinRequest: (clubId: string | number, reqId: string, data: { role: string; is_signatory?: boolean; signatory_role?: string; conflict_resolution?: string }) =>
+      apiFetch<void>(`/clubs/${clubId}/join-requests/${reqId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    rejectJoinRequest: (clubId: string | number, reqId: string) =>
+      apiFetch<void>(`/clubs/${clubId}/join-requests/${reqId}/reject`, {
+        method: 'POST',
+      }),
     get: (clubId: string | number) => apiFetch<Club>(`/clubs/${clubId}`),
     getMembers: (clubId: string | number) => apiFetch<ClubMember[]>(`/clubs/${clubId}/members`),
     addMember: (clubId: string | number, data: { user_email: string; role: string; title?: string }) =>
@@ -103,8 +263,82 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(person),
       }),
+    updatePerson: (clubId: string | number, personId: string | number, data: Partial<Person>) =>
+      apiFetch<Person>(`/clubs/${clubId}/people/${personId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    deletePerson: (clubId: string | number, personId: string | number) =>
+      apiFetch<{ message: string }>(`/clubs/${clubId}/people/${personId}`, {
+        method: 'DELETE',
+      }),
+    assignRole: (clubId: string | number, data: { person_id: string; role_key: string; designation_label: string; academic_year: string }) =>
+      apiFetch<RoleHeld>(`/clubs/${clubId}/roles`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateRole: (clubId: string | number, roleId: string, data: { role_key?: string; designation_label?: string; academic_year?: string }) =>
+      apiFetch<RoleHeld>(`/clubs/${clubId}/roles/${roleId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    deleteRole: (clubId: string | number, roleId: string) =>
+      apiFetch<{ message: string }>(`/clubs/${clubId}/roles/${roleId}`, {
+        method: 'DELETE',
+      }),
     revealSensitive: (clubId: string | number, personId: string | number) =>
       apiFetch<{ field: string; value: string | null }>(`/clubs/${clubId}/people/${personId}/sensitive?reveal=true`),
+    getInvites: (clubId: string | number) => apiFetch<Invite[]>(`/clubs/${clubId}/invites`),
+    createInvite: (clubId: string | number, data: { role: string; max_uses?: number; expiry_days?: number }) =>
+      apiFetch<Invite>(`/clubs/${clubId}/invites`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    revokeInvite: (clubId: string | number, inviteId: string) =>
+      apiFetch<{ message: string }>(`/clubs/${clubId}/invites/${inviteId}/revoke`, {
+        method: 'POST',
+      }),
+    getVenues: (clubId: string | number) => apiFetch<Venue[]>(`/clubs/${clubId}/venues`),
+    createVenue: (clubId: string | number, data: Partial<Venue>) =>
+      apiFetch<Venue>(`/clubs/${clubId}/venues`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateVenue: (clubId: string | number, venueId: string, data: Partial<Venue>) =>
+      apiFetch<Venue>(`/clubs/${clubId}/venues/${venueId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    deleteVenue: (clubId: string | number, venueId: string) =>
+      apiFetch<{ message: string }>(`/clubs/${clubId}/venues/${venueId}`, {
+        method: 'DELETE',
+      }),
+    getNumberingSeries: (clubId: string | number) => apiFetch<NumberingSeries[]>(`/clubs/${clubId}/numbering`),
+    updateNumberingSeries: (clubId: string | number, seriesKey: string, data: { format?: string; academic_year?: string; description?: string }) =>
+      apiFetch<NumberingSeries>(`/clubs/${clubId}/numbering/${seriesKey}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    getLetterheads: (clubId: string | number) => apiFetch<Letterhead[]>(`/clubs/${clubId}/letterheads`),
+    createLetterhead: (clubId: string | number, data: Partial<Letterhead>) =>
+      apiFetch<Letterhead>(`/clubs/${clubId}/letterheads`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateLetterhead: (clubId: string | number, letterheadId: string, data: Partial<Letterhead>) =>
+      apiFetch<Letterhead>(`/clubs/${clubId}/letterheads/${letterheadId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    getAssets: (clubId: string | number) => apiFetch<Asset[]>(`/clubs/${clubId}/assets`),
+    uploadLogo: async (clubId: string | number, file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return apiFetch<{ asset_id: string; filename: string; url: string; letterhead_id: string }>(`/clubs/${clubId}/upload-logo`, {
+        method: 'POST',
+        body: formData,
+      });
+    },
     setupWizard: (clubId: string | number, data: any) =>
       apiFetch<{ message: string; club: Club }>(`/clubs/${clubId}/setup-wizard`, {
         method: 'POST',
@@ -150,8 +384,145 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
+    list: (
+      clubId: string | number,
+      params?: {
+        q?: string;
+        template_id?: string;
+        status?: string;
+        event_id?: string;
+        date_from?: string;
+        date_to?: string;
+        sort_by?: string;
+        sort_order?: string;
+        page?: number;
+        page_size?: number;
+      }
+    ) => {
+      const searchParams = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => {
+          if (v !== undefined && v !== null && v !== '') {
+            searchParams.append(k, String(v));
+          }
+        });
+      }
+      const qs = searchParams.toString();
+      return apiFetch<{
+        items: Array<{
+          id: string;
+          club_id: string;
+          template_id: string;
+          template_slug: string;
+          template_name: string;
+          event_id?: string;
+          event_title?: string;
+          title: string;
+          ref_no?: string;
+          status: string;
+          created_at: string;
+          created_by?: string;
+          current_version_no: number;
+          page_count: number;
+          docx_url: string;
+          pdf_url: string;
+        }>;
+        total: number;
+        page: number;
+        page_size: number;
+        total_pages: number;
+      }>(`/clubs/${clubId}/documents${qs ? `?${qs}` : ''}`);
+    },
     get: (clubId: string | number, docId: string) =>
       apiFetch<GeneratedDocument>(`/clubs/${clubId}/documents/${docId}`),
+    listTemplates: (clubId: string | number) =>
+      apiFetch<any[]>(`/clubs/${clubId}/documents/templates`),
+    forkTemplate: (clubId: string | number, templateId: string, payload?: { name?: string }) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/${templateId}/fork`, {
+        method: 'POST',
+        body: payload ? JSON.stringify(payload) : undefined,
+      }),
+    updateTemplate: (
+      clubId: string | number,
+      templateId: string,
+      data: { name?: string; description?: string; category?: string; status?: string }
+    ) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/${templateId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    deleteTemplate: (clubId: string | number, templateId: string) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/${templateId}`, {
+        method: 'DELETE',
+      }),
+    createBlankTemplate: (
+      clubId: string | number,
+      data: { name: string; category?: string; description?: string }
+    ) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/blank`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getTemplateDraft: (clubId: string | number, templateId: string) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/${templateId}/draft`),
+    saveTemplateDraft: (clubId: string | number, templateId: string, data: any) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/${templateId}/draft`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    compileTemplate: (clubId: string | number, templateId: string, data: any) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/${templateId}/compile`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    previewTemplate: (clubId: string | number, templateId: string, data: any) =>
+      apiFetch<{ pages: string[]; page_count: number }>(`/clubs/${clubId}/documents/templates/${templateId}/preview`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    publishTemplate: (clubId: string | number, templateId: string) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/${templateId}/publish`, {
+        method: 'POST',
+      }),
+    reviewAiTemplate: (
+      clubId: string | number,
+      templateId: string,
+      payload: { all?: boolean; field_keys?: string[]; block_indices?: number[] }
+    ) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/${templateId}/review-ai`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    listLetterheads: (clubId: string | number) =>
+      apiFetch<any[]>(`/clubs/${clubId}/documents/letterheads`),
+    aiDraftTemplate: (
+      clubId: string | number,
+      data: { description: string }
+    ) =>
+      apiFetch<{
+        template: any;
+        draft: any;
+        logo_resolution: any;
+        message: string;
+      }>(`/clubs/${clubId}/documents/templates/ai-draft`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    resolveLogo: (
+      clubId: string | number,
+      text: string
+    ) =>
+      apiFetch<{
+        status: 'resolved' | 'ambiguous' | 'not_found';
+        asset_id?: string;
+        filename?: string;
+        url?: string;
+        candidates?: any[];
+        message?: string;
+      }>(`/clubs/${clubId}/documents/assets/resolve-logo`, {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      }),
   },
   events: {
     list: (clubId: string | number) =>
@@ -166,6 +537,106 @@ export const api = {
     update: (clubId: string | number, eventId: string, payload: { title?: string; event_code?: string; record?: Record<string, any> }, updateDocuments = false) =>
       apiFetch<any>(`/clubs/${clubId}/events/${eventId}?update_documents=${updateDocuments}`, {
         method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+    recommend: (
+      clubId: string | number,
+      payload: {
+        text: string;
+        explicit_data?: Record<string, any>;
+        selected_template_ids?: string[];
+      }
+    ) =>
+      apiFetch<{
+        event_text: string;
+        extracted_data: Record<string, any>;
+        detected_stage: string;
+        has_budget: boolean;
+        has_winners: boolean;
+        has_bills: boolean;
+        templates: Array<{
+          template_id: string;
+          slug: string;
+          name: string;
+          category: string;
+          stage: string;
+          recommended: boolean;
+          reason: string;
+          numbering_series?: string;
+          repeat_per?: string;
+          fields_count: number;
+        }>;
+        grouped_missing_fields: Array<{
+          key: string;
+          label: string;
+          type: string;
+          ask: string;
+          required: boolean;
+          defer_ok: boolean;
+          sensitive: boolean;
+          columns?: any[];
+          needed_by: string[];
+        }>;
+      }>(`/clubs/${clubId}/events/recommend`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    generateBatch: (
+      clubId: string | number,
+      payload: {
+        selected_template_ids: string[];
+        event_data: Record<string, any>;
+        event_id?: string;
+        event_title?: string;
+      }
+    ) =>
+      apiFetch<{
+        batch_id: string;
+        event_id: string;
+        event_title: string;
+        documents_count: number;
+        zip_filename: string;
+        zip_path: string;
+        zip_url: string;
+        documents: Array<{
+          id: string;
+          template_slug: string;
+          template_name: string;
+          title: string;
+          ref_no: string;
+          docx_path: string;
+          pdf_path: string;
+          page_count: number;
+        }>;
+      }>(`/clubs/${clubId}/events/generate-batch`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
+  home: {
+    understand: (
+      clubId: string | number,
+      payload: {
+        text: string;
+        explicit_data?: Record<string, any>;
+        selected_template_ids?: string[];
+      }
+    ) =>
+      apiFetch<HomeUnderstandResponse>(`/clubs/${clubId}/home/understand`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    generate: (
+      clubId: string | number,
+      payload: {
+        selected_template_ids: string[];
+        event_data: Record<string, any>;
+        ref_numbers_accepted: boolean;
+        event_title?: string;
+      }
+    ) =>
+      apiFetch<HomeGenerateResponse>(`/clubs/${clubId}/home/generate`, {
+        method: 'POST',
         body: JSON.stringify(payload),
       }),
   },

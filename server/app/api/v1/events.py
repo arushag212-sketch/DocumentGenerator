@@ -21,6 +21,8 @@ from server.app.core.database import get_db
 from server.app.core.permissions import ClubContext, Role, require_club_access
 from server.app.core.scoped_repo import ScopedRepository
 from server.app.models import Document, DocumentVersion, Event, Template, TemplateVersion
+from server.app.core.event_recommender import EventRecommender, EventRecommendationResponse
+from server.app.core.batch_generator import BatchGenerator
 
 router = APIRouter(prefix="/clubs/{club_id}/events", tags=["events"])
 
@@ -79,6 +81,13 @@ def list_events(
         doc_summaries = []
         for d in docs:
             tmpl = db.query(Template).filter(Template.id == d.template_id).first()
+            latest_v = (
+                db.query(DocumentVersion)
+                .filter(DocumentVersion.document_id == d.id)
+                .order_by(DocumentVersion.version_no.desc())
+                .first()
+            )
+            v_no = latest_v.version_no if latest_v else 1
             doc_summaries.append(
                 EventDocumentSummary(
                     id=d.id,
@@ -87,7 +96,7 @@ def list_events(
                     ref_no=d.ref_no,
                     status=d.status,
                     created_at=d.created_at,
-                    current_version_no=1,
+                    current_version_no=v_no,
                 )
             )
 
@@ -156,6 +165,13 @@ def get_event(
     doc_summaries = []
     for d in docs:
         tmpl = db.query(Template).filter(Template.id == d.template_id).first()
+        latest_v = (
+            db.query(DocumentVersion)
+            .filter(DocumentVersion.document_id == d.id)
+            .order_by(DocumentVersion.version_no.desc())
+            .first()
+        )
+        v_no = latest_v.version_no if latest_v else 1
         doc_summaries.append(
             EventDocumentSummary(
                 id=d.id,
@@ -164,7 +180,7 @@ def get_event(
                 ref_no=d.ref_no,
                 status=d.status,
                 created_at=d.created_at,
-                current_version_no=1,
+                current_version_no=v_no,
             )
         )
 
@@ -229,7 +245,10 @@ def update_event(
 
             # Prepare merged snapshot
             merged_snapshot = dict(latest_v.record_snapshot if latest_v else {})
-            merged_snapshot.update(ev.record)
+            if ev.record:
+                merged_snapshot.update(ev.record)
+            if d.ref_no:
+                merged_snapshot["ref_no"] = d.ref_no
             if payload.title:
                 merged_snapshot["event_name"] = payload.title
 
@@ -242,6 +261,7 @@ def update_event(
                 render_result = renderer.render(
                     template_id=tmpl.slug,
                     event=event_rec,
+                    extra_context=merged_snapshot,
                     output_dir=out_dir,
                     convert_pdf=True,
                 )
@@ -308,3 +328,69 @@ def update_event(
         created_at=ev.created_at,
         documents=doc_summaries,
     )
+
+
+class EventRecommendRequest(BaseModel):
+    text: str = Field(..., min_length=5)
+    explicit_data: Optional[dict[str, Any]] = None
+    selected_template_ids: Optional[list[str]] = None
+
+
+class BatchGenerateRequest(BaseModel):
+    selected_template_ids: list[str] = Field(..., min_length=1)
+    event_data: dict[str, Any] = Field(default_factory=dict)
+    event_id: Optional[str] = None
+    event_title: Optional[str] = None
+
+
+class BatchGenerateResponse(BaseModel):
+    batch_id: str
+    event_id: str
+    event_title: str
+    documents_count: int
+    zip_filename: str
+    zip_path: str
+    zip_url: str
+    documents: list[dict[str, Any]]
+
+
+@router.post("/recommend", response_model=EventRecommendationResponse)
+def recommend_event_documents(
+    payload: EventRecommendRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Analyze event description, extract fields, and return recommended documents with grouped missing fields."""
+    return EventRecommender.recommend(
+        text=payload.text,
+        club_id=ctx.club.id,
+        db=db,
+        explicit_data=payload.explicit_data,
+        selected_template_ids=payload.selected_template_ids,
+    )
+
+
+@router.post("/generate-batch", response_model=BatchGenerateResponse)
+def generate_event_batch(
+    payload: BatchGenerateRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Generate all selected documents for an event in one job, reserve numbers, and package as ZIP."""
+    try:
+        return BatchGenerator.generate_batch(
+            club_id=ctx.club.id,
+            user_id=ctx.user.id,
+            selected_template_ids=payload.selected_template_ids,
+            event_data=payload.event_data,
+            event_id=payload.event_id,
+            event_title=payload.event_title,
+            db=db,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+

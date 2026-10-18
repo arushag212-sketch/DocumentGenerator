@@ -73,7 +73,7 @@ class Club(TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     chapter_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     head_of_account: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    academic_year_default: Mapped[str] = mapped_column(String(20), default="2026-27", nullable=False)
+    academic_year_default: Mapped[str] = mapped_column(String(20), default="2026-27", server_default="2026-27", nullable=False)
     default_letterhead_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     disabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -87,6 +87,7 @@ class Membership(TimestampMixin, Base):
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     club_id: Mapped[str] = mapped_column(String(36), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(50), default="editor", nullable=False)  # owner | admin | editor | viewer
+    position: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # User's club position for signatures
     status: Mapped[str] = mapped_column(String(50), default="active", nullable=False)
 
     __table_args__ = (
@@ -97,14 +98,38 @@ class Membership(TimestampMixin, Base):
     club = relationship("Club", back_populates="memberships")
 
 
+class JoinRequest(TimestampMixin, Base):
+    __tablename__ = "join_requests"
+
+    club_id: Mapped[str] = mapped_column(String(36), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    position: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False)  # pending | approved | rejected | cancelled
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    club = relationship("Club", backref="join_requests")
+    user = relationship("User", foreign_keys=[user_id], backref="join_requests")
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+
+
 class Invite(TimestampMixin, Base):
     __tablename__ = "invites"
 
     club_id: Mapped[str] = mapped_column(String(36), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False, index=True)
-    email_or_code: Mapped[str] = mapped_column(String(255), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    email_or_code: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(50), default="editor", nullable=False)
+    created_by: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    max_uses: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    use_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    club = relationship("Club", backref="invites")
+    creator = relationship("User", foreign_keys=[created_by])
 
 
 class Asset(TimestampMixin, Base):
@@ -159,7 +184,7 @@ class RoleHeld(TimestampMixin, Base):
     designation_label: Mapped[str] = mapped_column(String(255), nullable=False)
     valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     valid_to: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    academic_year: Mapped[str] = mapped_column(String(20), default="2026-27", nullable=False)
+    academic_year: Mapped[str] = mapped_column(String(20), nullable=False)
 
 
 class Venue(TimestampMixin, Base):
@@ -317,8 +342,9 @@ class AIRequest(TimestampMixin, Base):
     purpose: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    tokens_in: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    tokens_out: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    tokens_in: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tokens_out: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    usage_estimated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class AuditLog(TimestampMixin, Base):

@@ -102,6 +102,12 @@ def test_w3_slice_end_to_end_journey(driver, e2e_server):
     submit_btn.click()
 
     # ---------------- 2. DASHBOARD & ROLE COHERENCE ----------------
+    time.sleep(1)
+    dash_btns = driver.find_elements(By.XPATH, "//button[contains(., 'Dashboard')]")
+    if dash_btns:
+        driver.execute_script("arguments[0].click();", dash_btns[0])
+        time.sleep(1)
+
     # Wait for dashboard to load
     wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'ACM Student Chapter')]")))
     wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Your Role:')]")))
@@ -167,12 +173,10 @@ def test_w3_slice_end_to_end_journey(driver, e2e_server):
 
     # ---------------- 5. GENERATE DOCUMENT ----------------
     gen_btn = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Generate Document')]"))
+        EC.presence_of_element_located((By.XPATH, "//button[contains(., 'Generate Document')]"))
     )
-    # Scroll into view and click
-    driver.execute_script("arguments[0].scrollIntoView(true);", gen_btn)
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", gen_btn)
     time.sleep(0.5)
-    gen_btn.click()
 
     # ---------------- 6. REVIEW PAGE & RENDERED PREVIEW ----------------
     # Wait for Review page banner and rendered preview image
@@ -214,3 +218,103 @@ def test_w3_slice_end_to_end_journey(driver, e2e_server):
         assert "None" not in pdf_text
         assert "<function" not in pdf_text
         assert "{{" not in pdf_text
+
+
+def test_events_page_update_documents_refetches_and_shows_v2(driver, e2e_server):
+    """W3.4 Task 3 UI Test:
+    Events page: after 'Update documents', refetch the event and show the new
+    version numbers on the cards (toast says v2 and the cards show v2).
+    """
+    import uuid
+    from server.app.models import Event, Club, Document
+    import server.app.core.database as db_core
+
+    # Link the generated document to an event so it appears on the Events page
+    db = db_core.SessionLocal()
+    try:
+        club = db.query(Club).filter(Club.short_name == "ACM").first()
+        doc = db.query(Document).filter(Document.club_id == club.id).order_by(Document.created_at.desc()).first()
+        assert doc is not None, "A document must exist from the previous test or seed"
+
+        event = db.query(Event).filter(Event.club_id == club.id).first()
+        if not event:
+            event = Event(
+                id=str(uuid.uuid4()),
+                club_id=club.id,
+                title="Smart India Hackathon 2026",
+                event_code="SIH",
+                record={
+                    "event_name": "Smart India Hackathon 2026",
+                    "event_code": "SIH",
+                    "dates": "15/10/2026",
+                    "venue": "Seminar Hall",
+                    "expected_participants": 120,
+                },
+                status="active",
+            )
+            db.add(event)
+            db.commit()
+            db.refresh(event)
+
+        doc.event_id = event.id
+        db.commit()
+    finally:
+        db.close()
+
+    wait = WebDriverWait(driver, 25)
+
+    # 1. Switch to Events tab
+    events_tab = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Events')]"))
+    )
+    events_tab.click()
+
+    # 2. Wait for Events page content to load
+    wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Events & Coordinated Document Packages')]")))
+    time.sleep(2)
+    driver.save_screenshot(str(SCREENSHOTS_DIR / "debug_events_tab.png"))
+    print("PAGE SOURCE SNIPPET:", driver.find_element(By.TAG_NAME, "body").text[:500])
+
+    # Verify initial document card displays v1
+    v1_badge = wait.until(
+        EC.presence_of_element_located((By.XPATH, "//*[contains(@data-testid, 'doc-version-') and contains(., 'v1')]"))
+    )
+    assert "v1" in v1_badge.text
+
+    time.sleep(0.5)
+    driver.save_screenshot(str(SCREENSHOTS_DIR / "06_events_page_initial_v1.png"))
+
+    # 3. Click 'Edit Event' button
+    edit_btn = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Edit Event')]"))
+    )
+    edit_btn.click()
+
+    # 4. In Edit Event Modal, change venue
+    venue_input = wait.until(
+        EC.presence_of_element_located((By.XPATH, "//label[contains(., 'Event Venue')]/following-sibling::input"))
+    )
+    venue_input.clear()
+    venue_input.send_keys("Seminar Hall 402 - Updated Lab")
+
+    # Ensure update checkbox is selected and submit
+    update_submit_btn = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//button[@type='submit' and (contains(., 'Update') or contains(., 'Save'))]"))
+    )
+    update_submit_btn.click()
+
+    # 5. Wait for success toast / message indicating re-rendering and v2
+    success_toast = wait.until(
+        EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Re-rendered') and contains(text(), 'v2')]"))
+    )
+    assert "(v2)" in success_toast.text
+
+    # 6. Verify that the cards on the Events page refetched and now show v2!
+    v2_badge = wait.until(
+        EC.presence_of_element_located((By.XPATH, "//*[contains(@data-testid, 'doc-version-') and contains(., 'v2')]"))
+    )
+    assert "v2" in v2_badge.text
+
+    time.sleep(0.5)
+    driver.save_screenshot(str(SCREENSHOTS_DIR / "07_events_page_v2_cards_updated.png"))
+

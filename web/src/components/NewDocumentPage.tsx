@@ -17,6 +17,7 @@ import { TemplateDetail, GeneratedDocument } from '../types';
 interface NewDocumentPageProps {
   clubId: string | number;
   templateId: string;
+  eventId?: string | null;
   onCancel: () => void;
   onGenerated: (doc: GeneratedDocument) => void;
 }
@@ -24,10 +25,12 @@ interface NewDocumentPageProps {
 export const NewDocumentPage: React.FC<NewDocumentPageProps> = ({
   clubId,
   templateId,
+  eventId,
   onCancel,
   onGenerated,
 }) => {
   const [template, setTemplate] = useState<TemplateDetail | null>(null);
+  const [linkedEvent, setLinkedEvent] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [generating, setGenerating] = useState<boolean>(false);
   const [extracting, setExtracting] = useState<boolean>(false);
@@ -60,12 +63,35 @@ export const NewDocumentPage: React.FC<NewDocumentPageProps> = ({
             initialForm[f.key] = data.defaults[f.key];
           } else if (f.default_value !== undefined && f.default_value !== null) {
             initialForm[f.key] = f.default_value;
+          } else if (f.type === 'enum' || (f.values && f.values.length > 0)) {
+            initialForm[f.key] = (f.values && f.values.length > 0) ? f.values[0] : 'Offline';
           }
         });
 
         // Add live club defaults (only document_date defaults)
         if (data.defaults.document_date) initialForm.document_date = data.defaults.document_date;
         if (data.defaults.suggested_ref_no) initialForm.ref_no = data.defaults.suggested_ref_no;
+
+        // If eventId provided, load event and prefill canonical fields
+        if (eventId) {
+          try {
+            const ev = await api.events.get(clubId, eventId);
+            if (ev) {
+              setLinkedEvent(ev);
+              if (ev.title) initialForm.event_name = ev.title;
+              if (ev.event_code) initialForm.event_code = ev.event_code;
+              if (ev.record) {
+                Object.entries(ev.record).forEach(([k, v]) => {
+                  if (v !== undefined && v !== null && v !== '') {
+                    initialForm[k] = v;
+                  }
+                });
+              }
+            }
+          } catch {
+            // fallback gracefully
+          }
+        }
 
         setFormData(initialForm);
       } catch (err: any) {
@@ -75,7 +101,7 @@ export const NewDocumentPage: React.FC<NewDocumentPageProps> = ({
       }
     };
     loadSchema();
-  }, [clubId, templateId]);
+  }, [clubId, templateId, eventId]);
 
   // Handle Natural Language Extraction
   const handleExtract = async () => {
@@ -137,7 +163,7 @@ export const NewDocumentPage: React.FC<NewDocumentPageProps> = ({
     try {
       setReserving(true);
       setError(null);
-      const seriesKey = template?.numbering_series || formData.event_code || 'ROOM';
+      const seriesKey = template?.numbering_series || template?.id || formData.event_code || 'ROOM';
       const res = await api.documents.reserveNumber(clubId, seriesKey, {
         template_id: templateId,
         event_code: formData.event_code,
@@ -189,14 +215,13 @@ export const NewDocumentPage: React.FC<NewDocumentPageProps> = ({
       setGenerating(true);
       setError(null);
 
-      const confirmedKeys = Object.entries(fieldProvenance)
-        .filter(([_, p]) => p.confirmed)
-        .map(([k, _]) => k);
+      const confirmedKeys = Object.keys(formData).filter((k) => !fieldProvenance[k] || fieldProvenance[k].confirmed);
 
       const deferredKeys = Object.keys(deferredFields).filter((k) => deferredFields[k]);
 
       const res = await api.documents.generate(clubId, {
         template_id: templateId,
+        event_id: eventId || undefined,
         title: formData.event_name,
         ref_no: formData.ref_no,
         ref_no_confirmed: refNoConfirmed,
@@ -274,6 +299,24 @@ export const NewDocumentPage: React.FC<NewDocumentPageProps> = ({
           </span>
         </div>
       </div>
+
+      {linkedEvent && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs sm:text-sm text-blue-900 flex items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Info className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <div>
+              <span className="font-bold">Generating document for Event: </span>
+              <span className="font-semibold text-slate-900">{linkedEvent.title}</span>
+              <p className="text-[11px] text-blue-700 mt-0.5">
+                Canonical venue, dates, and event code have been pre-filled from this event's shared context.
+              </p>
+            </div>
+          </div>
+          <span className="font-mono text-[10px] bg-blue-100 text-blue-800 px-2 py-1 rounded font-bold uppercase tracking-wider">
+            Linked Event
+          </span>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-center gap-2">

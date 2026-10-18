@@ -1,0 +1,60 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Python313\python.exe
+rootdir: C:\Users\OMEN\Desktop\DocumentGenerator
+configfile: pyproject.toml
+plugins: anyio-4.15.1, timeout-2.4.0
+timeout: 300.0s
+timeout method: thread
+timeout func_only: False
+collecting ... collected 16 items
+
+tests/test_w6a_batch_and_recommend.py::test_w6a_recommend_workshop_sentence PASSED [  6%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_recommend_budget_winners_and_bills PASSED [ 12%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_batch_generation_shared_fields_in_pdfs_and_zip PASSED [ 18%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_batch_generation_winners_repeat_per PASSED [ 25%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_cross_club_isolation PASSED [ 31%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_documents_list_search_filter_and_pagination PASSED [ 37%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_a_batch_only_name_venue_participants_returns_400 PASSED [ 43%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_b_batch_supplied_fields_pdf_sentinel_no_defaults PASSED [ 50%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_c_batch_unconfirmed_ai_draft_rejected PASSED [ 56%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_d_parallel_batches_gap_free_numbering PASSED [ 62%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_e_batch_render_failure_rolls_back_no_consumed_numbers PASSED [ 68%]
+tests/test_w6a_batch_and_recommend.py::test_w6a_f_batch_repeat_items_missing_fields_rejected PASSED [ 75%]
+tests/test_w5_2_publish_gate.py::test_w5_2_publish_rejected_with_409_when_unreviewed_ai_items_present PASSED [ 81%]
+tests/test_w5_2_publish_gate.py::test_w5_2_viewer_cannot_mark_ai_items_reviewed PASSED [ 87%]
+tests/test_w5_2_publish_gate.py::test_w5_2_publish_succeeds_after_reviewing_ai_items PASSED [ 93%]
+tests/test_w5_2_publish_gate.py::test_w5_2_dev_database_untouched_and_matches_clean_seed PASSED [100%]
+
+============================== warnings summary ===============================
+server\app\core\config.py:78
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\core\config.py:78: RuntimeWarning: [DEV WARNING] JWT_SECRET_KEY not set in env for 'development'. Generated ephemeral per-run secret.
+    warnings.warn(
+
+server\app\core\config.py:94
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\core\config.py:94: RuntimeWarning: [DEV WARNING] FIELD_ENCRYPTION_KEY not set in env for 'development'. Generated ephemeral Fernet key.
+    warnings.warn(
+
+docgen\schema.py:12
+  C:\Users\OMEN\Desktop\DocumentGenerator\docgen\schema.py:12: UserWarning: Field name "validate" in "FieldSchema" shadows an attribute in parent "BaseModel"
+    class FieldSchema(BaseModel):
+
+..\..\..\..\Python313\Lib\site-packages\fastapi\testclient.py:1
+  C:\Python313\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_w6a_batch_and_recommend.py: 298 warnings
+tests/test_w5_2_publish_gate.py: 48 warnings
+  C:\Python313\Lib\site-packages\sqlalchemy\sql\schema.py:4296: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore[call-arg, no-any-return, no-untyped-call]  # noqa: E501
+
+tests/test_w6a_batch_and_recommend.py::test_w6a_recommend_workshop_sentence
+  C:\Python313\Lib\site-packages\passlib\handlers\argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+tests/test_w6a_batch_and_recommend.py: 11 warnings
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\core\numbering_service.py:182: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: C:\Users\OMEN\Desktop\DocumentGenerator\docs\test_runs\w6a_junit.xml -
+====================== 16 passed, 362 warnings in 49.49s ======================

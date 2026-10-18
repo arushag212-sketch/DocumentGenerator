@@ -255,3 +255,27 @@ def fn_sr_no(index: Any = 0) -> int:
         return int(index) + 1
     except (ValueError, TypeError):
         return 1
+
+
+@register("format_time")
+def fn_format_time(val: Any) -> str:
+    """Format a 24-hour time string (e.g. '10:00', '17:00') into 12-hour club format ('10:00 AM', '05:00 PM')."""
+    if not val:
+        return ""
+    s = str(val).strip()
+    m12 = re.match(r'^(0?[1-9]|1[0-2])(?::([0-5]\d))?\s*(AM|PM|am|pm)$', s)
+    if m12:
+        h = int(m12.group(1))
+        m = int(m12.group(2)) if m12.group(2) else 0
+        ampm = m12.group(3).upper()
+        return f"{h:02d}:{m:02d} {ampm}"
+    m24 = re.match(r'^([01]?\d|2[0-3])(?::([0-5]\d))?$', s)
+    if m24:
+        h24 = int(m24.group(1))
+        m = int(m24.group(2)) if m24.group(2) else 0
+        ampm = "AM" if h24 < 12 else "PM"
+        h12 = h24 % 12
+        if h12 == 0:
+            h12 = 12
+        return f"{h12:02d}:{m:02d} {ampm}"
+    return s

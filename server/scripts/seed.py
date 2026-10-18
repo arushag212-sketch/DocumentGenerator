@@ -16,7 +16,8 @@ import uuid
 from pathlib import Path
 
 import yaml
-from server.app.core.database import SessionLocal, engine, Base
+from server.app.core import database as db_core
+from server.app.core.database import Base
 from server.app.core.security import get_password_hash
 from server.app.models import (
     Asset,
@@ -41,29 +42,30 @@ def compute_sha256(file_path: Path) -> str:
     return h.hexdigest()
 
 
-def seed():
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
+def seed(clean: bool = False, demo_users: Optional[bool] = None):
+    is_production = os.environ.get("ENVIRONMENT", "").strip().lower() == "production"
+    if is_production:
+        if demo_users is True:
+            raise RuntimeError("Refusing to create demo users, demo passwords or platform admin account when ENVIRONMENT=production")
+        demo_users = False
+    else:
+        if demo_users is None:
+            demo_users = True
+
+    if clean:
+        Base.metadata.drop_all(bind=db_core.engine)
+    Base.metadata.create_all(bind=db_core.engine)
+    db = db_core.SessionLocal()
 
     storage_assets_dir = Path("storage/assets")
     storage_templates_dir = Path("storage/templates")
     storage_assets_dir.mkdir(parents=True, exist_ok=True)
     storage_templates_dir.mkdir(parents=True, exist_ok=True)
 
-    print("Starting database seed...")
+    print(f"Starting database seed (production={is_production}, demo_users={demo_users})...")
 
-    # 1. Platform Admin User
-    admin = db.query(User).filter(User.email == "admin@svnit.ac.in").first()
-    if not admin:
-        admin = User(
-            email="admin@svnit.ac.in",
-            password_hash="!UNUSABLE_PASSWORD_INITIAL_SEED!",
-            name="SVNIT Platform Admin",
-            is_platform_admin=True,
-        )
-        db.add(admin)
-        db.flush()
-        print("-> Seeded platform admin user")
+    # Platform Admin accounts are NEVER seeded automatically.
+    # Platform admin accounts must only be created via: python -m server.scripts.create_admin
 
     # 2. System Assets (SVNIT logos)
     source_assets = [
@@ -94,7 +96,7 @@ def seed():
                 sha256=file_hash,
                 size=file_size,
                 storage_key=str(dest),
-                uploaded_by=admin.id,
+                uploaded_by=None,
                 is_system=True,
             )
             db.add(asset)
@@ -192,7 +194,7 @@ def seed():
                 version_no=1,
                 schema_yaml=schema_yaml_str,
                 docx_storage_key=str(dest_docx),
-                created_by=admin.id,
+                created_by=None,
                 change_note="Initial system import from templates/",
             )
             db.add(ver)
@@ -227,106 +229,93 @@ def seed():
         db.flush()
     print(f"-> Seeded demo club: {club.name} ({club.slug})")
 
-    # 5.1 Seed Demo Users and Memberships
-    demo_owner = db.query(User).filter(User.email == "demo.owner@svnit.ac.in").first()
-    if not demo_owner:
-        demo_owner = User(
-            email="demo.owner@svnit.ac.in",
-            password_hash=get_password_hash("DemoOwnerPass123!"),
-            name="Demo Club Head",
-            is_platform_admin=False,
-        )
-        db.add(demo_owner)
-        db.flush()
+    # 5.1 Seed Demo Users and Memberships (Development only)
+    if demo_users:
+        demo_owner = db.query(User).filter(User.email == "demo.owner@svnit.ac.in").first()
+        if not demo_owner:
+            demo_owner = User(
+                email="demo.owner@svnit.ac.in",
+                password_hash=get_password_hash("DemoOwnerPass123!"),
+                name="Demo Club Head",
+                is_platform_admin=False,
+            )
+            db.add(demo_owner)
+            db.flush()
+        else:
+            demo_owner.password_hash = get_password_hash("DemoOwnerPass123!")
+            demo_owner.name = "Demo Club Head"
+            demo_owner.failed_login_attempts = 0
+            demo_owner.locked_until = None
+            db.flush()
+
+        m_owner = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == demo_owner.id).first()
+        if not m_owner:
+            m_owner = Membership(
+                club_id=club.id,
+                user_id=demo_owner.id,
+                role="owner",
+                position="Student Head/Chairperson",
+                status="active",
+            )
+            db.add(m_owner)
+            db.flush()
+        else:
+            m_owner.position = "Student Head/Chairperson"
+            db.flush()
+
+        # Additional sample members so members count is realistic
+        sec_user = db.query(User).filter(User.email == "secretary@svnit.ac.in").first()
+        if not sec_user:
+            sec_user = User(
+                email="secretary@svnit.ac.in",
+                password_hash=get_password_hash("SecretaryPass123!"),
+                name="Demo Student Secretary",
+                is_platform_admin=False,
+            )
+            db.add(sec_user)
+            db.flush()
+        m_sec = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == sec_user.id).first()
+        if not m_sec:
+            m_sec = Membership(
+                club_id=club.id,
+                user_id=sec_user.id,
+                role="editor",
+                position="Student Secretary",
+                status="active",
+            )
+            db.add(m_sec)
+            db.flush()
+        else:
+            m_sec.position = "Student Secretary"
+            db.flush()
+
+        tres_user = db.query(User).filter(User.email == "treasurer@svnit.ac.in").first()
+        if not tres_user:
+            tres_user = User(
+                email="treasurer@svnit.ac.in",
+                password_hash=get_password_hash("TreasurerPass123!"),
+                name="Demo Student Treasurer",
+                is_platform_admin=False,
+            )
+            db.add(tres_user)
+            db.flush()
+        m_tres = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == tres_user.id).first()
+        if not m_tres:
+            m_tres = Membership(
+                club_id=club.id,
+                user_id=tres_user.id,
+                role="treasurer",
+                position="Treasurer",
+                status="active",
+            )
+            db.add(m_tres)
+            db.flush()
+        else:
+            m_tres.position = "Treasurer"
+            db.flush()
+        print("-> Seeded demo users and active memberships for ACM")
     else:
-        demo_owner.password_hash = get_password_hash("DemoOwnerPass123!")
-        demo_owner.name = "Demo Club Head"
-        demo_owner.failed_login_attempts = 0
-        demo_owner.locked_until = None
-        db.flush()
-
-    m_owner = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == demo_owner.id).first()
-    if not m_owner:
-        m_owner = Membership(
-            club_id=club.id,
-            user_id=demo_owner.id,
-            role="owner",
-            status="active",
-        )
-        db.add(m_owner)
-        db.flush()
-
-    demo_lead = db.query(User).filter(User.email == "demo.lead@example.com").first()
-    if not demo_lead:
-        demo_lead = User(
-            email="demo.lead@example.com",
-            password_hash=get_password_hash("DemoSecurePass123!"),
-            name="Demo Student Head",
-            is_platform_admin=True,
-        )
-        db.add(demo_lead)
-        db.flush()
-    else:
-        demo_lead.password_hash = get_password_hash("DemoSecurePass123!")
-        demo_lead.is_platform_admin = True
-        demo_lead.failed_login_attempts = 0
-        demo_lead.locked_until = None
-        db.flush()
-
-    m_lead = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == demo_lead.id).first()
-    if not m_lead:
-        m_lead = Membership(
-            club_id=club.id,
-            user_id=demo_lead.id,
-            role="owner",
-            status="active",
-        )
-        db.add(m_lead)
-        db.flush()
-
-    # Additional sample members so members count is realistic
-    sec_user = db.query(User).filter(User.email == "secretary@svnit.ac.in").first()
-    if not sec_user:
-        sec_user = User(
-            email="secretary@svnit.ac.in",
-            password_hash=get_password_hash("SecretaryPass123!"),
-            name="Demo Student Secretary",
-            is_platform_admin=False,
-        )
-        db.add(sec_user)
-        db.flush()
-    m_sec = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == sec_user.id).first()
-    if not m_sec:
-        m_sec = Membership(
-            club_id=club.id,
-            user_id=sec_user.id,
-            role="editor",
-            status="active",
-        )
-        db.add(m_sec)
-        db.flush()
-
-    tres_user = db.query(User).filter(User.email == "treasurer@svnit.ac.in").first()
-    if not tres_user:
-        tres_user = User(
-            email="treasurer@svnit.ac.in",
-            password_hash=get_password_hash("TreasurerPass123!"),
-            name="Demo Student Treasurer",
-            is_platform_admin=False,
-        )
-        db.add(tres_user)
-        db.flush()
-    m_tres = db.query(Membership).filter(Membership.club_id == club.id, Membership.user_id == tres_user.id).first()
-    if not m_tres:
-        m_tres = Membership(
-            club_id=club.id,
-            user_id=tres_user.id,
-            role="treasurer",
-            status="active",
-        )
-        db.add(m_tres)
-        db.flush()
-    print("-> Seeded demo users and active memberships for ACM")
+        print("-> Skipped demo users creation (production mode / demo_users=False)")
 
     # 6. Seed People & Roles for ACM
     people_map: dict[str, Person] = {}
@@ -356,7 +345,7 @@ def seed():
         people_map["student_head"] = p
         r = db.query(RoleHeld).filter(RoleHeld.club_id == club.id, RoleHeld.person_id == p.id, RoleHeld.role_key == "student_head").first()
         if not r:
-            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="student_head", designation_label="Student Head", academic_year="2026-27"))
+            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="student_head", designation_label="Student Head", academic_year=club.academic_year_default))
 
     # Student Secretary
     if cfg_data.get("student_secretary"):
@@ -365,7 +354,7 @@ def seed():
         people_map["student_secretary"] = p
         r = db.query(RoleHeld).filter(RoleHeld.club_id == club.id, RoleHeld.person_id == p.id, RoleHeld.role_key == "student_secretary").first()
         if not r:
-            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="student_secretary", designation_label="Student Secretary", academic_year="2026-27"))
+            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="student_secretary", designation_label="Student Secretary", academic_year=club.academic_year_default))
 
     # Chairperson
     if cfg_data.get("chairperson"):
@@ -374,7 +363,7 @@ def seed():
         people_map["chairperson"] = p
         r = db.query(RoleHeld).filter(RoleHeld.club_id == club.id, RoleHeld.person_id == p.id, RoleHeld.role_key == "chairperson").first()
         if not r:
-            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="chairperson", designation_label="Chairperson , ACM", academic_year="2026-27"))
+            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="chairperson", designation_label="Chairperson , ACM", academic_year=club.academic_year_default))
 
     # Faculty Chairman
     if cfg_data.get("faculty_chairman"):
@@ -383,7 +372,7 @@ def seed():
         people_map["faculty_chairman"] = p
         r = db.query(RoleHeld).filter(RoleHeld.club_id == club.id, RoleHeld.person_id == p.id, RoleHeld.role_key == "faculty_chairman").first()
         if not r:
-            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="faculty_chairman", designation_label="Chairman, ACM Student Chapter SVNIT", academic_year="2026-27"))
+            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="faculty_chairman", designation_label="Chairman, ACM Student Chapter SVNIT", academic_year=club.academic_year_default))
 
     # Faculty Co-Chairman
     if cfg_data.get("faculty_co_chairman"):
@@ -392,7 +381,7 @@ def seed():
         people_map["faculty_co_chairman"] = p
         r = db.query(RoleHeld).filter(RoleHeld.club_id == club.id, RoleHeld.person_id == p.id, RoleHeld.role_key == "faculty_co_chairman").first()
         if not r:
-            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="faculty_co_chairman", designation_label="Co-Chairman, ACM Student Chapter SVNIT", academic_year="2026-27"))
+            db.add(RoleHeld(club_id=club.id, person_id=p.id, role_key="faculty_co_chairman", designation_label="Co-Chairman, ACM Student Chapter SVNIT", academic_year=club.academic_year_default))
 
     # 7. Seed Venues
     venues_cfg = cfg_data.get("venues", {})
@@ -420,62 +409,138 @@ def seed():
             db.flush()
     print(f"-> Seeded venues for ACM")
 
-    # 8. Seed Numbering Series
+    # 8. Seed Numbering Series from template schemas and config
+    ay = club.academic_year_default
+    from docgen.schema import load_all_schemas
+    schemas = load_all_schemas()
+    for s in schemas.values():
+        if s.numbering and s.numbering.format:
+            s_key = s.numbering.series or s.id
+            ns = db.query(NumberingSeries).filter(
+                NumberingSeries.club_id == club.id,
+                NumberingSeries.key == s_key,
+                NumberingSeries.academic_year == ay,
+            ).first()
+            if not ns:
+                ns = NumberingSeries(
+                    club_id=club.id,
+                    key=s_key,
+                    format=s.numbering.format,
+                    academic_year=ay,
+                    last_seq=0,
+                )
+                db.add(ns)
+                db.flush()
+
     num_cfg = cfg_data.get("numbering", {})
     for n_key, n_val in num_cfg.items():
         ns = db.query(NumberingSeries).filter(
             NumberingSeries.club_id == club.id,
             NumberingSeries.key == n_key,
-            NumberingSeries.academic_year == "2026-27"
+            NumberingSeries.academic_year == ay,
         ).first()
         if not ns:
-            if n_key == "ROOM":
-                fmt = "ACM/2026-27/ROOM/{seq:03d}"
-            elif n_key == "MOM":
-                fmt = "ACM/2026-27/MOM/{seq:03d}"
-            elif n_key in ("approval_note", "event_approval"):
-                fmt = "ACM/2026-27/{event_code}/{seq:03d}"
-            else:
-                fmt = f"ACM/2026-27/{n_key}/{{seq:03d}}"
-
+            fmt = f"ACM/{{academic_year}}/{n_key}/{{seq:03d}}"
             ns = NumberingSeries(
                 club_id=club.id,
                 key=n_key,
                 format=fmt,
-                academic_year="2026-27",
+                academic_year=ay,
                 last_seq=n_val.get("last_used", 0),
             )
             db.add(ns)
             db.flush()
-    
-    # Also explicitly ensure event_approval series exists using {academic_year}/{event_code}
-    evt_ns = db.query(NumberingSeries).filter(
-        NumberingSeries.club_id == club.id,
-        NumberingSeries.key == "approval_note",
-        NumberingSeries.academic_year == "2026-27"
-    ).first()
-    if not evt_ns:
-        db.add(NumberingSeries(
-            club_id=club.id,
-            key="approval_note",
-            format="ACM/2026-27/{event_code}/{seq:03d}",
-            academic_year="2026-27",
-            last_seq=0
-        ))
-        db.flush()
     print(f"-> Seeded numbering series for ACM")
+
+    # 9. Seed Additional Dummy Clubs (Demo Robotics Club, Demo Cultural Club)
+    additional_clubs = [
+        ("Demo Robotics Club", "ROBO", "robotics", "ROBO", "robotics.lead@svnit.ac.in", "Demo Robotics Lead"),
+        ("Demo Cultural Club", "CULT", "cultural", "CULT", "cultural.lead@svnit.ac.in", "Demo Cultural Lead"),
+    ]
+    for c_name, c_short, c_slug, c_code, c_lead_email, c_lead_name in additional_clubs:
+        extra_club = db.query(Club).filter(Club.slug == c_slug).first()
+        if not extra_club:
+            extra_club = Club(
+                name=c_name,
+                short_name=c_short,
+                slug=c_slug,
+                chapter_code=c_code,
+                head_of_account=c_code,
+                academic_year_default="2026-27",
+                settings={"department": "Student Welfare", "approval_chain": []},
+            )
+            db.add(extra_club)
+            db.flush()
+
+        # Venues
+        for v_name in ("Seminar Hall", "Main Auditorium"):
+            v_check = db.query(Venue).filter(Venue.club_id == extra_club.id, Venue.name == v_name).first()
+            if not v_check:
+                db.add(Venue(club_id=extra_club.id, name=v_name, short_name=v_name))
+                db.flush()
+
+        # Numbering
+        for s_key in ("ROOM", "EVT", "MOM"):
+            ns_check = db.query(NumberingSeries).filter(
+                NumberingSeries.club_id == extra_club.id,
+                NumberingSeries.key == s_key,
+                NumberingSeries.academic_year == "2026-27",
+            ).first()
+            if not ns_check:
+                db.add(NumberingSeries(
+                    club_id=extra_club.id,
+                    key=s_key,
+                    format=f"{c_short}/{{academic_year}}/{s_key}/{{seq:03d}}",
+                    academic_year="2026-27",
+                    last_seq=0,
+                ))
+                db.flush()
+
+        if demo_users:
+            lead_u = db.query(User).filter(User.email == c_lead_email).first()
+            if not lead_u:
+                lead_u = User(
+                    email=c_lead_email,
+                    password_hash=get_password_hash("LeadPass123!"),
+                    name=c_lead_name,
+                    is_platform_admin=False,
+                )
+                db.add(lead_u)
+                db.flush()
+            m_lead = db.query(Membership).filter(Membership.club_id == extra_club.id, Membership.user_id == lead_u.id).first()
+            if not m_lead:
+                db.add(Membership(
+                    club_id=extra_club.id,
+                    user_id=lead_u.id,
+                    role="owner",
+                    position="Student Head/Chairperson",
+                    status="active",
+                ))
+                db.flush()
+    print("-> Seeded additional dummy clubs (Robotics, Cultural)")
 
     db.commit()
     db.close()
     print("Database seeding completed successfully!")
-    print("\n" + "=" * 72)
-    print("DEMO CREDENTIALS (DUMMY DATA):")
-    print("  Club Owner: demo.owner@svnit.ac.in  /  DemoOwnerPass123!   (Role: owner)")
-    print("  Club Lead:  demo.lead@example.com   /  DemoSecurePass123!  (Role: owner, Admin)")
-    print("  Secretary:  secretary@svnit.ac.in   /  SecretaryPass123!   (Role: editor)")
-    print("  Treasurer:  treasurer@svnit.ac.in   /  TreasurerPass123!   (Role: treasurer)")
-    print("=" * 72 + "\n")
+    if not is_production and demo_users:
+        print("\n" + "=" * 72)
+        print("DEMO CREDENTIALS (DUMMY DATA - DEVELOPMENT ONLY):")
+        print("  Club Owner: demo.owner@svnit.ac.in  /  DemoOwnerPass123!   (Role: owner)")
+        print("  Secretary:  secretary@svnit.ac.in   /  SecretaryPass123!   (Role: editor)")
+        print("  Treasurer:  treasurer@svnit.ac.in   /  TreasurerPass123!   (Role: treasurer)")
+        print("  Robo Lead:  robotics.lead@svnit.ac.in / LeadPass123!      (Role: owner)")
+        print("  Cult Lead:  cultural.lead@svnit.ac.in / LeadPass123!      (Role: owner)")
+        print("  (Platform Admin accounts created only via: python -m server.scripts.create_admin)")
+        print("=" * 72 + "\n")
+    else:
+        print("Production mode: Zero demo users, zero demo passwords, zero platform admin accounts.")
 
 
 if __name__ == "__main__":
-    seed()
+    import sys
+    is_clean = "--clean" in sys.argv or "--reset" in sys.argv or len(sys.argv) == 1
+    is_prod = os.environ.get("ENVIRONMENT", "").strip().lower() == "production"
+    has_demo_flag = "--demo-users" in sys.argv
+    if is_prod and has_demo_flag:
+        sys.exit("Error: Refusing to create demo users, demo passwords or platform admin account when ENVIRONMENT=production")
+    seed(clean=is_clean, demo_users=False if is_prod else True)

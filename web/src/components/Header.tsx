@@ -6,9 +6,10 @@ interface HeaderProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   memberCount: number;
+  onOpenClubModal?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, memberCount }) => {
+export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, memberCount: _memberCount, onOpenClubModal }) => {
   const { user, clubs, activeClub, setActiveClubId, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
@@ -43,8 +44,8 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, membe
           {/* Right Header Controls: Club Switcher, User Info, Logout */}
           <div className="flex items-center space-x-3 sm:space-x-4">
             {/* Club Switcher */}
-            {clubs.length > 0 && (
-              <div className="relative">
+            <div className="relative">
+              {clubs.length > 0 ? (
                 <button
                   type="button"
                   onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -56,15 +57,26 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, membe
                   </span>
                   <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
                 </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onOpenClubModal}
+                  className="flex items-center space-x-1.5 bg-blue-50 hover:bg-blue-100 text-[#1b365d] border border-blue-200 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-colors"
+                >
+                  <Building2 className="w-4 h-4" />
+                  <span>Choose Club</span>
+                </button>
+              )}
 
-                {dropdownOpen && (
-                  <div
-                    className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-50"
-                    onMouseLeave={() => setDropdownOpen(false)}
-                  >
-                    <div className="px-3 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                      Switch Active Club
-                    </div>
+              {dropdownOpen && (
+                <div
+                  className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl py-1 z-50 overflow-hidden"
+                  onMouseLeave={() => setDropdownOpen(false)}
+                >
+                  <div className="px-3.5 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                    Switch Active Club
+                  </div>
+                  <div className="max-h-60 overflow-y-auto py-1">
                     {clubs.map((c) => (
                       <button
                         key={c.id}
@@ -73,20 +85,33 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, membe
                           setActiveClubId(c.id);
                           setDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-2 text-xs sm:text-sm flex items-center justify-between hover:bg-slate-50 transition-colors ${
-                          activeClub?.id === c.id ? 'text-[#1b365d] font-bold bg-blue-50/60' : 'text-slate-700'
+                        className={`w-full text-left px-3.5 py-2 text-xs sm:text-sm flex items-center justify-between hover:bg-slate-50 transition-colors ${
+                          activeClub?.id === c.id ? 'text-[#1b365d] font-bold bg-blue-50/70' : 'text-slate-700'
                         }`}
                       >
-                        <span className="truncate">{c.name}</span>
-                        <span className="text-xs text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                          {c.code}
+                        <span className="truncate pr-2">{c.name}</span>
+                        <span className="text-[11px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 flex-shrink-0">
+                          {c.code || c.short_name}
                         </span>
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
-            )}
+
+                  <div className="border-t border-slate-100 p-1.5 bg-slate-50/60">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        onOpenClubModal?.();
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-semibold text-[#1b365d] hover:bg-blue-50 rounded-lg flex items-center gap-2 transition-colors"
+                    >
+                      <span>+ Join or Add Another Club</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* User Profile Info */}
             <div className="hidden md:flex items-center space-x-2 border-l border-slate-200 pl-4">
@@ -115,26 +140,51 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, setCurrentTab, membe
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex space-x-1 border-t border-slate-100 pt-1">
-          {[
-            { id: 'dashboard', label: 'Dashboard' },
-            { id: 'events', label: 'Events' },
-            { id: 'members', label: `Members (${memberCount})` },
-            { id: 'people', label: 'Faculty & Office' },
-            { id: 'audit', label: 'Security & Audit' },
-          ].map((tab) => (
+        <div className="flex items-center justify-between border-t border-slate-100 pt-1 overflow-x-auto no-scrollbar">
+          <div className="flex space-x-1">
+            {[
+              { id: 'home', label: 'Home' },
+              { id: 'documents', label: 'My Documents' },
+              { id: 'templates', label: 'Templates' },
+              { id: 'admin', label: 'Club settings' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setCurrentTab(tab.id)}
+                className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-t-md transition-colors whitespace-nowrap flex-shrink-0 ${
+                  currentTab === tab.id
+                    ? 'bg-slate-50 text-[#1b365d] border-b-2 border-[#1b365d] font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/60'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Secondary tools / legacy views */}
+          <div className="hidden lg:flex items-center space-x-1 pl-4 text-xs text-slate-400">
             <button
-              key={tab.id}
-              onClick={() => setCurrentTab(tab.id)}
-              className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-t-md transition-colors ${
-                currentTab === tab.id
-                  ? 'bg-slate-50 text-[#1b365d] border-b-2 border-[#1b365d] font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/60'
+              onClick={() => setCurrentTab('dashboard')}
+              className={`px-2 py-1 rounded text-[11px] transition-colors ${
+                currentTab === 'dashboard'
+                  ? 'text-[#1b365d] font-semibold bg-blue-50'
+                  : 'hover:text-slate-700'
               }`}
             >
-              {tab.label}
+              Dashboard
             </button>
-          ))}
+            <button
+              onClick={() => setCurrentTab('events')}
+              className={`px-2 py-1 rounded text-[11px] transition-colors ${
+                currentTab === 'events'
+                  ? 'text-[#1b365d] font-semibold bg-blue-50'
+                  : 'hover:text-slate-700'
+              }`}
+            >
+              Events
+            </button>
+          </div>
         </div>
       </div>
     </header>

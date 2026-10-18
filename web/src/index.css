@@ -10,3 +10,52 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* AI-Suggested and Official Wording Canvas Styles */
+.ProseMirror p[data-ai-suggested="true"],
+.ProseMirror h1[data-ai-suggested="true"],
+.ProseMirror h2[data-ai-suggested="true"],
+.ProseMirror h3[data-ai-suggested="true"] {
+  position: relative;
+}
+
+.ProseMirror p[data-ai-suggested="true"]::before,
+.ProseMirror h1[data-ai-suggested="true"]::before,
+.ProseMirror h2[data-ai-suggested="true"]::before,
+.ProseMirror h3[data-ai-suggested="true"]::before {
+  content: "AI-suggested";
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  margin-right: 6px;
+  border-radius: 9999px;
+  background-color: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+  vertical-align: middle;
+  line-height: normal;
+}
+
+.ProseMirror p[data-official-wording="true"] {
+  background-color: #fef2f2;
+  border-left: 3px solid #ef4444;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: #991b1b;
+  font-weight: 500;
+}
+
+.ProseMirror p[data-official-wording="true"]::before {
+  content: "⚠️ Official Wording Required";
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  margin-right: 8px;
+  border-radius: 4px;
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  vertical-align: middle;
+}

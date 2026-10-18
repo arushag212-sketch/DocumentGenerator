@@ -6,7 +6,7 @@ triggers: [approval, dean, budget, funding, financial, proposal, permission dean
 letterhead: svnit
 numbering:
   series: null
-  format: "ACM/{academic_year}/{event_code}"
+  format: "ACM/{academic_year}/{event_code}/{seq:03d}"
   confirm: true
 depends_on: []
 repeat_per: null

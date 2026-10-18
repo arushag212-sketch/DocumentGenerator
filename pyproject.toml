@@ -36,3 +36,6 @@ include = ["docgen*", "server*"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "live: live tests requiring external API keys",
+]

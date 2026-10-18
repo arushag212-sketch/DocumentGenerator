@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+import hashlib
+import uuid
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
@@ -24,10 +25,11 @@ from server.app.core.security import (
     validate_password_policy,
     verify_password,
 )
-from server.app.models import Club, Membership, User
+from server.app.models import Club, Invite, Membership, User
 from server.app.schemas.auth import (
     ClubMembershipSummary,
     ForgotPasswordRequest,
+    RefreshTokenRequest,
     ResetPasswordRequest,
     TokenResponse,
     UserLogin,
@@ -56,6 +58,7 @@ def _build_user_out(user: User, db: Session) -> UserOut:
                         club_slug=club.slug,
                         club_short=club.short_name,
                         role=m.role,
+                        position=m.position,
                         status=m.status,
                     )
                 )
@@ -155,6 +158,38 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
             detail={"code": "EMAIL_EXISTS", "message": "Email is already registered"},
         )
 
+    invite_obj = None
+    if payload.invite_code:
+        clean_inv = payload.invite_code.strip()
+        inv_hash = hashlib.sha256(clean_inv.encode("utf-8")).hexdigest()
+        invite_obj = (
+            db.query(Invite)
+            .filter((Invite.code_hash == inv_hash) | (Invite.code == inv_hash) | (Invite.code == clean_inv))
+            .first()
+        )
+        now = datetime.utcnow()
+        if (
+            not invite_obj
+            or invite_obj.revoked
+            or (invite_obj.expires_at and invite_obj.expires_at < now)
+            or (invite_obj.max_uses > 0 and invite_obj.use_count >= invite_obj.max_uses)
+        ):
+            client_ip = request.client.host if request and request.client else None
+            log_audit(
+                db=db,
+                action="invite_failed",
+                entity_type="invite",
+                entity_id=invite_obj.id if invite_obj else None,
+                club_id=invite_obj.club_id if invite_obj else None,
+                user_id=None,
+                meta={"code_hash": inv_hash[:16], "reason": "invalid_or_expired_at_register"},
+                ip=client_ip,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "INVALID_OR_EXPIRED_INVITE", "message": "Invalid or expired invite"},
+            )
+
     user = User(
         email=clean_email,
         name=payload.name.strip(),
@@ -166,6 +201,31 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
     db.commit()
     db.refresh(user)
 
+    if invite_obj:
+        m = Membership(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            club_id=invite_obj.club_id,
+            role=invite_obj.role,
+            status="active",
+        )
+        db.add(m)
+        invite_obj.use_count += 1
+        if invite_obj.use_count >= invite_obj.max_uses:
+            invite_obj.accepted_at = datetime.utcnow()
+        db.commit()
+
+        log_audit(
+            db=db,
+            action="invite_accepted",
+            entity_type="membership",
+            entity_id=m.id,
+            club_id=invite_obj.club_id,
+            user_id=user.id,
+            meta={"code": invite_obj.code, "role": invite_obj.role, "email": user.email},
+            ip=client_ip,
+        )
+
     log_audit(
         db=db,
         action="user_registered",
@@ -176,11 +236,16 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
         ip=client_ip,
     )
 
-    access_token, _, csrf_token = _set_auth_cookies(response, user)
+    access_token, refresh_token, csrf_token = _set_auth_cookies(response, user)
     user_out = _build_user_out(user, db)
 
-    # Return access_token for API/test automation; browser web client relies strictly on httpOnly cookie
-    return TokenResponse(user=user_out, csrf_token=csrf_token, access_token=access_token)
+    # Return tokens for API/client storage; browser client also sets secure cookies
+    return TokenResponse(
+        user=user_out,
+        csrf_token=csrf_token,
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -260,10 +325,15 @@ def login(payload: UserLogin, request: Request, response: Response, db: Session 
         ip=client_ip,
     )
 
-    access_token, _, csrf_token = _set_auth_cookies(response, user)
+    access_token, refresh_token, csrf_token = _set_auth_cookies(response, user)
     user_out = _build_user_out(user, db)
 
-    return TokenResponse(user=user_out, csrf_token=csrf_token, access_token=access_token)
+    return TokenResponse(
+        user=user_out,
+        csrf_token=csrf_token,
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
 
 
 @router.post("/token", response_model=TokenResponse)
@@ -285,35 +355,43 @@ async def login_token(
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_session(
     response: Response,
+    payload: Optional[RefreshTokenRequest] = None,
     refresh_token: Optional[str] = Cookie(default=None, alias="refresh_token"),
+    auth_refresh: Optional[str] = Header(default=None, alias="X-Refresh-Token"),
     db: Session = Depends(get_db),
 ):
-    """Rotate access token using valid httpOnly refresh token cookie."""
-    if not refresh_token:
+    """Rotate access token using valid httpOnly refresh token cookie, payload, or header."""
+    raw_token = refresh_token or (payload.refresh_token if payload else None) or auth_refresh
+    if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "MISSING_REFRESH_TOKEN", "message": "Refresh token cookie required"},
+            detail={"code": "MISSING_REFRESH_TOKEN", "message": "Refresh token required"},
         )
 
-    payload = decode_access_token(refresh_token)
-    if not payload or payload.get("type") != "refresh":
+    token_payload = decode_access_token(raw_token)
+    if not token_payload or token_payload.get("type") != "refresh":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "INVALID_REFRESH_TOKEN", "message": "Invalid or expired refresh token"},
         )
 
-    user = db.query(User).filter(User.id == payload.get("sub")).first()
+    user = db.query(User).filter(User.id == token_payload.get("sub")).first()
     if not user or user.disabled_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"code": "UNAUTHORIZED"})
 
-    if payload.get("token_version") != user.token_version:
+    if token_payload.get("token_version") != user.token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "SESSION_REVOKED", "message": "Session revoked. Please sign in again."},
         )
 
-    access_token, _, csrf_token = _set_auth_cookies(response, user)
-    return TokenResponse(user=_build_user_out(user, db), csrf_token=csrf_token, access_token=access_token)
+    access_token, new_refresh_token, csrf_token = _set_auth_cookies(response, user)
+    return TokenResponse(
+        user=_build_user_out(user, db),
+        csrf_token=csrf_token,
+        access_token=access_token,
+        refresh_token=new_refresh_token,
+    )
 
 
 @router.get("/me", response_model=UserOut)

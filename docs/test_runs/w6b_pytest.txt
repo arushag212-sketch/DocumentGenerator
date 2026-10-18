@@ -1,0 +1,131 @@
+..ss.....................s.............................................. [ 50%]
+......................................................................   [100%]
+============================== warnings summary ===============================
+server\app\core\config.py:78
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\core\config.py:78: RuntimeWarning: [DEV WARNING] JWT_SECRET_KEY not set in env for 'development'. Generated ephemeral per-run secret.
+    warnings.warn(
+
+server\app\core\config.py:94
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\core\config.py:94: RuntimeWarning: [DEV WARNING] FIELD_ENCRYPTION_KEY not set in env for 'development'. Generated ephemeral Fernet key.
+    warnings.warn(
+
+docgen\schema.py:12
+  C:\Users\OMEN\Desktop\DocumentGenerator\docgen\schema.py:12: UserWarning: Field name "validate" in "FieldSchema" shadows an attribute in parent "BaseModel"
+    class FieldSchema(BaseModel):
+
+..\..\..\..\Python313\Lib\site-packages\fastapi\testclient.py:1
+  C:\Python313\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/e2e/test_w3_slice_e2e.py: 118 warnings
+tests/test_phase_w2.py: 97 warnings
+tests/test_postgres_concurrency.py: 24 warnings
+tests/test_w3_1.py: 59 warnings
+tests/test_w3_2.py: 21 warnings
+tests/test_w3_3.py: 39 warnings
+tests/test_w3_4.py: 85 warnings
+tests/test_w3_slice.py: 25 warnings
+tests/test_w4_gallery_fork.py: 52 warnings
+tests/test_w4b1_security_and_ux.py: 24 warnings
+tests/test_w4b_editor_compile.py: 51 warnings
+tests/test_w5_2_publish_gate.py: 48 warnings
+tests/test_w5_ai_template.py: 163 warnings
+tests/test_w6a_batch_and_recommend.py: 198 warnings
+tests/test_w6b_admin_and_invites.py: 118 warnings
+tests/test_w6b_e2e_browser.py: 36 warnings
+  C:\Python313\Lib\site-packages\sqlalchemy\sql\schema.py:4296: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore[call-arg, no-any-return, no-untyped-call]  # noqa: E501
+
+tests/e2e/test_w3_slice_e2e.py::test_w3_slice_end_to_end_journey
+  C:\Python313\Lib\site-packages\passlib\handlers\argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+tests/e2e/test_w3_slice_e2e.py: 1 warning
+tests/test_w3_1.py: 3 warnings
+tests/test_w3_2.py: 1 warning
+tests/test_w3_3.py: 6 warnings
+tests/test_w3_4.py: 7 warnings
+tests/test_w3_slice.py: 1 warning
+tests/test_w4b_editor_compile.py: 1 warning
+tests/test_w5_ai_template.py: 2 warnings
+tests/test_w6a_batch_and_recommend.py: 11 warnings
+tests/test_w6b_admin_and_invites.py: 1 warning
+tests/test_w6b_e2e_browser.py: 1 warning
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\core\numbering_service.py:209: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+tests/e2e/test_w3_slice_e2e.py: 1 warning
+tests/test_w3_1.py: 3 warnings
+tests/test_w3_2.py: 1 warning
+tests/test_w3_3.py: 3 warnings
+tests/test_w3_4.py: 6 warnings
+tests/test_w3_slice.py: 1 warning
+tests/test_w4b_editor_compile.py: 1 warning
+tests/test_w5_ai_template.py: 2 warnings
+tests/test_w6b_admin_and_invites.py: 1 warning
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\api\v1\documents.py:2153: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    if reservation.expires_at < datetime.utcnow():
+
+tests/e2e/test_w3_slice_e2e.py: 1 warning
+tests/test_w3_1.py: 3 warnings
+tests/test_w3_2.py: 1 warning
+tests/test_w3_3.py: 1 warning
+tests/test_w3_4.py: 6 warnings
+tests/test_w3_slice.py: 1 warning
+tests/test_w4b_editor_compile.py: 1 warning
+tests/test_w5_ai_template.py: 2 warnings
+tests/test_w6b_admin_and_invites.py: 1 warning
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\api\v1\documents.py:2213: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    reservation.used_at = datetime.utcnow()
+
+tests/test_w3_3.py::test_w3_3_expired_and_already_used_reservations_rejected
+  C:\Users\OMEN\Desktop\DocumentGenerator\tests\test_w3_3.py:233: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    res_record.expires_at = datetime.utcnow() - timedelta(minutes=5)
+
+tests/test_w4b1_security_and_ux.py::test_api_rejects_invalid_identifiers_with_422
+  C:\Python313\Lib\site-packages\fastapi\telemetry\_api.py:244: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return function(**arguments)
+
+tests/test_w5_ai_template.py::test_w5_invalid_spec_fails_after_retry
+tests/test_w5_ai_template.py::test_w5_jinja_injection_in_llm_output_is_escaped_or_rejected
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\api\v1\documents.py:845: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    tmpl, ver, logo_res = generate_draft_template(
+
+tests/test_w6b_admin_and_invites.py::test_invite_creation_and_role_limits
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+tests/test_w6b_admin_and_invites.py::test_cross_club_invite_mismatch_rejected
+tests/test_w6b_admin_and_invites.py::test_invite_audit_log_entries
+tests/test_w6b_e2e_browser.py::test_full_browser_e2e_flow
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\api\v1\clubs.py:1163: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    expires_at = datetime.utcnow() + timedelta(days=expiry_days)
+
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+tests/test_w6b_e2e_browser.py::test_full_browser_e2e_flow
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\api\v1\invites.py:42: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+tests/test_w6b_e2e_browser.py::test_full_browser_e2e_flow
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\api\v1\auth.py:172: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+  C:\Users\OMEN\Desktop\DocumentGenerator\tests\test_w6b_admin_and_invites.py:245: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    inv_rec.expires_at = datetime.utcnow() - timedelta(days=2)
+
+tests/test_w6b_admin_and_invites.py::test_expired_revoked_and_used_up_invites_rejected
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\api\v1\auth.py:211: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    invite_obj.accepted_at = datetime.utcnow()
+
+tests/test_w6b_admin_and_invites.py::test_cross_club_invite_mismatch_rejected
+  C:\Users\OMEN\Desktop\DocumentGenerator\server\app\api\v1\invites.py:102: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+139 passed, 3 skipped, 1256 warnings in 258.21s (0:04:18)

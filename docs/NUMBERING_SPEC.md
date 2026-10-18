@@ -49,9 +49,8 @@ In institutional document workflows, reference numbers (e.g. `ACM/2026-27/SIH/00
      - `Document` is saved with `ref_no` enforced by a database unique constraint: `UniqueConstraint("club_id", "ref_no", name="uq_document_club_ref_no")`.
 
 3. **Gaps and Audit Policy**:
-   - Reference numbers associated with expired or cancelled reservations are **NEVER** reused or rolled back.
-   - Any unfinalized or expired reservation represents a permanent documented audit gap in the numbering sequence.
-   - This ensures institutional integrity: once a number is printed, distributed, or previewed with an official series, another document can never claim that same identifier.
+   - **Individual Document Reservations**: Reference numbers associated with expired or cancelled reservations are **NEVER** reused or rolled back. Any unfinalized or expired reservation represents a permanent documented audit gap in the numbering sequence to ensure institutional integrity (once an individual number is previewed, circulated, or printed, another document can never claim that same identifier).
+   - **Batch Generation Atomic Transactions**: In batch generation, sequence allocation, document insertion, and rendering occur inside a single atomic database transaction. If ANY document in the batch fails to render (or template/system error occurs), the entire transaction is rolled back via `db.rollback()`. Because the increment statement (`UPDATE numbering_series SET last_seq = last_seq + 1`) is within the transaction scope, the series counter is reverted to its exact pre-batch value. No sequence numbers are consumed and **NO gap is created** in the numbering series.
 
 ---
 

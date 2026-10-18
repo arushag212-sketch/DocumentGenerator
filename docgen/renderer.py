@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import os
 import shutil
 import subprocess
@@ -12,11 +13,47 @@ from pathlib import Path
 from typing import Any, Optional
 
 from docxtpl import DocxTemplate
+from jinja2 import StrictUndefined
+from jinja2.sandbox import SandboxedEnvironment
 
 from docgen.config import ClubConfig, load_config
 from docgen.functions import get_function
 from docgen.models import EventRecord
 from docgen.schema import TemplateSchema, load_schema
+
+
+def safe_cap_collections(obj: Any, max_items: int = 1000) -> None:
+    """Enforce loop size cap of 1000 items on any collection."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            safe_cap_collections(v, max_items)
+    elif isinstance(obj, (list, tuple)):
+        if len(obj) > max_items:
+            raise ValueError(f"Collection exceeds maximum allowed size of {max_items} rows (found {len(obj)} items)")
+        for item in obj:
+            safe_cap_collections(item, max_items)
+
+
+def safe_render_docx(tpl: DocxTemplate, context: dict[str, Any], timeout: float = 30.0) -> None:
+    """Render a DocxTemplate with SandboxedEnvironment, StrictUndefined, 30s timeout, and 1000-row cap."""
+    safe_cap_collections(context, max_items=1000)
+
+    env = SandboxedEnvironment(autoescape=True, undefined=StrictUndefined)
+
+    def safe_range(*args):
+        r = range(*args)
+        if len(r) > 1000:
+            raise ValueError("Loop range exceeds maximum allowed size of 1000")
+        return r
+    env.globals["range"] = safe_range
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(tpl.render, context, jinja_env=env)
+        try:
+            future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            raise TimeoutError(f"Template rendering exceeded time limit of {timeout}s")
+
 
 
 class RenderResult:
@@ -74,13 +111,13 @@ class Renderer:
         # Build context from event record
         context = self._build_context(event, schema, extra_context)
 
-        # Render DOCX with autoescape=True for proper XML character escaping (e.g. &)
+        # Render DOCX with SandboxedEnvironment and StrictUndefined (autoescape=True)
         if hasattr(docx_source, "seek"):
             docx_source.seek(0)
             doc = DocxTemplate(docx_source)
         else:
             doc = DocxTemplate(str(docx_source))
-        doc.render(context, autoescape=True)
+        safe_render_docx(doc, context, timeout=30.0)
 
         # Output path
         if output_dir is None:
@@ -138,6 +175,23 @@ class Renderer:
         if self.config.faculty_co_chairman:
             ctx["faculty_co_chairman"] = self.config.faculty_co_chairman.model_dump()
 
+        # Ensure safe defaults for personnel structures so StrictUndefined never raises
+        for role_name in ("student_head", "student_secretary", "chairperson"):
+            if role_name not in ctx or not isinstance(ctx[role_name], dict):
+                ctx[role_name] = {"name": "", "admission_no": "", "branch": "", "mobile": "", "email": "", "designation": "", "roles": {}}
+            else:
+                for attr in ("name", "admission_no", "branch", "mobile", "email", "designation"):
+                    if attr not in ctx[role_name] or ctx[role_name][attr] is None:
+                        ctx[role_name][attr] = ""
+
+        for role_name in ("faculty_chairman", "faculty_co_chairman"):
+            if role_name not in ctx or not isinstance(ctx[role_name], dict):
+                ctx[role_name] = {"name": "", "mobile": "", "email": "", "department": "", "designation": "", "roles": {}}
+            else:
+                for attr in ("name", "mobile", "email", "department", "designation"):
+                    if attr not in ctx[role_name] or ctx[role_name][attr] is None:
+                        ctx[role_name][attr] = ""
+
         # Add venue info
         venue_name = ctx.get("venue", "")
         if venue_name:
@@ -149,6 +203,19 @@ class Renderer:
                     ctx["venue_tech_assistant"] = venue_config.tech_assistant.model_dump()
                 if venue_config.faculty_in_charge:
                     ctx["venue_faculty_in_charge"] = venue_config.faculty_in_charge.model_dump()
+
+        for v_role in ("venue_tech_assistant", "venue_faculty_in_charge"):
+            if v_role not in ctx or not isinstance(ctx[v_role], dict):
+                ctx[v_role] = {"name": "", "mobile": "", "phone": "", "designation": "", "roles": {"permission_letter": ""}}
+            else:
+                if "name" not in ctx[v_role] or ctx[v_role]["name"] is None:
+                    ctx[v_role]["name"] = ""
+                if "mobile" not in ctx[v_role] or ctx[v_role]["mobile"] is None:
+                    ctx[v_role]["mobile"] = ""
+                if "roles" not in ctx[v_role] or not isinstance(ctx[v_role]["roles"], dict):
+                    ctx[v_role]["roles"] = {"permission_letter": ""}
+                elif "permission_letter" not in ctx[v_role]["roles"] or ctx[v_role]["roles"]["permission_letter"] is None:
+                    ctx[v_role]["roles"]["permission_letter"] = ""
 
         # Document-specific reference number handling (Permission Letter uses room_ref_no if set)
         if schema.id == "permission_letter" and ctx.get("room_ref_no"):
@@ -305,7 +372,80 @@ class Renderer:
             fn_amount_in_words_inr, fn_ordinal, fn_today, fn_line_total,
             fn_sum, fn_tax_amount, fn_total_with_tax,
         )
-        ctx["today_str"] = fn_today()
+        # Merge extra context (e.g., custom form data, winner data for repeat_per)
+        if extra_context:
+            ctx.update(extra_context)
+
+        # Ensure safe defaults for nested winner and reimbursement data structures
+        if "winners" in ctx and isinstance(ctx["winners"], list):
+            clean_winners = []
+            for w in ctx["winners"]:
+                w_dict = w.model_dump() if hasattr(w, "model_dump") else dict(w)
+                bank_dict = w_dict.get("bank")
+                if not isinstance(bank_dict, dict) or not bank_dict:
+                    bank_dict = {
+                        "account_no": "",
+                        "name_as_per_bank": w_dict.get("name", ""),
+                        "bank_name": "",
+                        "branch": "",
+                        "ifsc": "",
+                        "pan": "",
+                    }
+                else:
+                    bank_dict = dict(bank_dict)
+                    for bk in ("account_no", "name_as_per_bank", "bank_name", "branch", "ifsc", "pan"):
+                        if bk not in bank_dict or bank_dict[bk] is None:
+                            bank_dict[bk] = w_dict.get("name", "") if bk == "name_as_per_bank" else ""
+                w_dict["bank"] = bank_dict
+                for wk in ("name", "position", "amount", "roll_no", "course_semester", "mobile"):
+                    if wk not in w_dict or w_dict[wk] is None:
+                        w_dict[wk] = ""
+                clean_winners.append(w_dict)
+            ctx["winners"] = clean_winners
+
+        if "winner" in ctx and ctx["winner"]:
+            w = ctx["winner"]
+            w_dict = w.model_dump() if hasattr(w, "model_dump") else dict(w)
+            bank_dict = w_dict.get("bank")
+            if not isinstance(bank_dict, dict) or not bank_dict:
+                bank_dict = {
+                    "account_no": "",
+                    "name_as_per_bank": w_dict.get("name", ""),
+                    "bank_name": "",
+                    "branch": "",
+                    "ifsc": "",
+                    "pan": "",
+                }
+            else:
+                bank_dict = dict(bank_dict)
+                for bk in ("account_no", "name_as_per_bank", "bank_name", "branch", "ifsc", "pan"):
+                    if bk not in bank_dict or bank_dict[bk] is None:
+                        bank_dict[bk] = w_dict.get("name", "") if bk == "name_as_per_bank" else ""
+            w_dict["bank"] = bank_dict
+            for wk in ("name", "position", "amount", "roll_no", "course_semester", "mobile"):
+                if wk not in w_dict or w_dict[wk] is None:
+                    w_dict[wk] = ""
+            ctx["winner"] = w_dict
+
+        if "other_reimbursements" in ctx and isinstance(ctx["other_reimbursements"], list):
+            clean_reimb = []
+            for r in ctx["other_reimbursements"]:
+                r_dict = r.model_dump() if hasattr(r, "model_dump") else dict(r)
+                for rk in ("name", "account_no", "ifsc", "amount"):
+                    if rk not in r_dict or r_dict[rk] is None:
+                        r_dict[rk] = ""
+                clean_reimb.append(r_dict)
+            ctx["other_reimbursements"] = clean_reimb
+
+        if "budget_items" in ctx and isinstance(ctx["budget_items"], list):
+            clean_budget = []
+            for b in ctx["budget_items"]:
+                b_dict = b.model_dump() if hasattr(b, "model_dump") else dict(b)
+                for bk in ("item", "amount"):
+                    if bk not in b_dict or b_dict[bk] is None:
+                        b_dict[bk] = ""
+                clean_budget.append(b_dict)
+            ctx["budget_items"] = clean_budget
 
         # Compute bill totals and line totals if bill_items present
         if ctx.get("bill_items") and isinstance(ctx["bill_items"], list):
@@ -362,10 +502,20 @@ class Renderer:
         # Date formatting
         if ctx.get("date_start") and ctx.get("date_end"):
             ctx["date_range_str"] = fn_format_date_range(ctx["date_start"], ctx["date_end"])
+            if not ctx.get("dates"):
+                ctx["dates"] = ctx["date_range_str"]
         elif ctx.get("date_start"):
             ctx["date_range_str"] = fn_format_date(ctx["date_start"])
+            if not ctx.get("dates"):
+                ctx["dates"] = ctx["date_range_str"]
         elif ctx.get("dates"):
             ctx["date_range_str"] = fn_format_date(str(ctx["dates"]))
+
+        from docgen.functions import fn_format_time
+        if ctx.get("time_start"):
+            ctx["time_start"] = fn_format_time(ctx["time_start"])
+        if ctx.get("time_end"):
+            ctx["time_end"] = fn_format_time(ctx["time_end"])
 
         # Permission Letter Schedule & Description Formatting per official institutional sample
         if schema.id == "permission_letter":
@@ -397,9 +547,11 @@ class Renderer:
         else:
             ctx["document_date"] = fn_format_date(raw_doc_date)
 
-        # Merge extra context (e.g., winner data for repeat_per)
-        if extra_context:
-            ctx.update(extra_context)
+
+        # Standardize all schema date fields to DD/MM/YYYY
+        for f in schema.fields:
+            if f.type == "date" and ctx.get(f.key):
+                ctx[f.key] = fn_format_date(ctx[f.key])
 
         # Requirement 5: Money formatting must use ONLY the schema field type `money`
         # plus computed fields declared `format: inr`
@@ -407,14 +559,25 @@ class Renderer:
             f.key for f in schema.fields 
             if f.type == "money" or (getattr(f, "format", None) == "inr")
         }
+        for f in schema.fields:
+            if getattr(f, "columns", None):
+                for col in f.columns:
+                    if isinstance(col, dict) and (col.get("type") == "money" or col.get("key") in ("amount", "price", "unit_cost", "line_total")):
+                        money_keys.add(col.get("key"))
         # In bill_certificate, bill_total, tax_amount, bill_total_with_tax are money fields
         if schema.id == "bill_certificate":
             money_keys.update({"bill_total", "tax_amount", "bill_total_with_tax", "bill_amount", "unit_cost", "line_total"})
         elif schema.id == "bill_summary":
             money_keys.update({"prize_total", "other_total", "grand_total", "amount"})
+        money_keys.add("amount")
 
         # Convert Decimal values (format strictly as INR if field is in money_keys, otherwise keep plain numeric string)
         ctx = self._convert_decimals(ctx, money_keys)
+
+        # Ensure optional/missing schema fields have default empty strings so StrictUndefined succeeds
+        for f in schema.fields:
+            if f.key not in ctx or ctx[f.key] is None:
+                ctx[f.key] = ""
 
         # GLOBAL GUARD (Extended per Requirement 2 & W3.1):
         # 1. Any context value that is callable, a function/method repr, or contains "<function", "<bound", "object at 0x", "[AI-drafted" must raise.
@@ -487,6 +650,9 @@ class Renderer:
             if obj % 1 == 0:
                 return str(int(obj))
             return str(obj)
+        elif isinstance(obj, (int, float)) and not isinstance(obj, bool) and current_key in money_keys:
+            from docgen.functions import fn_format_inr
+            return fn_format_inr(Decimal(str(obj)))
         elif isinstance(obj, dict):
             return {k: self._convert_decimals(v, money_keys, k) for k, v in obj.items()}
         elif isinstance(obj, list):

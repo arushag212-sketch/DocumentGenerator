@@ -12,6 +12,28 @@ from pydantic import BaseModel
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 
+
+def _load_env_file():
+    """Load key-value pairs from .env in BASE_DIR into os.environ if not already present."""
+    env_file = BASE_DIR / ".env"
+    if env_file.exists():
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k and k not in os.environ:
+                        os.environ[k] = v
+        except Exception:
+            pass
+
+
+_load_env_file()
+
 KNOWN_INSECURE_DEFAULTS = {
     "c1ubd0cs-svnit-s3cur3-k3y-ph4s3-w2-k33p-s3cr3t-pr0ducti0n",
     "svnit-docgen-aes256-key-32bytes-secret!",
