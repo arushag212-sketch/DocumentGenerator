@@ -49,6 +49,10 @@ ALLOWED_BLOCK_TYPES = {
     "repeatingTable",
     "signatureGrid",
     "pageBreak",
+    "table",
+    "tableRow",
+    "tableCell",
+    "tableHeader",
 }
 
 ALLOWED_FIELD_TYPES = {

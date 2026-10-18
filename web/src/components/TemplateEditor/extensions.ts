@@ -1,4 +1,8 @@
 import { Node, Extension, mergeAttributes } from '@tiptap/core';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
 
 export const AiSuggestedBlock = Extension.create({
   name: 'aiSuggestedBlock',
@@ -9,16 +13,16 @@ export const AiSuggestedBlock = Extension.create({
         attributes: {
           ai_suggested: {
             default: false,
-            parseHTML: element => element.getAttribute('data-ai-suggested') === 'true',
-            renderHTML: attributes => {
+            parseHTML: (element: any) => element.getAttribute('data-ai-suggested') === 'true',
+            renderHTML: (attributes: any) => {
               if (!attributes.ai_suggested) return {};
               return { 'data-ai-suggested': 'true' };
             },
           },
           official_wording_required: {
             default: false,
-            parseHTML: element => element.getAttribute('data-official-wording') === 'true',
-            renderHTML: attributes => {
+            parseHTML: (element: any) => element.getAttribute('data-official-wording') === 'true',
+            renderHTML: (attributes: any) => {
               if (!attributes.official_wording_required) return {};
               return { 'data-official-wording': 'true' };
             },
@@ -77,234 +81,80 @@ export const FieldChip = Node.create({
   },
 });
 
-export const InfoTable = Node.create({
-  name: 'infoTable',
-  group: 'block',
-  atom: true,
-
+export const CustomTable = Table.extend({
   addAttributes() {
     return {
-      title: { default: 'Details' },
-      ai_suggested: {
-        default: false,
-        parseHTML: element => element.getAttribute('data-ai-suggested') === 'true',
-        renderHTML: attributes => (attributes.ai_suggested ? { 'data-ai-suggested': 'true' } : {}),
-      },
-      rows: {
-        default: [
-          { label: 'Event Title', field: 'event_name', value: '' },
-          { label: 'Date', field: 'event_date', value: '' },
-          { label: 'Venue', field: 'venue', value: '' },
-        ],
-      },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: 'div[data-type="info-table"]' }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    const rows = HTMLAttributes.rows || [];
-    const isAi = HTMLAttributes.ai_suggested || HTMLAttributes['data-ai-suggested'] === 'true';
-    const rowElements = rows.map((r: any) => [
-      'tr',
-      { class: 'border-b border-slate-200' },
-      ['td', { class: 'py-2 px-3 bg-slate-100 font-semibold text-xs text-slate-700 w-1/3' }, r.label || 'Label'],
-      [
-        'td',
-        { class: 'py-2 px-3 text-xs text-slate-800 bg-white' },
-        r.field
-          ? [
-              'span',
-              {
-                class:
-                  'field-chip inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-300 shadow-xs',
-              },
-              `⚡ ${r.field}`,
-            ]
-          : r.value || '',
-      ],
-    ]);
-
-    return [
-      'div',
-      mergeAttributes(HTMLAttributes, {
-        'data-type': 'info-table',
-        class: 'info-table-block my-4 p-3 border border-slate-300 rounded-lg bg-slate-50 shadow-sm',
-      }),
-      ['div', { class: 'text-xs font-bold text-slate-600 uppercase tracking-wide mb-2 flex items-center justify-between' },
-        ['span', { class: 'flex items-center gap-2' },
-          ['span', {}, '📋 Info Table (Label : Value)'],
-          isAi ? ['span', { class: 'text-[9px] bg-purple-100 text-purple-700 font-semibold px-2 py-0.5 rounded-full border border-purple-200 shadow-xs' }, 'AI-suggested'] : '',
-        ],
-        ['span', { class: 'text-[10px] text-slate-400 font-normal' }, `${rows.length} rows`],
-      ],
-      ['table', { class: 'w-full text-left border-collapse border border-slate-200 rounded overflow-hidden' },
-        ['tbody', {}, ...rowElements],
-      ],
-    ];
-  },
-});
-
-export const RepeatingTable = Node.create({
-  name: 'repeatingTable',
-  group: 'block',
-  atom: true,
-
-  addAttributes() {
-    return {
-      listVariable: { default: 'sponsorship_tiers' },
-      itemAlias: { default: 'tier' },
-      ai_suggested: {
-        default: false,
-        parseHTML: element => element.getAttribute('data-ai-suggested') === 'true',
-        renderHTML: attributes => (attributes.ai_suggested ? { 'data-ai-suggested': 'true' } : {}),
-      },
-      columns: {
-        default: [
-          { key: 'tier_name', label: 'Tier', align: 'left' },
-          { key: 'benefits', label: 'Benefits', align: 'left' },
-          { key: 'amount', label: 'Contribution (INR)', align: 'right' },
-        ],
-      },
-      hasTotal: { default: true },
-      totalLabel: { default: 'Total Contribution' },
-      totalField: { default: 'amount' },
-      totalVarName: { default: 'total_sponsorship_amount' },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: 'div[data-type="repeating-table"]' }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    const cols = HTMLAttributes.columns || [];
-    const listVar = HTMLAttributes.listVariable || 'items';
-    const isAi = HTMLAttributes.ai_suggested || HTMLAttributes['data-ai-suggested'] === 'true';
-
-    const headerCols = cols.map((c: any) => [
-      'th',
-      { class: `py-2 px-3 bg-blue-100 text-blue-900 font-bold text-xs uppercase tracking-wider text-${c.align || 'left'}` },
-      c.label || c.key,
-    ]);
-
-    const sampleRow = cols.map((c: any) => [
-      'td',
-      { class: `py-2 px-3 text-xs text-slate-700 bg-white text-${c.align || 'left'}` },
-      [
-        'span',
-        {
-          class:
-            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200',
+      ...this.parent?.(),
+      blockType: {
+        default: 'generic',
+        parseHTML: (element: any) => element.getAttribute('data-block-type') || 'generic',
+        renderHTML: (attributes: any) => {
+          const bt = attributes.blockType || 'generic';
+          const classMap: Record<string, string> = {
+            infoTable: 'cd-info-table',
+            repeatingTable: 'cd-repeating-table',
+            signatureGrid: 'cd-signature-grid',
+          };
+          const extra = classMap[bt] ? ` ${classMap[bt]}` : '';
+          return {
+            'data-block-type': bt,
+            class: `cd-table cd-${bt}${extra}`,
+          };
         },
-        `⚡ ${c.key}`,
-      ],
-    ]);
-
-    const rows = [
-      ['tr', {}, ...headerCols],
-      ['tr', { class: 'border-b border-blue-100' }, ...sampleRow],
-    ];
-
-    if (HTMLAttributes.hasTotal) {
-      rows.push([
-        'tr',
-        { class: 'bg-blue-50/80 font-bold border-t-2 border-blue-300' },
-        ['td', { class: 'py-2 px-3 text-xs text-blue-950 font-bold' }, HTMLAttributes.totalLabel || 'Total'],
-        ...Array(Math.max(cols.length - 2, 0)).fill(['td', { class: 'py-2 px-3' }, '']),
-        [
-          'td',
-          { class: 'py-2 px-3 text-xs text-blue-950 font-bold text-right' },
-          [
-            'span',
-            {
-              class:
-                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-200 text-blue-900 border border-blue-300',
-            },
-            `⚡ ∑ ${HTMLAttributes.totalVarName || 'total_amount'}`,
-          ],
-        ],
-      ]);
-    }
-
-    return [
-      'div',
-      mergeAttributes(HTMLAttributes, {
-        'data-type': 'repeating-table',
-        class: 'repeating-table-block my-4 p-3 border border-blue-200 rounded-lg bg-blue-50/40 shadow-sm',
-      }),
-      ['div', { class: 'text-xs font-bold text-blue-800 uppercase tracking-wide mb-2 flex items-center justify-between' },
-        ['span', { class: 'flex items-center gap-2' },
-          ['span', { class: 'font-bold' }, '🔁 Repeating Table'],
-          ['span', { class: 'text-[11px] font-normal px-2 py-0.5 rounded bg-blue-200 text-blue-800' }, `repeats for each row of <${listVar}>`],
-          isAi ? ['span', { class: 'text-[9px] bg-purple-100 text-purple-700 font-semibold px-2 py-0.5 rounded-full border border-purple-200 shadow-xs' }, 'AI-suggested'] : '',
-        ],
-        ['span', { class: 'text-[10px] text-blue-600 bg-blue-100 px-2 py-0.5 rounded' }, HTMLAttributes.hasTotal ? 'Computed Total Enabled' : 'No Total'],
-      ],
-      ['table', { class: 'w-full text-left border-collapse border border-blue-200 rounded overflow-hidden' },
-        ['tbody', {}, ...rows],
-      ],
-    ];
-  },
-});
-
-export const SignatureGrid = Node.create({
-  name: 'signatureGrid',
-  group: 'block',
-  atom: true,
-
-  addAttributes() {
-    return {
-      columns: { default: 3 },
-      ai_suggested: {
-        default: false,
-        parseHTML: element => element.getAttribute('data-ai-suggested') === 'true',
-        renderHTML: attributes => (attributes.ai_suggested ? { 'data-ai-suggested': 'true' } : {}),
       },
-      signatures: {
-        default: [
-          { label: 'Student Coordinator', designation: 'ACM Student Chapter' },
-          { label: 'Faculty Advisor', designation: 'DoCSE, SVNIT' },
-          { label: 'Head of Department', designation: 'DoCSE, SVNIT' },
-        ],
+      listVariable: {
+        default: null,
+        parseHTML: (element: any) => element.getAttribute('data-list-var'),
+        renderHTML: (attributes: any) => (attributes.listVariable ? { 'data-list-var': attributes.listVariable } : {}),
+      },
+      itemAlias: {
+        default: null,
+        parseHTML: (element: any) => element.getAttribute('data-item-alias'),
+        renderHTML: (attributes: any) => (attributes.itemAlias ? { 'data-item-alias': attributes.itemAlias } : {}),
+      },
+      hasTotal: {
+        default: false,
+        parseHTML: (element: any) => element.getAttribute('data-has-total') === 'true',
+        renderHTML: (attributes: any) => (attributes.hasTotal ? { 'data-has-total': 'true' } : {}),
+      },
+      totalLabel: {
+        default: 'Total',
+        parseHTML: (element: any) => element.getAttribute('data-total-label') || 'Total',
+        renderHTML: (attributes: any) => (attributes.totalLabel ? { 'data-total-label': attributes.totalLabel } : {}),
+      },
+      totalVarName: {
+        default: null,
+        parseHTML: (element: any) => element.getAttribute('data-total-var'),
+        renderHTML: (attributes: any) => (attributes.totalVarName ? { 'data-total-var': attributes.totalVarName } : {}),
       },
     };
   },
 
-  parseHTML() {
-    return [{ tag: 'div[data-type="signature-grid"]' }];
-  },
+  renderHTML({ node, HTMLAttributes }): any {
+    const bt = node.attrs.blockType || 'generic';
+    const classMap: Record<string, string> = {
+      infoTable: 'cd-info-table',
+      repeatingTable: 'cd-repeating-table',
+      signatureGrid: 'cd-signature-grid',
+    };
+    const extra = classMap[bt] ? ` ${classMap[bt]}` : '';
+    const tableClass = `cd-table cd-${bt}${extra}`;
 
-  renderHTML({ HTMLAttributes }) {
-    const signs = HTMLAttributes.signatures || [];
-    const isAi = HTMLAttributes.ai_suggested || HTMLAttributes['data-ai-suggested'] === 'true';
-    const cols = signs.map((s: any) => [
-      'div',
-      { class: 'flex-1 text-center p-3 border border-gray-200 bg-white rounded flex flex-col items-center justify-between min-h-[90px]' },
-      ['div', { class: 'w-full border-b border-gray-300 mt-6 mb-2' }],
-      ['div', { class: 'text-xs font-bold text-gray-800' }, s.label || 'Signee'],
-      ['div', { class: 'text-[10px] text-gray-500' }, s.designation || ''],
-    ]);
-
-    return [
-      'div',
-      mergeAttributes(HTMLAttributes, {
-        'data-type': 'signature-grid',
-        class: 'signature-grid-block my-6 p-4 border border-gray-300 rounded-lg bg-gray-50 shadow-sm',
-      }),
-      ['div', { class: 'text-xs font-bold text-gray-600 uppercase tracking-wide mb-3 flex items-center justify-between' },
-        ['span', { class: 'flex items-center gap-2' },
-          ['span', {}, '✍️ Signature Grid (Keeps Rows Together)'],
-          isAi ? ['span', { class: 'text-[9px] bg-purple-100 text-purple-700 font-semibold px-2 py-0.5 rounded-full border border-purple-200 shadow-xs' }, 'AI-suggested'] : '',
-        ],
-        ['span', { class: 'text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-mono' }, 'cantSplit & keepWithNext'],
-      ],
-      ['div', { class: 'flex gap-4' }, ...cols],
-    ];
+    const parentRender = this.parent?.({ node, HTMLAttributes }) as any;
+    if (Array.isArray(parentRender) && parentRender.length >= 2) {
+      parentRender[1] = mergeAttributes(parentRender[1] || {}, {
+        class: tableClass,
+        'data-block-type': bt,
+      });
+      return parentRender;
+    }
+    return ['table', mergeAttributes(HTMLAttributes, { class: tableClass, 'data-block-type': bt }), 0];
   },
 });
+
+export const CustomTableRow = TableRow;
+export const CustomTableCell = TableCell;
+export const CustomTableHeader = TableHeader;
 
 export const PageBreak = Node.create({
   name: 'pageBreak',
@@ -320,9 +170,246 @@ export const PageBreak = Node.create({
       'div',
       mergeAttributes(HTMLAttributes, {
         'data-type': 'page-break',
-        class: 'page-break my-6 py-2 border-b-2 border-dashed border-gray-400 text-center text-xs font-mono text-gray-500 uppercase tracking-widest bg-gray-50 rounded select-none',
+        class:
+          'page-break my-6 py-2 border-b-2 border-dashed border-gray-400 text-center text-xs font-mono text-gray-500 uppercase tracking-widest bg-gray-50 rounded select-none',
       }),
       '--- PAGE BREAK ---',
     ];
   },
 });
+
+// Helper Content Creators for Native Tables
+export function createInfoTableNode(
+  rows: Array<{ label: string; field?: string; value?: string }> = [
+    { label: 'Event Title', field: 'event_name' },
+    { label: 'Date', field: 'event_date' },
+    { label: 'Venue', field: 'venue' },
+  ]
+) {
+  return {
+    type: 'table',
+    attrs: { blockType: 'infoTable', class: 'cd-info-table' },
+    content: rows.map(r => ({
+      type: 'tableRow',
+      content: [
+        {
+          type: 'tableCell',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: r.label }] }],
+        },
+        {
+          type: 'tableCell',
+          content: [
+            {
+              type: 'paragraph',
+              content: r.field
+                ? [{ type: 'fieldChip', attrs: { fieldName: r.field, label: r.field, fieldType: 'text' } }]
+                : r.value
+                ? [{ type: 'text', text: r.value }]
+                : [],
+            },
+          ],
+        },
+      ],
+    })),
+  };
+}
+
+export function createRepeatingTableNode(
+  cols: Array<{ key: string; label: string }> = [
+    { key: 'description', label: 'Item Description' },
+    { key: 'amount', label: 'Amount (INR)' },
+  ],
+  listVar = 'budget_items',
+  itemAlias = 'item',
+  hasTotal = true,
+  totalLabel = 'Total Budget',
+  totalVarName = 'total_budget_amount'
+) {
+  const headerRow = {
+    type: 'tableRow',
+    content: cols.map(c => ({
+      type: 'tableHeader',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: c.label }] }],
+    })),
+  };
+
+  const dataRow = {
+    type: 'tableRow',
+    content: cols.map(c => ({
+      type: 'tableCell',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'fieldChip',
+              attrs: { fieldName: `${listVar}.${c.key}`, label: `${itemAlias}.${c.key}`, fieldType: 'text' },
+            },
+          ],
+        },
+      ],
+    })),
+  };
+
+  const rows = [headerRow, dataRow];
+
+  if (hasTotal && cols.length > 0) {
+    const totalCells: any[] = [
+      {
+        type: 'tableCell',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: totalLabel }] }],
+      },
+    ];
+    for (let i = 0; i < cols.length - 2; i++) {
+      totalCells.push({
+        type: 'tableCell',
+        content: [{ type: 'paragraph' }],
+      });
+    }
+    if (cols.length > 1) {
+      totalCells.push({
+        type: 'tableCell',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'fieldChip',
+                attrs: { fieldName: totalVarName, label: totalVarName, fieldType: 'money' },
+              },
+            ],
+          },
+        ],
+      });
+    }
+    rows.push({ type: 'tableRow', content: totalCells });
+  }
+
+  return {
+    type: 'table',
+    attrs: {
+      blockType: 'repeatingTable',
+      class: 'cd-repeating-table',
+      listVariable: listVar,
+      itemAlias: itemAlias,
+      hasTotal: hasTotal,
+      totalLabel: totalLabel,
+      totalVarName: totalVarName,
+    },
+    content: rows,
+  };
+}
+
+export function createSignatureGridNode(
+  count = 2,
+  signatures: Array<{ label: string; designation?: string }> = [
+    { label: 'Student Chairperson', designation: 'Club Executive Committee' },
+    { label: 'Faculty Advisor', designation: 'SVNIT Surat' },
+  ]
+) {
+  const signs = signatures.slice(0, count);
+  return {
+    type: 'table',
+    attrs: { blockType: 'signatureGrid', class: 'cd-signature-grid', columns: count },
+    content: [
+      {
+        type: 'tableRow',
+        content: signs.map(s => ({
+          type: 'tableCell',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: s.label }] },
+            { type: 'paragraph', content: [{ type: 'text', text: s.designation || '' }] },
+          ],
+        })),
+      },
+    ],
+  };
+}
+
+export function safeInsertBlock(editor: any, nodeJSON: any) {
+  if (!editor) return;
+  try {
+    if (editor.can().insertContent(nodeJSON)) {
+      editor.chain().focus().insertContent(nodeJSON).run();
+      return;
+    }
+  } catch {
+    // continue to fallback
+  }
+
+  try {
+    const { $to } = editor.state.selection;
+    const depth = Math.min($to.depth, 1);
+    const afterPos = depth > 0 ? $to.after(depth) : editor.state.doc.content.size;
+    editor.chain().focus().insertContentAt(afterPos, nodeJSON).run();
+  } catch {
+    try {
+      editor.chain().focus().insertContentAt(editor.state.doc.content.size, nodeJSON).run();
+    } catch (err) {
+      console.error('Failed to insert block:', err);
+    }
+  }
+}
+
+export function insertInfoTable(editor: any, rows?: any[]) {
+  const node = createInfoTableNode(rows);
+  safeInsertBlock(editor, node);
+}
+
+export function insertRepeatingTable(editor: any, cols?: any[], listVar?: string, itemAlias?: string) {
+  const node = createRepeatingTableNode(cols, listVar, itemAlias);
+  safeInsertBlock(editor, node);
+}
+
+export function insertSignatureGrid(editor: any, count = 2, signatures?: any[]) {
+  const node = createSignatureGridNode(count, signatures);
+  safeInsertBlock(editor, node);
+}
+
+export function insertFieldChip(editor: any, fieldName: string, label?: string, fieldType = 'text') {
+  editor
+    .chain()
+    .focus()
+    .insertContent({
+      type: 'fieldChip',
+      attrs: {
+        fieldName,
+        label: label || fieldName,
+        fieldType,
+      },
+    })
+    .run();
+}
+
+/**
+ * Transparently converts legacy atom nodes (infoTable, repeatingTable, signatureGrid)
+ * into native TipTap table nodes before loading into the editor.
+ */
+export function migrateTipTapContent(content: any): any {
+  if (!content || !content.content || !Array.isArray(content.content)) {
+    return content;
+  }
+  const newContent: any[] = [];
+  for (const block of content.content) {
+    if (block.type === 'infoTable') {
+      const rows = block.attrs?.rows || [];
+      newContent.push(createInfoTableNode(rows));
+    } else if (block.type === 'repeatingTable') {
+      const cols = block.attrs?.columns || [];
+      const listVar = block.attrs?.listVariable || 'budget_items';
+      const itemAlias = block.attrs?.itemAlias || 'item';
+      const hasTotal = block.attrs?.hasTotal ?? true;
+      const totalLabel = block.attrs?.totalLabel || 'Total';
+      const totalVar = block.attrs?.totalVarName || `total_${listVar}_amount`;
+      newContent.push(createRepeatingTableNode(cols, listVar, itemAlias, hasTotal, totalLabel, totalVar));
+    } else if (block.type === 'signatureGrid') {
+      const signs = block.attrs?.signatures || [];
+      const count = block.attrs?.columns || (signs.length > 0 ? signs.length : 2);
+      newContent.push(createSignatureGridNode(count, signs));
+    } else {
+      newContent.push(block);
+    }
+  }
+  return { ...content, content: newContent };
+}
+

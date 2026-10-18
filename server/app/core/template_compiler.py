@@ -115,6 +115,174 @@ def validate_identifier(name: str, identifier_type: str = "Identifier") -> None:
         )
 
 
+def migrate_template_content(content: dict[str, Any]) -> dict[str, Any]:
+    """Migrate legacy TipTap atom nodes (infoTable, repeatingTable, signatureGrid) into native editable TipTap table nodes."""
+    if not isinstance(content, dict):
+        return content
+
+    blocks = content.get("content", [])
+    if not isinstance(blocks, list):
+        return content
+
+    new_blocks = []
+    for b in blocks:
+        if not isinstance(b, dict):
+            new_blocks.append(b)
+            continue
+
+        b_type = b.get("type")
+        attrs = b.get("attrs", {})
+
+        if b_type == "infoTable":
+            rows = b.get("rows") or attrs.get("rows") or []
+            table_rows = []
+            for r in rows:
+                label = str(r.get("label", "Label"))
+                field_name = r.get("field") or r.get("key")
+                val_text = r.get("value")
+
+                val_content = []
+                if field_name:
+                    val_content = [{
+                        "type": "fieldChip",
+                        "attrs": {"fieldName": field_name, "label": field_name, "fieldType": "text"}
+                    }]
+                elif val_text:
+                    val_content = [{"type": "text", "text": str(val_text)}]
+                else:
+                    val_content = []
+
+                table_rows.append({
+                    "type": "tableRow",
+                    "content": [
+                        {
+                            "type": "tableCell",
+                            "content": [{"type": "paragraph", "content": [{"type": "text", "text": label}]}]
+                        },
+                        {
+                            "type": "tableCell",
+                            "content": [{"type": "paragraph", "content": val_content}] if val_content else [{"type": "paragraph"}]
+                        }
+                    ]
+                })
+
+            new_blocks.append({
+                "type": "table",
+                "attrs": {
+                    "blockType": "infoTable",
+                    "class": "cd-info-table",
+                },
+                "content": table_rows
+            })
+
+        elif b_type == "repeatingTable":
+            cols = attrs.get("columns", [])
+            list_var = attrs.get("listVariable", "budget_items")
+            item_alias = attrs.get("itemAlias", "item")
+            has_total = attrs.get("hasTotal", False)
+            total_label = attrs.get("totalLabel", "Total")
+            total_var_name = attrs.get("totalVarName") or f"total_{list_var}_amount"
+
+            header_cells = [
+                {
+                    "type": "tableHeader",
+                    "content": [{"type": "paragraph", "content": [{"type": "text", "text": str(c.get("label", c.get("key", "Column")))}]}]
+                }
+                for c in cols
+            ]
+            table_rows = [{"type": "tableRow", "content": header_cells}]
+
+            data_cells = [
+                {
+                    "type": "tableCell",
+                    "content": [{
+                        "type": "paragraph",
+                        "content": [{
+                            "type": "fieldChip",
+                            "attrs": {
+                                "fieldName": f"{list_var}.{c.get('key', '')}" if c.get("key") else "",
+                                "label": c.get("label", c.get("key", "")),
+                                "fieldType": "text"
+                            }
+                        }]
+                    }]
+                }
+                for c in cols
+            ]
+            table_rows.append({"type": "tableRow", "content": data_cells})
+
+            if has_total and cols:
+                total_cells = [
+                    {
+                        "type": "tableCell",
+                        "content": [{"type": "paragraph", "content": [{"type": "text", "text": total_label}]}]
+                    }
+                ]
+                for _ in range(max(len(cols) - 2, 0)):
+                    total_cells.append({"type": "tableCell", "content": [{"type": "paragraph"}]})
+                if len(cols) > 1:
+                    total_cells.append({
+                        "type": "tableCell",
+                        "content": [{
+                            "type": "paragraph",
+                            "content": [{
+                                "type": "fieldChip",
+                                "attrs": {
+                                    "fieldName": total_var_name,
+                                    "label": total_var_name,
+                                    "fieldType": "money"
+                                }
+                            }]
+                        }]
+                    })
+                table_rows.append({"type": "tableRow", "content": total_cells})
+
+            new_blocks.append({
+                "type": "table",
+                "attrs": {
+                    "blockType": "repeatingTable",
+                    "class": "cd-repeating-table",
+                    "listVariable": list_var,
+                    "itemAlias": item_alias,
+                    "hasTotal": has_total,
+                    "totalLabel": total_label,
+                    "totalVarName": total_var_name,
+                },
+                "content": table_rows
+            })
+
+        elif b_type == "signatureGrid":
+            signatures = attrs.get("signatures", [])
+            cells = []
+            for s in signatures:
+                label = str(s.get("label", "Signee"))
+                desig = str(s.get("designation", ""))
+                cell_content = [{"type": "paragraph", "content": [{"type": "text", "text": label}]}]
+                if desig:
+                    cell_content.append({"type": "paragraph", "content": [{"type": "text", "text": desig}]})
+                cells.append({
+                    "type": "tableCell",
+                    "content": cell_content
+                })
+
+            new_blocks.append({
+                "type": "table",
+                "attrs": {
+                    "blockType": "signatureGrid",
+                    "class": "cd-signature-grid",
+                    "columns": len(signatures) or 2
+                },
+                "content": [{"type": "tableRow", "content": cells}] if cells else []
+            })
+
+        else:
+            new_blocks.append(b)
+
+    migrated = dict(content)
+    migrated["content"] = new_blocks
+    return migrated
+
+
 def validate_template_identifiers(editor_json: dict[str, Any] | None, fields: list[dict[str, Any]] | None) -> None:
     """Validate all identifiers in schema fields and editor JSON blocks for strict compliance and uniqueness."""
     seen_field_keys: set[str] = set()
@@ -137,11 +305,24 @@ def validate_template_identifiers(editor_json: dict[str, Any] | None, fields: li
                         seen_col_keys.add(ckey)
 
     if editor_json and isinstance(editor_json, dict):
-        blocks = editor_json.get("content", [])
+        migrated_json = migrate_template_content(editor_json)
+        blocks = migrated_json.get("content", [])
         for b in blocks:
             b_type = b.get("type")
             attrs = b.get("attrs", {})
-            if b_type == "repeatingTable":
+            if b_type == "table":
+                block_type = attrs.get("blockType") or ""
+                if block_type == "repeatingTable" or "cd-repeating-table" in attrs.get("class", ""):
+                    list_var = attrs.get("listVariable")
+                    if list_var:
+                        validate_identifier(list_var, "List variable")
+                    item_alias = attrs.get("itemAlias")
+                    if item_alias:
+                        validate_identifier(item_alias, "Item alias")
+                    tot_var = attrs.get("totalVarName")
+                    if tot_var:
+                        validate_identifier(tot_var, "Total variable name")
+            elif b_type == "repeatingTable":
                 list_var = attrs.get("listVariable")
                 if list_var:
                     validate_identifier(list_var, "List variable")
@@ -151,22 +332,7 @@ def validate_template_identifiers(editor_json: dict[str, Any] | None, fields: li
                 tot_var = attrs.get("totalVarName")
                 if tot_var:
                     validate_identifier(tot_var, "Total variable name")
-                cols = attrs.get("columns", [])
-                seen_cols: set[str] = set()
-                for col in cols:
-                    ckey = col.get("key")
-                    if ckey:
-                        validate_identifier(ckey, "Column key in repeatingTable")
-                        if ckey in seen_cols:
-                            raise ValueError(f"Duplicate column key '{ckey}' in repeatingTable. Column keys must be unique.")
-                        seen_cols.add(ckey)
-            elif b_type == "infoTable":
-                rows = b.get("rows") or attrs.get("rows") or []
-                for r in rows:
-                    f_name = r.get("field") or r.get("key")
-                    if f_name:
-                        validate_identifier(f_name, "Info table field")
-            elif b.get("content"):
+            if b.get("content"):
                 _validate_chips_recursive(b.get("content") or [])
 
 
@@ -177,7 +343,12 @@ def _validate_chips_recursive(nodes: list[dict[str, Any]] | None) -> None:
         if node.get("type") == "fieldChip":
             fn = node.get("attrs", {}).get("fieldName")
             if fn:
-                validate_identifier(fn, "Field chip name")
+                for part in fn.split("."):
+                    if part:
+                        validate_identifier(part, "Field chip identifier part")
+        if node.get("content"):
+            _validate_chips_recursive(node.get("content"))
+
         if "content" in node and isinstance(node["content"], list):
             _validate_chips_recursive(node["content"])
 
@@ -378,7 +549,7 @@ class TipTapDocxCompiler:
 
     def __init__(self, editor_json: dict[str, Any], fields: list[dict[str, Any]],
                  club_slug: str = "acm", letterhead_cfg: dict[str, Any] | None = None):
-        self.editor_json = editor_json or {"type": "doc", "content": []}
+        self.editor_json = migrate_template_content(editor_json or {"type": "doc", "content": []})
         self.fields = fields or []
         self.fields_by_key = {f.get("key"): f for f in self.fields if f.get("key")}
         self.club_slug = club_slug
@@ -418,6 +589,8 @@ class TipTapDocxCompiler:
                 self._add_paragraph(block)
             elif b_type in ("bulletList", "orderedList"):
                 self._add_list(block, ordered=(b_type == "orderedList"))
+            elif b_type == "table":
+                self._add_native_table(block)
             elif b_type == "infoTable":
                 self._add_info_table(block)
             elif b_type == "repeatingTable":
@@ -825,6 +998,324 @@ class TipTapDocxCompiler:
                         r2.font.size = Pt(8.5)
                         r2.font.color.rgb = RGBColor(0x4B, 0x55, 0x63)
 
+    def _add_native_table(self, block: dict[str, Any]):
+        """Render native TipTap table (infoTable, repeatingTable, signatureGrid, or generic)."""
+        attrs = block.get("attrs", {})
+        block_type = attrs.get("blockType") or attrs.get("data-block-type") or ""
+        css_class = attrs.get("class", "")
+
+        if block_type == "infoTable" or "cd-info-table" in css_class:
+            self._render_native_info_table(block)
+        elif block_type == "repeatingTable" or "cd-repeating-table" in css_class:
+            self._render_native_repeating_table(block)
+        elif block_type == "signatureGrid" or "cd-signature-grid" in css_class:
+            self._render_native_signature_grid(block)
+        else:
+            self._render_generic_table(block)
+
+    def _render_native_info_table(self, block: dict[str, Any]):
+        rows = block.get("content", [])
+        if not rows:
+            return
+
+        table = self.doc.add_table(rows=len(rows), cols=2)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = False
+
+        for i, row_node in enumerate(rows):
+            word_row = table.rows[i]
+            set_row_cant_split(word_row)
+
+            cells = row_node.get("content", [])
+            # Left cell: Label
+            c0 = word_row.cells[0]
+            c0.width = Inches(2.2)
+            set_cell_shading(c0, "F8FAFC")
+            set_cell_margins(c0, top=80, bottom=80, left=120, right=120)
+            set_cell_border(c0,
+                            top={"val": "single", "sz": "4", "color": "D1D5DB"},
+                            bottom={"val": "single", "sz": "4", "color": "D1D5DB"},
+                            start={"val": "single", "sz": "4", "color": "D1D5DB"},
+                            end={"val": "single", "sz": "4", "color": "D1D5DB"})
+            p0 = c0.paragraphs[0]
+            p0.paragraph_format.space_before = Pt(0)
+            p0.paragraph_format.space_after = Pt(0)
+            set_paragraph_keep_with_next(p0)
+
+            if len(cells) > 0:
+                self._render_cell_paragraphs(c0, cells[0], is_bold=True)
+
+            # Right cell: Value / Field
+            c1 = word_row.cells[1]
+            c1.width = Inches(4.47)
+            set_cell_margins(c1, top=80, bottom=80, left=120, right=120)
+            set_cell_border(c1,
+                            top={"val": "single", "sz": "4", "color": "D1D5DB"},
+                            bottom={"val": "single", "sz": "4", "color": "D1D5DB"},
+                            start={"val": "single", "sz": "4", "color": "D1D5DB"},
+                            end={"val": "single", "sz": "4", "color": "D1D5DB"})
+            p1 = c1.paragraphs[0]
+            p1.paragraph_format.space_before = Pt(0)
+            p1.paragraph_format.space_after = Pt(0)
+
+            if len(cells) > 1:
+                self._render_cell_paragraphs(c1, cells[1], is_bold=False)
+
+        p_sp = self.doc.add_paragraph()
+        p_sp.paragraph_format.space_before = Pt(4)
+        p_sp.paragraph_format.space_after = Pt(4)
+
+    def _render_native_repeating_table(self, block: dict[str, Any]):
+        attrs = block.get("attrs", {})
+        list_var = attrs.get("listVariable") or "budget_items"
+        validate_identifier(list_var, "List variable")
+        item_alias = attrs.get("itemAlias") or "item"
+        validate_identifier(item_alias, "Item alias")
+        has_total = attrs.get("hasTotal", False)
+        total_label = attrs.get("totalLabel", "Total")
+        total_var_name = attrs.get("totalVarName") or f"total_{list_var}_amount"
+        if has_total:
+            validate_identifier(total_var_name, "Total variable name")
+
+        rows = block.get("content", [])
+        if not rows:
+            return
+
+        header_row_node = rows[0]
+        header_cells = header_row_node.get("content", [])
+        num_cols = max(len(header_cells), 1)
+        col_width = Inches(6.67 / num_cols)
+
+        table = self.doc.add_table(rows=0, cols=num_cols)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = False
+
+        # 1. Header row
+        h_row = table.add_row()
+        set_row_cant_split(h_row)
+        set_table_header(h_row)
+        for j in range(num_cols):
+            cell = h_row.cells[j]
+            cell.width = col_width
+            set_cell_shading(cell, "EBF1F5")
+            set_cell_margins(cell, top=100, bottom=100, left=120, right=120)
+            set_cell_border(cell,
+                            top={"val": "single", "sz": "6", "color": "1E5B94"},
+                            bottom={"val": "single", "sz": "6", "color": "1E5B94"},
+                            start={"val": "single", "sz": "4", "color": "D1D5DB"},
+                            end={"val": "single", "sz": "4", "color": "D1D5DB"})
+            p = cell.paragraphs[0]
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(0)
+            if j < len(header_cells):
+                self._render_cell_paragraphs(cell, header_cells[j], is_bold=True, font_color=RGBColor(0x1E, 0x5B, 0x94))
+
+        # 2. Loop start row
+        r_start = table.add_row()
+        r_start.cells[0].paragraphs[0].text = f"{{%tr for {item_alias} in {list_var} %}}"
+
+        # 3. Template data row
+        template_row_node = rows[1] if len(rows) > 1 else None
+        template_cells = template_row_node.get("content", []) if template_row_node else []
+
+        d_row = table.add_row()
+        set_row_cant_split(d_row)
+        for j in range(num_cols):
+            cell = d_row.cells[j]
+            cell.width = col_width
+            set_cell_margins(cell, top=80, bottom=80, left=120, right=120)
+            set_cell_border(cell,
+                            top={"val": "single", "sz": "4", "color": "E5E7EB"},
+                            bottom={"val": "single", "sz": "4", "color": "E5E7EB"},
+                            start={"val": "single", "sz": "4", "color": "E5E7EB"},
+                            end={"val": "single", "sz": "4", "color": "E5E7EB"})
+            p = cell.paragraphs[0]
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(0)
+
+            if j < len(template_cells):
+                self._render_cell_paragraphs(cell, template_cells[j], item_alias=item_alias, list_var=list_var)
+
+        # 4. Loop end row
+        r_end = table.add_row()
+        r_end.cells[0].paragraphs[0].text = "{%tr endfor %}"
+
+        # 5. Total row
+        if has_total or len(rows) > 2:
+            t_row = table.add_row()
+            set_row_cant_split(t_row)
+            for j in range(num_cols):
+                cell = t_row.cells[j]
+                cell.width = col_width
+                set_cell_shading(cell, "F8FAFC")
+                set_cell_margins(cell, top=100, bottom=100, left=120, right=120)
+                set_cell_border(cell,
+                                top={"val": "single", "sz": "6", "color": "1E5B94"},
+                                bottom={"val": "double", "sz": "8", "color": "1E5B94"},
+                                start={"val": "single", "sz": "4", "color": "D1D5DB"},
+                                end={"val": "single", "sz": "4", "color": "D1D5DB"})
+                p = cell.paragraphs[0]
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+
+                if j == 0:
+                    r = p.add_run(escape_jinja_delimiters(sanitize_text(total_label)))
+                    r.bold = True
+                    r.font.name = "Times New Roman"
+                    r.font.size = Pt(10)
+                elif j == num_cols - 1:
+                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    r = p.add_run(f"{{{{ {total_var_name} }}}}")
+                    r.bold = True
+                    r.font.name = "Times New Roman"
+                    r.font.size = Pt(10)
+
+        p_sp = self.doc.add_paragraph()
+        p_sp.paragraph_format.space_before = Pt(4)
+        p_sp.paragraph_format.space_after = Pt(4)
+
+    def _render_native_signature_grid(self, block: dict[str, Any]):
+        rows = block.get("content", [])
+        if not rows:
+            return
+        row_node = rows[0]
+        cells = row_node.get("content", [])
+        cols_count = max(len(cells), 1)
+        cell_width = Inches(6.67 / cols_count)
+
+        p_lead = self.doc.add_paragraph()
+        p_lead.paragraph_format.space_before = Pt(14)
+        p_lead.paragraph_format.space_after = Pt(4)
+        set_paragraph_keep_with_next(p_lead)
+
+        table = self.doc.add_table(rows=2, cols=cols_count)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = False
+
+        # Row 0: Signature line space
+        space_row = table.rows[0]
+        set_row_cant_split(space_row)
+        for col_idx in range(cols_count):
+            cell = space_row.cells[col_idx]
+            cell.width = cell_width
+            set_cell_border(cell,
+                            top={"val": "none", "sz": "0"},
+                            bottom={"val": "single", "sz": "4", "color": "9CA3AF"},
+                            start={"val": "none", "sz": "0"},
+                            end={"val": "none", "sz": "0"})
+            p = cell.paragraphs[0]
+            p.paragraph_format.space_before = Pt(36)
+            p.paragraph_format.space_after = Pt(2)
+            set_paragraph_keep_with_next(p)
+
+        # Row 1: Signee details
+        info_row = table.rows[1]
+        set_row_cant_split(info_row)
+        for col_idx in range(cols_count):
+            cell = info_row.cells[col_idx]
+            cell.width = cell_width
+            set_cell_border(cell,
+                            top={"val": "none", "sz": "0"},
+                            bottom={"val": "none", "sz": "0"},
+                            start={"val": "none", "sz": "0"},
+                            end={"val": "none", "sz": "0"})
+            p = cell.paragraphs[0]
+            p.paragraph_format.space_before = Pt(3)
+            p.paragraph_format.space_after = Pt(10)
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            set_paragraph_keep_with_next(p)
+
+            if col_idx < len(cells):
+                self._render_cell_paragraphs(cell, cells[col_idx], is_bold=True)
+
+    def _render_generic_table(self, block: dict[str, Any]):
+        rows = block.get("content", [])
+        if not rows:
+            return
+
+        first_row_cells = rows[0].get("content", [])
+        cols_count = max(len(first_row_cells), 1)
+        col_width = Inches(6.67 / cols_count)
+
+        table = self.doc.add_table(rows=len(rows), cols=cols_count)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = False
+
+        for i, row_node in enumerate(rows):
+            word_row = table.rows[i]
+            set_row_cant_split(word_row)
+            cells = row_node.get("content", [])
+            is_header = any(c.get("type") == "tableHeader" for c in cells)
+            if is_header and i == 0:
+                set_table_header(word_row)
+
+            for j in range(cols_count):
+                cell = word_row.cells[j]
+                cell.width = col_width
+                if is_header:
+                    set_cell_shading(cell, "F1F5F9")
+                set_cell_margins(cell, top=80, bottom=80, left=120, right=120)
+                set_cell_border(cell,
+                                top={"val": "single", "sz": "4", "color": "D1D5DB"},
+                                bottom={"val": "single", "sz": "4", "color": "D1D5DB"},
+                                start={"val": "single", "sz": "4", "color": "D1D5DB"},
+                                end={"val": "single", "sz": "4", "color": "D1D5DB"})
+                p = cell.paragraphs[0]
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+
+                if j < len(cells):
+                    self._render_cell_paragraphs(cell, cells[j], is_bold=is_header)
+
+        p_sp = self.doc.add_paragraph()
+        p_sp.paragraph_format.space_before = Pt(4)
+        p_sp.paragraph_format.space_after = Pt(4)
+
+    def _render_cell_paragraphs(self, docx_cell, cell_node: dict[str, Any], is_bold: bool = False,
+                                font_color: Optional[RGBColor] = None, item_alias: Optional[str] = None,
+                                list_var: Optional[str] = None):
+        """Render all paragraphs and inline runs/chips inside a TipTap table cell."""
+        p_nodes = [n for n in cell_node.get("content", []) if n.get("type") == "paragraph"]
+        if not p_nodes:
+            p_nodes = [cell_node]
+
+        for p_idx, p_node in enumerate(p_nodes):
+            if p_idx == 0:
+                p = docx_cell.paragraphs[0]
+            else:
+                p = docx_cell.add_paragraph()
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(2)
+
+            for child in p_node.get("content", []):
+                c_type = child.get("type")
+                if c_type == "text":
+                    text = child.get("text", "")
+                    clean_text = escape_jinja_delimiters(sanitize_text(text))
+                    run = p.add_run(clean_text)
+                    run.bold = is_bold or any(m.get("type") == "bold" for m in child.get("marks", []))
+                    run.italic = any(m.get("type") == "italic" for m in child.get("marks", []))
+                    run.font.name = "Times New Roman"
+                    run.font.size = Pt(10)
+                    if font_color:
+                        run.font.color.rgb = font_color
+                elif c_type == "fieldChip":
+                    fn = child.get("attrs", {}).get("fieldName", "")
+                    if fn:
+                        for part in fn.split("."):
+                            if part:
+                                validate_identifier(part, "Field chip identifier part")
+                        if item_alias and list_var and (fn.startswith(f"{list_var}.") or fn.startswith(f"{item_alias}.")):
+                            field_key = fn.split(".", 1)[1]
+                            tag_text = f"{{{{ {item_alias}.{field_key} }}}}"
+                        elif item_alias and "." not in fn:
+                            tag_text = f"{{{{ {item_alias}.{fn} }}}}"
+                        else:
+                            tag_text = f"{{{{ {fn} }}}}"
+                        run = p.add_run(tag_text)
+                        run.font.name = "Times New Roman"
+                        run.font.size = Pt(10)
+
     def _add_page_break(self):
         """Insert clean page break."""
         p = self.doc.add_paragraph()
@@ -853,7 +1344,9 @@ class TipTapDocxCompiler:
                 attrs = item.get("attrs", {})
                 f_name = attrs.get("fieldName") or ""
                 if f_name:
-                    validate_identifier(f_name, "Field chip name")
+                    for part in f_name.split("."):
+                        if part:
+                            validate_identifier(part, "Field chip name part")
                     run = paragraph.add_run(f"{{{{ {f_name} }}}}")
                     run.bold = default_bold
                     run.font.name = "Times New Roman"
@@ -1299,6 +1792,37 @@ def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, A
                     ctx[f["key"]] = fn_format_inr(total_val)
                 else:
                     ctx[f["key"]] = str(total_val)
+
+    # Scan editor_json for any repeating tables (both legacy and native table nodes)
+    migrated_json = migrate_template_content(editor_json) if editor_json else {"type": "doc", "content": []}
+    for b in migrated_json.get("content", []):
+        attrs = b.get("attrs", {})
+        is_repeat = (
+            b.get("type") == "repeatingTable"
+            or (b.get("type") == "table" and (attrs.get("blockType") == "repeatingTable" or "repeating" in str(attrs.get("class", ""))))
+        )
+        if is_repeat:
+            list_var = attrs.get("listVariable") or "budget_items"
+            if list_var not in ctx or not isinstance(ctx[list_var], list):
+                cols = attrs.get("columns") or [
+                    {"key": "description", "label": "Item Description"},
+                    {"key": "amount", "label": "Amount (INR)"},
+                ]
+                dummy_rows = []
+                for idx in (1, 2, 3):
+                    row_dict = {}
+                    for col in cols:
+                        ckey = col.get("key", "col")
+                        if "amount" in ckey or "cost" in ckey or "price" in ckey:
+                            row_dict[ckey] = fn_format_inr(Decimal(str(idx * 25000)))
+                        else:
+                            row_dict[ckey] = f"Sample {ckey.replace('_', ' ').title()} {idx}"
+                    dummy_rows.append(row_dict)
+                ctx[list_var] = dummy_rows
+
+            tot_var = attrs.get("totalVarName") or f"total_{list_var}_amount"
+            if tot_var not in ctx:
+                ctx[tot_var] = fn_format_inr(Decimal("150000"))
 
     # Ensure all schema fields have a default value to satisfy StrictUndefined
     for f_schema in schema.fields:

@@ -59,3 +59,80 @@ body {
   border: 1px solid #fca5a5;
   vertical-align: middle;
 }
+
+/* TipTap Native Table Styles */
+.ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 1.25rem 0;
+  overflow: hidden;
+}
+
+.ProseMirror td,
+.ProseMirror th {
+  min-width: 2em;
+  border: 1px solid #cbd5e1;
+  padding: 8px 10px;
+  vertical-align: top;
+  box-sizing: border-box;
+  position: relative;
+  font-size: 0.875rem;
+}
+
+.ProseMirror th {
+  font-weight: 600;
+  text-align: left;
+  background-color: #f1f5f9;
+}
+
+.ProseMirror .selectedCell:after {
+  z-index: 2;
+  position: absolute;
+  content: "";
+  left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(147, 197, 253, 0.3);
+  pointer-events: none;
+}
+
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background-color: #3b82f6;
+  pointer-events: none;
+}
+
+/* Info Table Styling */
+.ProseMirror table.cd-info-table {
+  border: 1px solid #cbd5e1;
+}
+
+.ProseMirror table.cd-info-table tr td:first-child {
+  background-color: #f8fafc;
+  font-weight: 600;
+  width: 32%;
+  color: #334155;
+}
+
+/* Repeating Table Styling */
+.ProseMirror table.cd-repeating-table th {
+  background-color: #eff6ff;
+  color: #1e3a8a;
+  border-color: #bfdbfe;
+}
+
+/* Signature Grid Styling */
+.ProseMirror table.cd-signature-grid {
+  border: none;
+}
+
+.ProseMirror table.cd-signature-grid td {
+  border: 1px dashed #94a3b8;
+  text-align: center;
+  padding: 18px 8px;
+  background-color: #f8fafc;
+}
+

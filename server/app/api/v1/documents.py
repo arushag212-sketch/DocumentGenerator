@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from server.app.core.template_compiler import TemplateCompiler
+from server.app.core.template_compiler import TemplateCompiler, migrate_template_content
 from server.app.core.template_generator import (
     generate_draft_template,
     resolve_club_logo_by_text,
@@ -817,6 +817,7 @@ def create_blank_template(
             }}
         ]
     }
+    initial_json = migrate_template_content(initial_json)
     initial_fields = [
         {"key": "event_name", "label": "Event Name", "type": "text", "required": True, "ask": "What is the event name?"},
         {"key": "event_date", "label": "Event Date", "type": "date", "required": True, "ask": "What is the event date?"},
@@ -1009,7 +1010,7 @@ def get_template_draft(
     if not ver:
         raise HTTPException(status_code=404, detail="Template has no version")
 
-    editor_json = ver.editor_json
+    editor_json = migrate_template_content(ver.editor_json) if ver.editor_json else {"type": "doc", "content": []}
     fields_list = []
     if ver.schema_yaml:
         try:

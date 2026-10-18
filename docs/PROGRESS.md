@@ -80,8 +80,37 @@ Screenshots archived to `docs/screenshots/baseline/`.
 
 ---
 
+## Phase 2: Advanced TipTap Template Editor (Completed)
+- **Status**: **DONE**
+- **Changes**:
+  - Rebuilt `web/src/components/TemplateEditor/extensions.ts` with native `@tiptap/extension-table`, `@tiptap/extension-table-row`, `@tiptap/extension-table-cell`, `@tiptap/extension-table-header`.
+  - Rebuilt `web/src/components/TemplateEditor/TemplateEditor.tsx`:
+    - Eliminated `editor.isEmpty -> setContent` wipe bug by loading content once per draft version via `contentLoadedRef`.
+    - Added floating selection bubble menu (bold, italic, insert field).
+    - Added slash commands menu (`/` trigger for headings, info table, repeating table, signatures, page break, field).
+    - Added right sidebar fields panel with one-click "Insert" chips into current cursor position.
+    - Added A4 desk layout (`max-w-[800px]`, `min-h-[1050px]`, shadow-2xl).
+    - Added debounced 1s autosave with status indicator pill (`Saved`, `Saving...`, `Unsaved changes`).
+    - Added React `EditorErrorBoundary`.
+  - Updated backend compiler (`server/app/core/template_compiler.py`):
+    - Added `migrate_template_content` to convert atom nodes into native tables.
+    - Added native table compilation in `TipTapDocxCompiler` for info tables, repeating tables, signature grids, and generic tables.
+    - Updated identifier validation to support dot-notation table fields (e.g. `budget_items.amount`).
+    - Added repeating table detection in `_build_editor_dummy_context` for reliable live preview dry-rendering.
+  - **Verification**:
+    - `python -m pytest tests/test_phase2_template_tables.py`: 4/4 passed.
+    - `python scripts/verify_phase2_editor_selenium.py`: ALL 7 steps passed in headless Chrome (opened blank template, typed heading, inserted & edited infoTable, inserted & edited repeatingTable, inserted signatureGrid, generated LibreOffice PDF live preview, saved, reloaded, and verified table edits persisted).
+    - Dev database cleaned of test templates.
+
+---
+
 ## Current Status & Next Steps
-- **Phase 0**: **DONE**
-- **Phase 1**: **DONE**
-- **Phase 2 (Next)**: Rebuild TipTap Template Editor — Replace non-editable atom table nodes with editable TipTap tables (`@tiptap/extension-table`, `TableRow`, `TableCell`, `TableHeader`), eliminate `editor.isEmpty -> setContent` wipe bug, add slash menu, bubble menu, fields panel, A4 page layout, autosave indicator, and schema compiler updates.
+- **Phase 0**: **DONE** (Commit `69b63d8`)
+- **Phase 1**: **DONE** (Commit `941f16e`)
+- **Phase 2**: **DONE**
+- **Phase 3 (Next)**: React Router real URLs, Onboarding & Frontend Shrink:
+  - Configure `react-router-dom` for real routes: `/login`, `/onboarding/club`, `/onboarding/position`, `/home`, `/documents`, `/documents/:id`, `/templates`, `/templates/:id`, `/settings/*`.
+  - Remove dead legacy components: `EventsTab.tsx`, `Dashboard.tsx`, `NewDocumentPage.tsx`, `ReviewDocumentPage.tsx`.
+  - Verify route transitions and deep linking.
+
 
