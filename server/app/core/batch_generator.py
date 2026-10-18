@@ -368,6 +368,8 @@ class BatchGenerator:
         final_title = event_title or event_data.get("event_name")
         if not final_title:
             raise HTTPException(status_code=400, detail="Event name/title is required for batch generation.")
+        if not event_data.get("event_name"):
+            event_data["event_name"] = final_title
 
         # Ensure event_code is present
         if not event_data.get("event_code"):
@@ -378,6 +380,11 @@ class BatchGenerator:
         # Ensure category is present
         if not event_data.get("category"):
             event_data["category"] = event_data.get("event_type") or "Technical Event"
+
+        if not event_data.get("target_audience"):
+            event_data["target_audience"] = "SVNIT Students & Participants"
+        if not event_data.get("submitted_to"):
+            event_data["submitted_to"] = "Dean (Student Welfare), SVNIT Surat"
 
         batch_id = str(uuid.uuid4())
         batch_dir = Path("storage/batches") / batch_id

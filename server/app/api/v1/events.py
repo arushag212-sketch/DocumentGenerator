@@ -116,6 +116,56 @@ def list_events(
     return EventListOut(items=result, total=len(result))
 
 
+@router.get("/active", response_model=list[EventDetailOut])
+def list_active_events(
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """List active events for dropdown selection."""
+    event_repo = ScopedRepository(db, Event, club_id=ctx.club.id)
+    doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
+    events = event_repo.all(Event.status == "active")
+
+    result = []
+    for ev in events:
+        docs = doc_repo.all(Document.event_id == ev.id)
+        doc_summaries = []
+        for d in docs:
+            tmpl = db.query(Template).filter(Template.id == d.template_id).first()
+            latest_v = (
+                db.query(DocumentVersion)
+                .filter(DocumentVersion.document_id == d.id)
+                .order_by(DocumentVersion.version_no.desc())
+                .first()
+            )
+            v_no = latest_v.version_no if latest_v else 1
+            doc_summaries.append(
+                EventDocumentSummary(
+                    id=d.id,
+                    template_slug=tmpl.slug if tmpl else "document",
+                    title=d.title,
+                    ref_no=d.ref_no,
+                    status=d.status,
+                    created_at=d.created_at,
+                    current_version_no=v_no,
+                )
+            )
+
+        result.append(
+            EventDetailOut(
+                id=ev.id,
+                club_id=ev.club_id,
+                title=ev.title,
+                event_code=ev.event_code,
+                status=ev.status,
+                record=ev.record or {},
+                created_at=ev.created_at,
+                documents=doc_summaries,
+            )
+        )
+    return result
+
+
 @router.post("", response_model=EventDetailOut, status_code=status.HTTP_201_CREATED)
 def create_event(
     payload: EventCreateRequest,

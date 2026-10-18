@@ -32,12 +32,14 @@ class EventExtractor:
         # 1. Rule-based extraction
         # Expected participants (e.g., "around 120 students", "150+ participants", "around 60 first years")
         count_match = re.search(
-            r'(?:around|approx(?:imately)?|about|\+)?\s*(\d+)\s*(?:students?|participants?|attendees?|delegates?|people|first years?|second years?|third years?|final years?|freshers?|members?)',
+            r'(?:around|approx(?:imately)?|about|\+)?\s*(\d+)\s*(students?|participants?|attendees?|delegates?|people|first years?|second years?|third years?|final years?|freshers?|members?)',
             text,
             re.IGNORECASE,
         )
         if count_match:
             event.expected_participants = tf(int(count_match.group(1)), FieldSource.extracted_rule, confirmed=False)
+            group_word = count_match.group(2) if len(count_match.groups()) > 1 and count_match.group(2) else "students"
+            event.target_audience = tf(f"SVNIT {group_word.capitalize()}", FieldSource.extracted_rule, confirmed=False)
 
         norm_text = text.replace("–", "-").replace("—", "-")
 
@@ -254,6 +256,12 @@ class EventExtractor:
                 text,
                 re.IGNORECASE,
             )
+        if not title_match:
+            title_match = re.match(
+                r'^\s*([A-Za-z0-9\s_-]+?)(?=\s+(?:on|at|from|during)\b|[.,;]|$)',
+                text,
+                re.IGNORECASE,
+            )
         if title_match:
             extracted_name = title_match.group(1).strip()
             if extracted_name.islower():
@@ -268,7 +276,7 @@ class EventExtractor:
             event.event_code = tf(code, FieldSource.extracted_rule, confirmed=False)
         # Budget matching (e.g. "budget sanction of Rs 25000", "budget of 15000", "sanction of 25,000 INR")
         from decimal import Decimal
-        from docgen.models import BudgetItem
+        from docgen.models import BudgetItem, Winner
         budget_match = re.search(
             r'(?:budget|sanction|sanctioned(?:\s+of)?|fund|allocation)\s*(?:of|is|:)?\s*(?:Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)',
             text,
@@ -281,6 +289,26 @@ class EventExtractor:
                     event.budget_items = [BudgetItem(item="Proposed Budget", amount=b_amt)]
             except Exception:
                 pass
+
+        # Winners matching (e.g. "1st prize Rs 5000 to Rahul Sharma (U22CS001)", "1st: Rahul Sharma (5000)")
+        winner_pattern = re.compile(
+            r'\b(1st|2nd|3rd|first|second|third|runner[\s-]?up)\s*(?:prize|place)?\s*(?:of|is|:)?\s*(?:Rs\.?|INR)?\s*([\d,]+)?\s*(?:to|for|-)?\s*([A-Za-z\s]+?)\s*\(([A-Za-z0-9]+)\)',
+            re.IGNORECASE,
+        )
+        extracted_winners = []
+        for wm in winner_pattern.finditer(text):
+            pos, amt_s, w_name, w_roll = wm.groups()
+            amt_val = Decimal(amt_s.replace(",", "")) if amt_s else Decimal("1000")
+            extracted_winners.append(
+                Winner(
+                    position=pos.lower(),
+                    amount=amt_val,
+                    name=w_name.strip(),
+                    roll_no=w_roll.strip(),
+                )
+            )
+        if extracted_winners:
+            event.winners = extracted_winners
 
         # Default organizers
         event.organizers = tf(self.config.club_name, FieldSource.config, confirmed=True)

@@ -496,6 +496,8 @@ export const api = {
   events: {
     list: (clubId: string | number) =>
       apiFetch<{ items: any[]; total: number }>(`/clubs/${clubId}/events`),
+    listActive: (clubId: string | number) =>
+      apiFetch<any[]>(`/clubs/${clubId}/events/active`),
     get: (clubId: string | number, eventId: string) =>
       apiFetch<any>(`/clubs/${clubId}/events/${eventId}`),
     create: (clubId: string | number, payload: { title: string; event_code?: string; record?: Record<string, any> }) =>

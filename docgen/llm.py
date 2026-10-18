@@ -504,9 +504,9 @@ class GeminiLLMClient(LLMClient):
         }
 
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=30)
+            resp = requests.post(url, headers=headers, json=payload, timeout=12)
         except requests.exceptions.Timeout:
-            raise AITimeoutError("AI service timed out after 30s. Try a shorter prompt.")
+            raise AITimeoutError("AI service timed out after 12s. Try a shorter prompt.")
         except requests.exceptions.RequestException as e:
             raise AIServiceError(f"AI service error: Network failure ({str(e)})")
 
@@ -518,9 +518,9 @@ class GeminiLLMClient(LLMClient):
                 current_model = self.model
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent"
                 try:
-                    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                    resp = requests.post(url, headers=headers, json=payload, timeout=12)
                 except requests.exceptions.Timeout:
-                    raise AITimeoutError("AI service timed out after 30s. Try a shorter prompt.")
+                    raise AITimeoutError("AI service timed out after 12s. Try a shorter prompt.")
                 except requests.exceptions.RequestException as e:
                     raise AIServiceError(f"AI service error: Network failure ({str(e)})")
 
@@ -530,7 +530,7 @@ class GeminiLLMClient(LLMClient):
                 time.sleep(1)
                 fb_url = f"https://generativelanguage.googleapis.com/v1beta/models/{fb_model}:generateContent"
                 try:
-                    fb_resp = requests.post(fb_url, headers=headers, json=payload, timeout=30)
+                    fb_resp = requests.post(fb_url, headers=headers, json=payload, timeout=12)
                     if fb_resp.status_code == 200:
                         self.model = fb_model
                         resp = fb_resp

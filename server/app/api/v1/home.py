@@ -342,6 +342,9 @@ def generate_user_need(
         b_list = coerce_to_budget_items(b_val)
         payload.event_data["budget_items"] = [b.model_dump() for b in b_list]
 
+    if not payload.event_data.get("event_name") and payload.event_title:
+        payload.event_data["event_name"] = payload.event_title
+
     # 3. Input widget validation (dates, times, integers, amounts)
     validate_input_fields(payload.event_data)
 

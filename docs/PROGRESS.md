@@ -119,16 +119,51 @@ Screenshots archived to `docs/screenshots/baseline/`.
 
 ---
 
+### Phase 4: Home Flow & Native Input Widgets (COMPLETED)
+- **What was done**:
+  - Rebuilt `/home` input widgets:
+    - Native `<input type="date">` with past/future bounds (min 1 year ago, max 2 years ahead) and `DD/MM/YYYY` Indian formatting preview.
+    - Native `<input type="time">` storing canonical 24-hr `HH:MM`, displaying 12-hr AM/PM, with validation enforcing `end_time > start_time`.
+    - Currency input with leading `₹` symbol, decimal parsing, and live Indian numbering grouping preview (`5,000.00`, `1,50,000.00`).
+    - Active event dropdown context (`-- New event --` + active events from `/api/v1/clubs/{club_id}/events/active`).
+    - People pickers for signatories/in-charges populated from `clubPeople`.
+    - AI draft confirmation controls: unconfirmed drafts tagged `[AI-drafted]` with one-click "Accept AI Draft" actions, preventing unreviewed AI text from reaching official documents.
+    - Official reference number acceptance checkbox (`#acceptRefNumbers`).
+  - Hardened extraction & batch generation:
+    - Added prefix title matching heuristic in `EventExtractor.extract_from_text` to cleanly parse titles like `"TechNova on 15 Nov..."`.
+    - Added regex extraction for student prize winners (`1st`, `2nd`, `3rd`, roll number, prize amount) directly into `event.winners`.
+    - Added safe fallbacks for `event_name`, `target_audience`, and `submitted_to` across `home.py` and `batch_generator.py`.
+    - Updated Content Security Policy middleware in `server/app/main.py` (`frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`, `frame-src 'self' blob:`) to support inline PDF blob previews without browser security violations.
+- **Verification**:
+  - `npm run build`: built in 4.86s with 0 errors.
+  - `python scripts/verify_phase4_home_selenium.py`: ALL 6 steps passed in headless Chrome:
+    - Logged in as demo owner and navigated to `/home`.
+    - Inputted prompt: `"TechNova on 15 Nov 2026, 10 AM to 5 PM, Computer Dept seminar hall, budget 25000, 120 attendees, 1st prize Rs 5000 to Rahul Sharma (U22CS001), 2nd prize Rs 3000 to Priya Patel (U22CS002)"`.
+    - Successfully extracted dates (`2026-11-15`), times (`10:00` to `17:00`), venue, budget (`₹25,000.00`), and winners.
+    - Accepted AI drafts and reference numbers; generated 4-document batch (Permission Letter, Approval Note, 2 Prize Money Receipts).
+    - Downloaded batch ZIP (1,376,409 bytes) containing 4 DOCX + 4 PDF files.
+    - Verified unbroken numbering (`ACM/26-27/ROOM/006`, `ACM/2026-27/T/004`, `ACM/26-27/PRIZE/007`, `ACM/26-27/PRIZE/008`), Indian currency formatting, and Indian date formatting.
+    - Verified 0 SEVERE browser console errors.
+    - Screenshots recorded in `docs/screenshots/phase4/`:
+      - `01_home_initial.png`
+      - `02_understood_cards.png`
+      - `03_ready_to_generate.png`
+      - `04_batch_generated_success.png`
+
+---
+
 ## Current Status & Next Steps
 - **Phase 0**: **DONE** (Commit `69b63d8`)
 - **Phase 1**: **DONE** (Commit `941f16e`)
 - **Phase 2**: **DONE** (Commit `9253148`)
-- **Phase 3**: **DONE**
-- **Phase 4 (Next)**: Home Flow & Native Input Widgets
-  - Native HTML5 date (`type="date"`) and time (`type="time"`) pickers formatting to `DD/MM/YYYY` and `hh:mm A`.
-  - Indian currency formatting (`₹`, Decimal arithmetic, grouping `5,000.00`).
-  - Enum dropdowns, person pickers, and lightweight event dropdown on `/home`.
-  - End-to-end prompt-to-batch document generation verification.
+- **Phase 3**: **DONE** (Commit `0987314`)
+- **Phase 4**: **DONE**
+- **Phase 5 (Next)**: Backend Hardening & PostgreSQL Portability
+  - Email sender abstraction (`EmailSender`: SMTP with Console fallback).
+  - Storage abstraction (`Storage`: LocalDiskStorage + S3-compatible stub).
+  - Timezone-aware UTC timestamps (`datetime.now(timezone.utc)` across models).
+  - Check database migration & portability scripts (`scripts/check_db.py`).
+
 
 
 

@@ -3,6 +3,36 @@ import { Sparkles, FileText, CheckSquare, Square, AlertCircle, ArrowRight, Calen
 import { api } from '../api/client';
 import { HomeUnderstoodData, HomeRecommendedDoc, HomeMissingQuestion, HomeGenerateResponse } from '../types';
 
+export const formatDateToIndian = (d: string): string => {
+  if (!d || !d.includes('-')) return d;
+  const parts = d.split('-');
+  if (parts.length === 3) {
+    const [y, m, day] = parts;
+    return `${day}/${m}/${y}`;
+  }
+  return d;
+};
+
+export const formatTime12Hour = (time24: string): string => {
+  if (!time24 || !time24.includes(':')) return time24;
+  const [hStr, mStr] = time24.split(':');
+  let h = parseInt(hStr, 10);
+  if (isNaN(h)) return time24;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h.toString().padStart(2, '0')}:${mStr} ${ampm}`;
+};
+
+export const formatIndianCurrency = (num: number | string): string => {
+  const clean = typeof num === 'string' ? num.replace(/,/g, '') : num;
+  const val = typeof clean === 'string' ? parseFloat(clean) : clean;
+  if (isNaN(val)) return '₹0.00';
+  return '₹' + val.toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
 interface HomePageProps {
   clubId: string | number;
   initialTemplateId?: string | null;
@@ -96,6 +126,63 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [participants, setParticipants] = useState<number | string>('');
   const [description, setDescription] = useState('');
   const [objectives, setObjectives] = useState('');
+
+  // Active events dropdown & People picker state
+  const [activeEvents, setActiveEvents] = useState<any[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const [clubPeople, setClubPeople] = useState<any[]>([]);
+
+  const today = new Date();
+  const minDate = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate()).toISOString().split('T')[0];
+  const maxDate = new Date(today.getFullYear() + 2, today.getMonth(), today.getDate()).toISOString().split('T')[0];
+
+  useEffect(() => {
+    if (clubId) {
+      api.events.listActive(clubId)
+        .then((data) => setActiveEvents(data || []))
+        .catch(() => {});
+      api.clubs.getPeople(clubId)
+        .then((data) => setClubPeople(data || []))
+        .catch(() => {});
+    }
+  }, [clubId]);
+
+  const handleEventChange = (evId: string) => {
+    setSelectedEventId(evId);
+    if (!evId) {
+      setInputText('');
+      setUnderstood(null);
+      setEventName('');
+      setVenue('');
+      setDateStart('');
+      setDateEnd('');
+      setTimeStart('');
+      setTimeEnd('');
+      setParticipants('');
+      setDescription('');
+      setObjectives('');
+      setAnswers({});
+      setSelectedTemplateIds([]);
+      return;
+    }
+    const ev = activeEvents.find((e) => e.id === evId);
+    if (ev) {
+      const rec = ev.record || {};
+      const title = ev.title || rec.event_name || '';
+      setEventName(title);
+      setVenue(rec.venue || '');
+      setDateStart(rec.date_start || '');
+      setDateEnd(rec.date_end || '');
+      setTimeStart(rec.time_start || '');
+      setTimeEnd(rec.time_end || '');
+      setParticipants(rec.participants || rec.expected_participants || '');
+      setDescription(rec.description || '');
+      setObjectives(rec.objectives || '');
+      const prompt = `${title} at ${rec.venue || 'campus'} on ${rec.dates || rec.date_start || 'upcoming'}`;
+      setInputText(prompt);
+      handleUnderstand(prompt);
+    }
+  };
 
   useEffect(() => {
     if (initialTemplateId) {
@@ -208,6 +295,26 @@ export const HomePage: React.FC<HomePageProps> = ({
       return;
     }
 
+    // Date range bounds checking (1 year in past to 2 years in future)
+    if (dateStart && (dateStart < minDate || dateStart > maxDate)) {
+      setError(`Start date must be between ${formatDateToIndian(minDate)} and ${formatDateToIndian(maxDate)}.`);
+      return;
+    }
+    if (dateEnd && (dateEnd < minDate || dateEnd > maxDate)) {
+      setError(`End date must be between ${formatDateToIndian(minDate)} and ${formatDateToIndian(maxDate)}.`);
+      return;
+    }
+
+    // Time ordering check: if same day, end time must be strictly after start time
+    if (timeStart && timeEnd) {
+      if ((!dateStart && !dateEnd) || dateStart === dateEnd) {
+        if (timeEnd <= timeStart) {
+          setError('End time must be after start time.');
+          return;
+        }
+      }
+    }
+
     setGenerating(true);
     setError(null);
 
@@ -256,14 +363,32 @@ export const HomePage: React.FC<HomePageProps> = ({
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
       {/* Hero / Big Input Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-7 space-y-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-amber-500 flex-shrink-0" />
-            What do you need?
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Type in plain words what document or package you want to draft, or click an example below.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+              <Sparkles className="w-6 h-6 text-amber-500 flex-shrink-0" />
+              What do you need?
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              Type in plain words what document or package you want to draft, or click an example below.
+            </p>
+          </div>
+          {/* Active Event Selector */}
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 self-start sm:self-auto">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Event:</span>
+            <select
+              value={selectedEventId}
+              onChange={(e) => handleEventChange(e.target.value)}
+              className="text-xs bg-transparent border-0 text-slate-800 font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="">-- New event --</option>
+              {activeEvents.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.title} {ev.event_code ? `(${ev.event_code})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Document Type Picker */}
@@ -401,24 +526,42 @@ export const HomePage: React.FC<HomePageProps> = ({
 
               {/* Date Start & Date End (Native Pickers) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  Start Date
+                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    Start Date
+                  </span>
+                  {dateStart && (
+                    <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      {formatDateToIndian(dateStart)}
+                    </span>
+                  )}
                 </label>
                 <input
                   type="date"
+                  min={minDate}
+                  max={maxDate}
                   value={dateStart}
                   onChange={(e) => setDateStart(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  End Date
+                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    End Date
+                  </span>
+                  {dateEnd && (
+                    <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      {formatDateToIndian(dateEnd)}
+                    </span>
+                  )}
                 </label>
                 <input
                   type="date"
+                  min={minDate}
+                  max={maxDate}
                   value={dateEnd}
                   onChange={(e) => setDateEnd(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
@@ -443,9 +586,16 @@ export const HomePage: React.FC<HomePageProps> = ({
 
               {/* Time Start & Time End (Native 24-hr Pickers) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  Start Time
+                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    Start Time
+                  </span>
+                  {timeStart && (
+                    <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      {formatTime12Hour(timeStart)}
+                    </span>
+                  )}
                 </label>
                 <input
                   type="time"
@@ -455,9 +605,16 @@ export const HomePage: React.FC<HomePageProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  End Time
+                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    End Time
+                  </span>
+                  {timeEnd && (
+                    <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      {formatTime12Hour(timeEnd)}
+                    </span>
+                  )}
                 </label>
                 <input
                   type="time"
@@ -609,15 +766,33 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <p className="text-[11px] text-slate-400">Needed for: {q.needed_by.join(', ')}</p>
 
                       {/* Widget rendering based on type */}
-                      {q.type === 'enum' && q.values ? (
+                      {(q.type === 'enum' || (q.values && q.values.length > 0)) ? (
                         <select
                           value={val}
                           onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
                           className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
                         >
-                          {q.values.map((opt) => (
+                          <option value="">-- Select {q.label} --</option>
+                          {q.values?.map((opt) => (
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
+                        </select>
+                      ) : (q.type === 'person' || q.key.includes('signatory') || q.key.includes('person') || q.key === 'faculty_incharge') && clubPeople.length > 0 ? (
+                        <select
+                          value={val}
+                          onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+                          className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                        >
+                          <option value="">-- Select Person --</option>
+                          {clubPeople.map((p) => {
+                            const pName = p.full_name || p.name;
+                            const pDesig = p.roles?.[0]?.designation_label || p.designation || '';
+                            return (
+                              <option key={p.id} value={pName}>
+                                {pName} {pDesig ? `(${pDesig})` : ''}
+                              </option>
+                            );
+                          })}
                         </select>
                       ) : q.type === 'longtext' ? (
                         <textarea
@@ -626,28 +801,77 @@ export const HomePage: React.FC<HomePageProps> = ({
                           onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
                           className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
                         />
+                      ) : q.type === 'date' ? (
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] text-slate-400">Date picker</span>
+                            {val && (
+                              <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                {formatDateToIndian(val)}
+                              </span>
+                            )}
+                          </div>
+                          <input
+                            type="date"
+                            min={minDate}
+                            max={maxDate}
+                            value={val}
+                            onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+                            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                          />
+                        </div>
+                      ) : q.type === 'time' ? (
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] text-slate-400">24-hour time picker</span>
+                            {val && (
+                              <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                {formatTime12Hour(val)}
+                              </span>
+                            )}
+                          </div>
+                          <input
+                            type="time"
+                            value={val}
+                            onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+                            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                          />
+                        </div>
+                      ) : (q.type === 'money' || q.key === 'budget_items' || q.key.includes('amount') || q.key.includes('budget')) ? (
+                        <div>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-slate-500 font-bold text-xs">₹</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={val}
+                              onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
+                              placeholder="e.g. 25000.00"
+                              className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                            />
+                          </div>
+                          {val && !isNaN(Number(val)) && (
+                            <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                              Formatted: {formatIndianCurrency(val)}
+                            </p>
+                          )}
+                        </div>
                       ) : (
                         <div>
                           <input
-                            type={q.type === 'time' ? 'time' : q.type === 'date' ? 'date' : (q.type === 'int' || q.type === 'money') ? 'number' : 'text'}
-                            step={q.type === 'money' ? '0.01' : q.type === 'int' ? '1' : undefined}
-                            min={(q.type === 'int' || q.type === 'money') ? '0' : undefined}
+                            type={q.type === 'int' ? 'number' : 'text'}
+                            step={q.type === 'int' ? '1' : undefined}
+                            min={q.type === 'int' ? '0' : undefined}
                             value={val}
                             onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
                             placeholder={
-                              q.key === 'budget_items'
-                                ? 'e.g. 1100 or Banner: 800, Snacks: 300'
-                                : q.key === 'judges'
+                              q.key === 'judges'
                                 ? 'e.g. Dr. Alok Kumar, Prof. Sharma (or leave blank if none)'
                                 : q.label
                             }
                             className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
                           />
-                          {q.key === 'budget_items' && (
-                            <p className="text-[10px] text-slate-400 mt-1">
-                              Enter a total amount (e.g. 1100) or comma-separated items with costs.
-                            </p>
-                          )}
                           {q.key === 'judges' && (
                             <p className="text-[10px] text-slate-400 mt-1">
                               Enter comma-separated names of external judges, or leave empty if none.
