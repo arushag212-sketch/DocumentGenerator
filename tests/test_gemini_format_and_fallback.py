@@ -188,10 +188,9 @@ def test_gemini_429_quota_retries_with_fallback_model():
         )
 
         assert mock_post.call_count == 2
-        # First call was to gemini-3.8-flash
-        assert "gemini-3.8-flash" in mock_post.call_args_list[0][0][0]
-        # Second call fell back to gemini-3.5-flash-lite
-        assert "gemini-3.5-flash-lite" in mock_post.call_args_list[1][0][0]
+        # Second call fell back to next flash candidate
+        second_call_url = mock_post.call_args_list[1][0][0]
+        assert "flash" in second_call_url and "gemini-3.8-flash" not in second_call_url
         assert result == {"title": "Fallback Model Response"}
 
 

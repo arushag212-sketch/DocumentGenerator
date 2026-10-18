@@ -53,9 +53,10 @@ const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     );
   }
 
-  // 1. Unauthenticated -> redirect to /login preserving deep link
+  // 1. Unauthenticated -> redirect to /login preserving deep link and search params
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    const search = location.search || window.location.search || '';
+    return <Navigate to={`/login${search}`} state={{ from: location }} replace />;
   }
 
   const currentPath = location.pathname;
@@ -99,6 +100,12 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       </footer>
     </div>
   );
+};
+
+const RootRedirect: React.FC = () => {
+  const location = useLocation();
+  const search = location.search || window.location.search || '';
+  return <Navigate to={`/home${search}`} replace />;
 };
 
 export const App: React.FC = () => {
@@ -216,8 +223,8 @@ export const App: React.FC = () => {
       />
 
       {/* Default redirects */}
-      <Route path="/" element={<Navigate to="/home" replace />} />
-      <Route path="*" element={<Navigate to="/home" replace />} />
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="*" element={<RootRedirect />} />
     </Routes>
   );
 };

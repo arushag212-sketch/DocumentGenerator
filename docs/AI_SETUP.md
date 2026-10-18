@@ -1,93 +1,98 @@
 # AI Setup & Gemini Integration Guide
 
-This guide explains how to configure, verify, and run the real LLM-powered document generation and template drafting features in **DocumentGenerator** using Google's Gemini API.
+This guide explains how SVNIT ClubDocs integrates with Google's Gemini API for natural-language template drafting and field extraction, how model names are resolved dynamically, and what data is transmitted.
 
 ---
 
-## 1. Environment Variable Configuration
+## 1. Dynamic Model Selection & Why Model Names Change
 
-The application uses Google's Gemini API for natural-language template drafting and field extraction. To enable real LLM calls, set the `GEMINI_API_KEY` environment variable in your terminal or `.env` file:
+AI models are regularly updated, deprecated, and retired by upstream providers (for example, `gemini-2.5-flash` returned HTTP 404 "no longer available to new users").
+
+To prevent broken workflows:
+1. **Dynamic Model Discovery (`docgen/llm.py`)**:
+   - At startup and when drafting templates, ClubDocs queries the Gemini models endpoint:
+     `https://generativelanguage.googleapis.com/v1beta/models`
+   - It filters for models supporting `generateContent` and containing `flash` (excluding specialized audio/image models).
+   - Selection priority:
+     1. `GEMINI_MODEL` from your `.env` (if valid and present in the supported models list).
+     2. `gemini-flash-latest` (if present).
+     3. The newest non-preview flash model (e.g. `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash`).
+     4. Any available flash model.
+2. **1-Hour In-Memory Cache**:
+   - The selected model is cached for 1 hour (`MODEL_CACHE_TTL = 3600`).
+   - If an HTTP 404 ("model not found" or "no longer available") occurs, the cache is automatically cleared, the endpoint re-queried, and the next candidate model is selected and retried ONCE.
+3. **HTTP 429 Quota Backoff**:
+   - If an HTTP 429 quota/rate limit error occurs, the client iterates candidate flash models with a 1-second backoff (`time.sleep(1)`).
+
+---
+
+## 2. Configuration & How to Set `GEMINI_MODEL`
+
+In your `.env` file or environment variables:
+
+```ini
+# Required for real AI drafting:
+GEMINI_API_KEY=AIzaSy...
+
+# Optional override:
+GEMINI_MODEL=gemini-flash-latest
+```
 
 ### Windows (PowerShell)
 ```powershell
-$env:GEMINI_API_KEY="your-gemini-api-key-here"
+$env:GEMINI_API_KEY="AIzaSy..."
+$env:GEMINI_MODEL="gemini-flash-latest"
 ```
 
-### Windows (Command Prompt)
-```cmd
-set GEMINI_API_KEY=your-gemini-api-key-here
+To test and discover which models are currently available with your key, run the diagnostic doctor:
+```powershell
+python -m server.scripts.doctor
 ```
+This prints:
+`Gemini API connected. Discovered flash models: [gemini-flash-latest, gemini-3.8-flash, ...]. Selected model for docgen: 'gemini-flash-latest'.`
 
-### Linux / macOS (Bash / Zsh)
-```bash
-export GEMINI_API_KEY="your-gemini-api-key-here"
-```
+---
+
+## 3. Privacy & What Data is Sent to the AI
+
+SVNIT ClubDocs enforces strict institutional data protection:
+
+| Data Type | Sent to Gemini? | Explanation |
+| :--- | :---: | :--- |
+| **User Prompt / Description** | **YES** | The exact natural-language text entered by the user in the prompt box (e.g. *"Create a sound system permission letter for our cultural fest"*). |
+| **Club Database Records** | **NO** | Club database records, membership rosters, and audit logs are **never** sent. |
+| **Passwords & Hashes** | **NO** | Never transmitted or logged. |
+| **Financial & Bank Details** | **NO** | Real bank account numbers, IFSC codes, PAN, and GST numbers are never included in prompts. |
+| **Personal Phone Numbers** | **NO** | Mobile numbers and private student details are stored encrypted and never sent to external AI APIs. |
 
 > [!IMPORTANT]
-> **API Key Privacy & Security**:
-> - Never hardcode or commit API keys into source code or git history.
-> - The application transmits the API key strictly via the `x-goog-api-key` HTTP header, never in the request URL query parameters where it might be logged in web server access logs or proxy traces.
-> - If `GEMINI_API_KEY` is not set or empty, the application falls back safely to the deterministic `StubLLMClient` for offline testing and development.
+> The API key is sent strictly in the `x-goog-api-key` HTTP header. It is **never** included in URL query parameters, never printed to terminal logs, and never included in error messages.
 
 ---
 
-## 2. API Communication & Schema Enforcement
+## 4. Plain-Language User Error Messages
 
-1. **Header-Based Authentication**:
-   - `GeminiLLMClient` sends all requests to Google's Generative Language API endpoint:
-     `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
-   - Authentication header: `x-goog-api-key: <GEMINI_API_KEY>`
+When an AI request cannot complete, the user receives an honest, plain-language explanation rather than raw Google JSON errors:
 
-2. **Simplified Inlined Schema**:
-   - Gemini's `generationConfig.response_schema` does not accept complex OpenAPI schemas containing `$defs` or `$ref` pointers.
-   - The application automatically simplifies Pydantic schemas via `simplify_schema_for_gemini`, recursively inlining definitions so that Gemini strictly generates conformant JSON.
-
-3. **Typed Error Handling**:
-   - The Gemini client returns typed exceptions rather than empty dicts or generic errors:
-     - `AIAuthenticationError` (401/403): Invalid API key or missing permissions.
-     - `AIQuotaError` (429): Quota or rate limit exceeded.
-     - `AITimeoutError` (504): Network timeout.
-     - `AIBadResponseError` (502): Malformed or empty JSON.
-   - The API surfaces clear messages prefixed with `"AI service error: <reason>"` rather than confusing schema validation failures when the upstream service fails.
-
----
-
-## 3. Security & Anti-Hallucination Guardrails
-
-1. **Identifier Whitelisting & Sandboxed Jinja**:
-   - All variable names, field keys, loop variables, and column identifiers must match `^[a-z][a-z0-9_]{0,39}$`.
-   - Reserved Python and Jinja dunders/builtins are rejected with HTTP 422.
-   - Compiled templates render in a `SandboxedEnvironment(autoescape=True, undefined=StrictUndefined)`.
-
-2. **Official Wording Protection**:
-   - Official certification, approval, sanction, and undertaking statements cannot be hallucinated.
-   - Each paragraph in AI output that matches an official trigger is compared sentence-by-sentence against what the user wrote in their prompt.
-   - If the user did not supply the exact or near-exact phrasing verbatim, the block is replaced with the visible placeholder: `"Add official wording here"` (flagged with `official_wording_required=True`).
-
-3. **Token Accounting**:
-   - Real token counts from the upstream `usageMetadata` (`promptTokenCount`, `candidatesTokenCount`) are recorded in the `ai_requests` table.
-   - If `usageMetadata` is absent or the request was simulated, `tokens_in` and `tokens_out` are recorded as `null`, and `usage_estimated` is flagged as `true`. Word-count guesses are never stored as real tokens.
-
-4. **Numbering Series Isolation**:
-   - Each AI-drafted template derives a unique series key within the club (e.g., `SPON`, `SPON2`, `SPON3`). Two templates never share a numbering counter.
+- **Model Retired / Missing**:  
+  `"The AI model is not available. Set GEMINI_MODEL in .env to one of: <list>."`
+- **Quota Exceeded (429)**:  
+  `"Gemini API quota exceeded or rate limit reached. Tip: Set GEMINI_API_KEY in your environment or .env..."`
+- **Invalid Key (400/401/403)**:  
+  `"Gemini API key is invalid or expired. Check your .env."`
+- **Overloaded (503)**:  
+  `"AI service is temporarily overloaded. Please try again in a few moments."`
+- **Timeout**:  
+  `"AI service timed out after 30s. Try a shorter prompt."`
+- **Malformed Response**:  
+  `"AI service returned invalid data. You can build this manually in the editor."`
+- **Offline / Missing Key**:  
+  Falls back cleanly to `StubLLMClient` for offline testing.
 
 ---
 
-## 4. Running Tests
+## 5. Security & Anti-Hallucination Guardrails
 
-### Running the Standard Offline Suite
-All offline tests run using the deterministic stub client without requiring network access:
-```powershell
-python -m pytest -v -p no:cacheprovider
-```
-
-### Running Live Gemini API Tests
-To execute live integration tests against the Gemini API:
-```powershell
-# Set your API key in your session
-$env:GEMINI_API_KEY="your-gemini-api-key"
-
-# Run tests marked with 'live'
-python -m pytest -v -m live
-```
-If `GEMINI_API_KEY` is not present, the live tests will be safely skipped.
+1. **Jinja Sandboxing**: All user input is treated as DATA. Jinja delimiters (`{{`, `}}`, `{%`, `%}`) in user text are escaped automatically.
+2. **Official Wording Protection**: Official certification, sanction, undertaking, or approval language is never written by the AI. It is replaced with an `"Add official wording here"` placeholder unless the user typed it verbatim.
+3. **No Unreviewed AI Drafts in Official PDFs**: AI-suggested content is always tagged `[AI-drafted, review]` and must be explicitly reviewed and accepted before document generation.

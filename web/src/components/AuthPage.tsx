@@ -28,7 +28,17 @@ export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from || '/home';
-  const initialInvite = new URLSearchParams(window.location.search).get('invite') || '';
+
+  const getInviteParam = () => {
+    const params = new URLSearchParams(location.search || window.location.search);
+    let code = params.get('invite');
+    if (!code && (location.state as any)?.from?.search) {
+      code = new URLSearchParams((location.state as any).from.search).get('invite');
+    }
+    return code || '';
+  };
+
+  const initialInvite = getInviteParam();
   const [tab, setTab] = useState<'login' | 'register' | 'forgot' | 'reset'>(initialInvite ? 'register' : 'login');
 
   // Form states
@@ -49,6 +59,14 @@ export const AuthPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    const inv = getInviteParam();
+    if (inv && inv !== inviteCode) {
+      setInviteCode(inv);
+      setTab('register');
+    }
+  }, [location.search]);
 
   useEffect(() => {
     if (inviteCode.trim()) {

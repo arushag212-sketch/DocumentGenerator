@@ -355,6 +355,7 @@ def search_clubs(
     return results
 
 
+@router.get("", response_model=list[ClubOut])
 @router.get("/", response_model=list[ClubOut])
 def list_clubs(
     current_user: User = Depends(get_current_user),
@@ -393,6 +394,7 @@ def list_clubs(
     return clubs_out
 
 
+@router.post("", response_model=ClubOut, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=ClubOut, status_code=status.HTTP_201_CREATED)
 def create_club(
     payload: ClubCreate,

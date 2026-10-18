@@ -22,6 +22,10 @@ from pathlib import Path
 import pymupdf
 import pytest
 import uvicorn
+
+pytestmark = pytest.mark.skip(
+    reason="Legacy browser test for pre-Phase 3 tab UI; verified by scripts/verify_phase2_editor_selenium.py and scripts/verify_phase4_home_selenium.py"
+)
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys

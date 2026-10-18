@@ -75,7 +75,7 @@ def run_phase2_verification():
 
         # 2. Open Templates tab
         print("[2/7] Opening Templates Gallery...")
-        templates_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Templates')]")))
+        templates_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[self::a or self::button][contains(., 'Templates')]")))
         templates_btn.click()
         time.sleep(2)
 
@@ -234,8 +234,8 @@ def run_phase2_verification():
         driver.refresh()
         time.sleep(3)
 
-        # In current tab navigation, navigate back to Templates gallery
-        templates_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Templates')]")))
+        # In declarative navigation, navigate back to Templates gallery
+        templates_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[self::a or self::button][contains(., 'Templates')]")))
         driver.execute_script("arguments[0].click();", templates_tab)
         time.sleep(2)
 
