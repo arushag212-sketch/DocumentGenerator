@@ -54,6 +54,34 @@ Screenshots archived to `docs/screenshots/baseline/`.
 
 ---
 
+## Phase 1: AI Robustness & Dynamic Model Discovery
+
+### Completed Tasks
+- **Dynamic Model Discovery (`docgen/llm.py`)**:
+  - Implemented `discover_gemini_models` querying `https://generativelanguage.googleapis.com/v1beta/models` using `x-goog-api-key` header (strictly in headers, never query params).
+  - Filtered models supporting `generateContent` and containing `flash` (excluding specialized audio/image models like `-image`, `-tts`).
+  - Prioritized newest non-preview models (`gemini-3.8-flash`, `gemini-3.7-flash`, etc.) and `GEMINI_MODEL` from `.env`, with fallback to `gemini-flash-latest`.
+  - In-memory 1-hour cache (`MODEL_CACHE_TTL = 3600.0`) with `force_refresh` and `clear_model_cache()`.
+- **Automatic Fallback Chain**:
+  - On HTTP 404 ("model not found" or "no longer available"): cache is invalidated, candidate list re-queried, switched to the next candidate model, and retried ONCE.
+  - On HTTP 429 ("quota exceeded"): iterates candidate flash models with 1-second backoff (`time.sleep(1)`), up to 2 retries.
+- **Plain-Language User Messages**:
+  - Invalid/expired key: `"Gemini API key is invalid or expired. Check your .env."`
+  - Quota exceeded: `"Gemini API quota exceeded or rate limit reached. Tip: Set GEMINI_API_KEY in your environment or .env..."`
+  - Timeout: `"AI service timed out after 30s. Try a shorter prompt."`
+  - Bad response / invalid JSON: `"AI service returned invalid data. You can build this manually in the editor."`
+  - General failure: `"AI could not draft this template right now. You can build it manually in the editor."`
+- **System Doctor Integration (`server/scripts/doctor.py`)**:
+  - `python -m server.scripts.doctor` dynamically queries flash models and prints:
+    `Gemini API connected. Discovered flash models: [gemini-flash-latest, gemini-3.8-flash, gemini-3.7-flash, gemini-3.6-flash, gemini-3.5-flash (+9 more)]. Selected model for docgen: 'gemini-flash-latest'.`
+- **Verification**:
+  - `tests/test_gemini_format_and_fallback.py` updated and passing (8/8 passed).
+  - Executed live draft trial with the live key ("A simple notice with a title, a date, a body and a signature for the chairperson"). Successfully caught 429 on `gemini-flash-latest`, backed off 1s, fell back to next model, and drafted TemplateSpec (`General Notice`, 3 fields, 5 blocks).
+
+---
+
 ## Current Status & Next Steps
-- **Phase 0**: **DONE** (Baseline recorded, reproduction completed, git commit created).
-- **Phase 1 (Next)**: AI Robustness — Dynamic model discovery from models list endpoint, caching, fallback chain, and typed error handling.
+- **Phase 0**: **DONE**
+- **Phase 1**: **DONE**
+- **Phase 2 (Next)**: Rebuild TipTap Template Editor — Replace non-editable atom table nodes with editable TipTap tables (`@tiptap/extension-table`, `TableRow`, `TableCell`, `TableHeader`), eliminate `editor.isEmpty -> setContent` wipe bug, add slash menu, bubble menu, fields panel, A4 page layout, autosave indicator, and schema compiler updates.
+

@@ -193,3 +193,98 @@ def test_gemini_429_quota_retries_with_fallback_model():
         # Second call fell back to gemini-3.5-flash-lite
         assert "gemini-3.5-flash-lite" in mock_post.call_args_list[1][0][0]
         assert result == {"title": "Fallback Model Response"}
+
+
+def test_gemini_404_triggers_fallback_to_next_model():
+    """Assert a 404 on current model invalidates cache and retries with next model."""
+    from docgen.llm import clear_model_cache
+    clear_model_cache()
+
+    client = GeminiLLMClient(api_key="test-key", model="gemini-deprecated-model")
+
+    mock_err_404 = MagicMock()
+    mock_err_404.status_code = 404
+    mock_err_404.json.return_value = {"error": {"message": "Model not found or no longer available"}}
+
+    mock_success = _mock_success_response('{"title": "Recovered On Next Model"}')
+
+    # Mock discovery endpoint to return candidate list
+    mock_models_resp = MagicMock()
+    mock_models_resp.status_code = 200
+    mock_models_resp.json.return_value = {
+        "models": [
+            {"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-flash-latest", "supportedGenerationMethods": ["generateContent"]},
+        ]
+    }
+
+    with patch("requests.get", return_value=mock_models_resp):
+        with patch("requests.post", side_effect=[mock_err_404, mock_success]) as mock_post:
+            result = client.generate_json(
+                prompt="Draft template",
+                schema={"type": "object"},
+            )
+
+            assert mock_post.call_count == 2
+            # First call was to deprecated model
+            assert "gemini-deprecated-model" in mock_post.call_args_list[0][0][0]
+            # Second call was to next candidate model
+            assert "gemini-2.5-flash" in mock_post.call_args_list[1][0][0]
+            assert result == {"title": "Recovered On Next Model"}
+
+
+def test_gemini_429_backoff_and_exhaustion():
+    """Assert 429 retries with 1s backoff and raises AIQuotaError when exhausted."""
+    from docgen.llm import AIQuotaError, clear_model_cache
+    clear_model_cache()
+
+    client = GeminiLLMClient(api_key="test-key", model="gemini-3.8-flash")
+
+    mock_err_429 = MagicMock()
+    mock_err_429.status_code = 429
+    mock_err_429.text = "Quota exhausted"
+    mock_err_429.json.return_value = {"error": {"message": "Quota exceeded"}}
+
+    with patch("time.sleep") as mock_sleep:
+        with patch("requests.post", return_value=mock_err_429) as mock_post:
+            with pytest.raises(AIQuotaError) as exc_info:
+                client.generate_json(
+                    prompt="Draft template",
+                    schema={"type": "object"},
+                )
+
+            assert mock_post.call_count >= 2
+            assert mock_sleep.call_count >= 1
+            mock_sleep.assert_called_with(1)
+            assert "quota exceeded or rate limit reached" in exc_info.value.message.lower()
+
+
+def test_gemini_model_discovery_1hr_cache():
+    """Assert discovered models are cached in-memory and not re-fetched within 1 hour."""
+    from docgen.llm import clear_model_cache, discover_gemini_models
+    clear_model_cache()
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "models": [
+            {"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"]},
+        ]
+    }
+
+    with patch("requests.get", return_value=mock_resp) as mock_get:
+        # First discovery call
+        m1 = discover_gemini_models(api_key="test-key")
+        assert mock_get.call_count == 1
+        assert "gemini-2.5-flash" in m1
+
+        # Second call within 1 hour should hit cache
+        m2 = discover_gemini_models(api_key="test-key")
+        assert mock_get.call_count == 1
+        assert m1 == m2
+
+        # Forced refresh should make a new network call
+        m3 = discover_gemini_models(api_key="test-key", force_refresh=True)
+        assert mock_get.call_count == 2
+        assert m3 == m1
+

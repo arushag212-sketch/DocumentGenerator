@@ -345,74 +345,39 @@ def check_ai() -> list[CheckResult]:
             )
         ]
 
-    configured_model = os.environ.get("GEMINI_MODEL") or "gemini-2.5-flash"
-    import requests
-
-    url = "https://generativelanguage.googleapis.com/v1beta/models"
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key.strip(),
-    }
-
+    from docgen.llm import discover_gemini_models
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
-    except Exception as e:
-        return [
-            CheckResult(
-                name="Google Gemini AI Integration",
-                passed=False,
-                message=f"Network error connecting to Gemini API: {e}",
-                fix_instruction="Check internet connectivity and ensure generativelanguage.googleapis.com is reachable.",
-            )
-        ]
-
-    if resp.status_code != 200:
-        err_msg = ""
-        try:
-            err_msg = resp.json().get("error", {}).get("message", "")
-        except Exception:
-            err_msg = resp.text[:200]
-        return [
-            CheckResult(
-                name="Google Gemini AI Integration",
-                passed=False,
-                message=f"Gemini API returned HTTP {resp.status_code}: {err_msg}",
-                fix_instruction="Verify that your GEMINI_API_KEY is active and valid at https://aistudio.google.com/.",
-            )
-        ]
-
-    try:
-        data = resp.json()
-        models = data.get("models", [])
-        model_names = [m.get("name", "") for m in models]
-        target_name = f"models/{configured_model}" if not configured_model.startswith("models/") else configured_model
-
-        is_in_list = any(m == target_name or m == configured_model for m in model_names)
-        if is_in_list:
-            return [
-                CheckResult(
-                    name="Google Gemini AI Integration",
-                    passed=True,
-                    message=f"Gemini API connected successfully. Configured model '{configured_model}' is available ({len(models)} models listed).",
-                )
-            ]
-        else:
-            avail_sample = [m.replace("models/", "") for m in model_names if "gemini" in m][:5]
+        discovered = discover_gemini_models(api_key.strip(), force_refresh=True)
+        if not discovered:
             return [
                 CheckResult(
                     name="Google Gemini AI Integration",
                     passed=False,
-                    message=f"Gemini API connected, but configured model '{configured_model}' was not found in available models.",
-                    fix_instruction=f"Set GEMINI_MODEL in .env to a supported model (e.g. gemini-2.5-flash). Available models: {', '.join(avail_sample)}",
+                    message="No compatible Gemini flash models found.",
+                    fix_instruction="Verify your GEMINI_API_KEY has access to Gemini flash models.",
                 )
             ]
+
+        configured_model = os.environ.get("GEMINI_MODEL")
+        chosen_model = discovered[0]
+        models_str = ", ".join(discovered[:5]) + (f" (+{len(discovered)-5} more)" if len(discovered) > 5 else "")
+        return [
+            CheckResult(
+                name="Google Gemini AI Integration",
+                passed=True,
+                message=(
+                    f"Gemini API connected. Discovered flash models: [{models_str}]. "
+                    f"Selected model for docgen: '{chosen_model}'."
+                ),
+            )
+        ]
     except Exception as e:
         return [
             CheckResult(
                 name="Google Gemini AI Integration",
                 passed=False,
-                message=f"Failed to parse Gemini models list: {e}",
-                fix_instruction="Check Google Generative Language API status.",
+                message=f"Gemini API check failed: {e}",
+                fix_instruction="Verify your GEMINI_API_KEY in .env.",
             )
         ]
 

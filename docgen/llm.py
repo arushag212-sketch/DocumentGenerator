@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
@@ -26,29 +28,116 @@ class AIServiceError(Exception):
 class AIAuthenticationError(AIServiceError):
     """Invalid or missing API key."""
 
-    def __init__(self, message: str = "AI service error: Invalid or missing Gemini API key."):
+    def __init__(self, message: str = "Gemini API key is invalid or expired. Check your .env."):
         super().__init__(message, code="INVALID_API_KEY")
 
 
 class AIQuotaError(AIServiceError):
     """Rate limit or quota exceeded."""
 
-    def __init__(self, message: str = "AI service error: Gemini API quota exceeded or rate limit reached."):
+    def __init__(self, message: str = "Gemini API quota exceeded or rate limit reached. Tip: Set GEMINI_API_KEY in your environment or .env to activate live Gemini AI drafting. Alternatively, click 'New Blank Template' above to compose manually in the WYSIWYG editor."):
         super().__init__(message, code="QUOTA_EXCEEDED")
 
 
 class AITimeoutError(AIServiceError):
     """Request timed out."""
 
-    def __init__(self, message: str = "AI service error: Gemini API request timed out."):
+    def __init__(self, message: str = "AI service timed out after 30s. Try a shorter prompt."):
         super().__init__(message, code="TIMEOUT")
 
 
 class AIBadResponseError(AIServiceError):
     """Malformed JSON or unexpected response from AI service."""
 
-    def __init__(self, message: str = "AI service error: Malformed response from Gemini."):
+    def __init__(self, message: str = "AI service returned invalid data. You can build this manually in the editor."):
         super().__init__(message, code="BAD_RESPONSE")
+
+
+# ---------------------------------------------------------------------------
+# Dynamic Model Discovery & Cache
+# ---------------------------------------------------------------------------
+
+_CACHED_MODELS: list[str] = []
+_CACHE_TIMESTAMP: float = 0.0
+MODEL_CACHE_TTL: float = 3600.0  # 1 hour
+
+
+def clear_model_cache() -> None:
+    """Clear in-memory model discovery cache (used in testing)."""
+    global _CACHED_MODELS, _CACHE_TIMESTAMP
+    _CACHED_MODELS = []
+    _CACHE_TIMESTAMP = 0.0
+
+
+def discover_gemini_models(api_key: Optional[str] = None, force_refresh: bool = False) -> list[str]:
+    """
+    Query https://generativelanguage.googleapis.com/v1beta/models using x-goog-api-key header.
+    Filter to models supporting generateContent and containing 'flash'.
+    Order:
+      1. Newest non-preview flash models
+      2. Other flash models / gemini-flash-latest
+    Cached in-memory for 1 hour.
+    """
+    global _CACHED_MODELS, _CACHE_TIMESTAMP
+    now = time.time()
+    if not force_refresh and _CACHED_MODELS and (now - _CACHE_TIMESTAMP < MODEL_CACHE_TTL):
+        return list(_CACHED_MODELS)
+
+    key = api_key or os.environ.get("GEMINI_API_KEY")
+    fallback_candidates = [
+        "gemini-3.8-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+    ]
+
+    if not key or not key.strip():
+        _CACHED_MODELS = fallback_candidates
+        _CACHE_TIMESTAMP = now
+        return list(_CACHED_MODELS)
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models"
+    headers = {"Content-Type": "application/json", "x-goog-api-key": key.strip()}
+
+    import requests
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            raw_models = data.get("models", [])
+            valid_models = []
+            for m in raw_models:
+                name = m.get("name", "").replace("models/", "")
+                methods = m.get("supportedGenerationMethods", [])
+                if "generateContent" in methods and "flash" in name.lower():
+                    # Exclude specialized modalities like -image, -tts
+                    if not any(sub in name.lower() for sub in ["-image", "-tts"]):
+                        valid_models.append(name)
+
+            if valid_models:
+                def _version_key(name: str):
+                    # Penalize preview / experimental models
+                    is_preview = 1 if any(p in name.lower() for p in ["preview", "exp", "experimental"]) else 0
+                    match = re.search(r"(\d+(?:\.\d+)*)", name)
+                    if match:
+                        parts = tuple(int(x) for x in match.group(1).split("."))
+                    else:
+                        parts = (0,)
+                    return (-is_preview, parts)
+
+                valid_models.sort(key=_version_key, reverse=True)
+
+                _CACHED_MODELS = valid_models
+                _CACHE_TIMESTAMP = now
+                return list(_CACHED_MODELS)
+    except Exception:
+        pass
+
+    _CACHED_MODELS = fallback_candidates
+    _CACHE_TIMESTAMP = now
+    return list(_CACHED_MODELS)
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +251,6 @@ class StubLLMClient(LLMClient):
 
         # Simulate failures for retry testing
         if self.attempt_count <= self.fail_attempts:
-            # Return an invalid structure that fails Pydantic schema
             return {"invalid": "payload_missing_required_fields"}
 
         if self.simulated_usage:
@@ -189,7 +277,17 @@ class GeminiLLMClient(LLMClient):
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
-        self.model = model or os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+        if model:
+            self.model = model
+        else:
+            candidates = discover_gemini_models(self.api_key)
+            env_model = os.environ.get("GEMINI_MODEL")
+            if env_model and env_model in candidates:
+                self.model = env_model
+            elif candidates:
+                self.model = candidates[0]
+            else:
+                self.model = "gemini-flash-latest"
         self.last_usage_metadata = None
 
     @property
@@ -225,15 +323,10 @@ class GeminiLLMClient(LLMClient):
 
         logger = logging.getLogger(__name__)
 
-        # Pass API key strictly in header, NEVER in URL query string
-        url = self.endpoint_url
-        headers = self.build_headers()
-
         simplified_schema = simplify_schema_for_gemini(schema)
         schema_json_str = json.dumps(simplified_schema, indent=2)
         prompt_with_schema = prompt if (schema_json_str in prompt or "TemplateSpec" in prompt) else f"{prompt}\n\nTarget JSON Schema:\n{schema_json_str}"
 
-        # Standard JSON schema via responseJsonSchema (response_schema and responseSchema MUST be omitted)
         payload = {
             "contents": [{"parts": [{"text": prompt_with_schema}]}],
             "generationConfig": {
@@ -243,13 +336,40 @@ class GeminiLLMClient(LLMClient):
             },
         }
 
+        candidates = discover_gemini_models(self.api_key)
+        if self.model not in candidates:
+            candidates = [self.model] + candidates
+        else:
+            candidates = [self.model] + [m for m in candidates if m != self.model]
+
+        current_model = self.model
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent"
+        headers = self.build_headers()
+
         try:
             resp = requests.post(url, headers=headers, json=payload, timeout=30)
         except requests.exceptions.Timeout:
-            raise AITimeoutError("AI service error: Gemini API request timed out.")
+            raise AITimeoutError("AI service timed out after 30s. Try a shorter prompt.")
         except requests.exceptions.RequestException as e:
             logger.error("Network failure contacting Gemini API: %s", str(e))
             raise AIServiceError("AI could not draft this template right now. You can build it manually in the editor.")
+
+        # On 404 ("model not found" or "no longer available"): invalidate cache, re-fetch list, switch to next candidate flash model, retry ONCE
+        if resp.status_code == 404:
+            logger.warning("Gemini model '%s' returned 404. Invalidating cache and switching to next model.", current_model)
+            refreshed_candidates = discover_gemini_models(self.api_key, force_refresh=True)
+            next_models = [m for m in refreshed_candidates if m != current_model]
+            if next_models:
+                self.model = next_models[0]
+                current_model = self.model
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent"
+                try:
+                    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                except requests.exceptions.Timeout:
+                    raise AITimeoutError("AI service timed out after 30s. Try a shorter prompt.")
+                except requests.exceptions.RequestException as e:
+                    logger.error("Network failure contacting Gemini API on 404 fallback: %s", str(e))
+                    raise AIServiceError("AI could not draft this template right now. You can build it manually in the editor.")
 
         # Check for 400 schema error -> retry ONCE without any schema (prompt-only JSON mode)
         if resp.status_code == 400:
@@ -271,9 +391,8 @@ class GeminiLLMClient(LLMClient):
             )
             if is_auth_error:
                 logger.error("Gemini API authentication failed (HTTP 400): %s", raw_err_msg)
-                raise AIAuthenticationError("AI service error: Invalid or expired API key")
+                raise AIAuthenticationError("Gemini API key is invalid or expired. Check your .env.")
 
-            # Schema or payload issue: log server-side only and retry ONCE in prompt-only JSON mode
             logger.warning("Gemini rejected schema with HTTP 400 (%s). Retrying ONCE in prompt-only JSON mode.", raw_err_msg)
             fallback_payload = {
                 "contents": [{"parts": [{"text": prompt_with_schema}]}],
@@ -285,20 +404,26 @@ class GeminiLLMClient(LLMClient):
             try:
                 resp = requests.post(url, headers=headers, json=fallback_payload, timeout=30)
             except requests.exceptions.Timeout:
-                raise AITimeoutError("AI service error: Gemini API request timed out.")
+                raise AITimeoutError("AI service timed out after 30s. Try a shorter prompt.")
             except requests.exceptions.RequestException as e:
                 logger.error("Network failure contacting Gemini API on retry: %s", str(e))
                 raise AIServiceError("AI could not draft this template right now. You can build it manually in the editor.")
 
+        # On 429 ("quota exceeded"): try candidate flash models in order, with 1s backoff, max 2 retries
         if resp.status_code == 429:
-            logger.warning("Gemini model '%s' hit HTTP 429 quota. Trying fallback models...", self.model)
-            fallback_models = [m for m in ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite") if m != self.model]
-            for fb_model in fallback_models:
+            logger.warning("Gemini model '%s' hit HTTP 429 quota. Trying fallback models with 1s backoff...", current_model)
+            alt_candidates = [m for m in candidates if m != current_model][:2]
+            for fb_model in alt_candidates:
+                time.sleep(1)
                 fb_url = f"https://generativelanguage.googleapis.com/v1beta/models/{fb_model}:generateContent"
                 try:
                     fb_resp = requests.post(fb_url, headers=headers, json=payload, timeout=30)
                     if fb_resp.status_code == 200:
                         logger.info("Successfully completed request using fallback model '%s'", fb_model)
+                        self.model = fb_model
+                        resp = fb_resp
+                        break
+                    elif fb_resp.status_code != 429:
                         resp = fb_resp
                         break
                 except Exception as fb_err:
@@ -306,10 +431,10 @@ class GeminiLLMClient(LLMClient):
 
         if resp.status_code in (401, 403):
             logger.error("Gemini API authentication error (HTTP %d): %s", resp.status_code, resp.text[:300])
-            raise AIAuthenticationError("AI service error: Invalid or expired API key")
+            raise AIAuthenticationError("Gemini API key is invalid or expired. Check your .env.")
         elif resp.status_code == 429:
             logger.error("Gemini API rate limit or quota exceeded (HTTP 429): %s", resp.text[:300])
-            raise AIQuotaError("AI service error: Gemini API quota exceeded or rate limit reached.")
+            raise AIQuotaError("Gemini API quota exceeded or rate limit reached. Tip: Set GEMINI_API_KEY in your environment or .env to activate live Gemini AI drafting. Alternatively, click 'New Blank Template' above to compose manually in the WYSIWYG editor.")
         elif resp.status_code != 200:
             logger.error("Gemini API returned error (HTTP %d): %s", resp.status_code, resp.text[:300])
             raise AIServiceError("AI could not draft this template right now. You can build it manually in the editor.")
@@ -318,9 +443,8 @@ class GeminiLLMClient(LLMClient):
             data = resp.json()
         except Exception as e:
             logger.error("Failed to decode Gemini response as JSON: %s (raw: %s)", str(e), resp.text[:300])
-            raise AIBadResponseError("AI could not draft this template right now. You can build it manually in the editor.")
+            raise AIBadResponseError("AI service returned invalid data. You can build this manually in the editor.")
 
-        # Capture real token usage metadata from API
         usage_meta = data.get("usageMetadata", {})
         if usage_meta and "promptTokenCount" in usage_meta:
             self.last_usage_metadata = {
@@ -335,27 +459,27 @@ class GeminiLLMClient(LLMClient):
                 "usage_estimated": True,
             }
 
-        candidates = data.get("candidates", [])
-        if not candidates:
+        candidates_list = data.get("candidates", [])
+        if not candidates_list:
             logger.error("Gemini returned empty candidates list: %s", data)
-            raise AIBadResponseError("AI could not draft this template right now. You can build it manually in the editor.")
+            raise AIBadResponseError("AI service returned invalid data. You can build this manually in the editor.")
 
-        candidate = candidates[0]
+        candidate = candidates_list[0]
         finish_reason = candidate.get("finishReason")
         if finish_reason and finish_reason not in ("STOP", None):
             logger.error("Gemini generation incomplete (finish_reason: %s): %s", finish_reason, data)
-            raise AIBadResponseError("AI could not draft this template right now. You can build it manually in the editor.")
+            raise AIBadResponseError("AI service returned invalid data. You can build this manually in the editor.")
 
         text = candidate.get("content", {}).get("parts", [{}])[0].get("text", "")
         if not text:
             logger.error("Gemini candidate part had empty text: %s", data)
-            raise AIBadResponseError("AI could not draft this template right now. You can build it manually in the editor.")
+            raise AIBadResponseError("AI service returned invalid data. You can build this manually in the editor.")
 
         try:
             return json.loads(text)
         except json.JSONDecodeError as e:
             logger.error("Failed to parse JSON generated by model: %s (raw output: %s)", str(e), text[:300])
-            raise AIBadResponseError("AI could not draft this template right now. You can build it manually in the editor.")
+            raise AIBadResponseError("AI service returned invalid data. You can build this manually in the editor.")
 
     def draft_text(self, prompt: str, context: dict[str, Any]) -> str:
         if not self.is_available():
@@ -363,7 +487,14 @@ class GeminiLLMClient(LLMClient):
 
         import requests
 
-        url = self.endpoint_url
+        candidates = discover_gemini_models(self.api_key)
+        if self.model not in candidates:
+            candidates = [self.model] + candidates
+        else:
+            candidates = [self.model] + [m for m in candidates if m != self.model]
+
+        current_model = self.model
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent"
         headers = self.build_headers()
         ctx_summary = "\n".join(f"{k}: {v}" for k, v in context.items() if v)
         full_prompt = f"Context:\n{ctx_summary}\n\nTask: {prompt}\nDraft professional text for official student chapter documentation."
@@ -375,38 +506,57 @@ class GeminiLLMClient(LLMClient):
         try:
             resp = requests.post(url, headers=headers, json=payload, timeout=30)
         except requests.exceptions.Timeout:
-            raise AITimeoutError("AI service error: Request timed out after 30 seconds.")
+            raise AITimeoutError("AI service timed out after 30s. Try a shorter prompt.")
         except requests.exceptions.RequestException as e:
             raise AIServiceError(f"AI service error: Network failure ({str(e)})")
 
+        if resp.status_code == 404:
+            refreshed_candidates = discover_gemini_models(self.api_key, force_refresh=True)
+            next_models = [m for m in refreshed_candidates if m != current_model]
+            if next_models:
+                self.model = next_models[0]
+                current_model = self.model
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent"
+                try:
+                    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                except requests.exceptions.Timeout:
+                    raise AITimeoutError("AI service timed out after 30s. Try a shorter prompt.")
+                except requests.exceptions.RequestException as e:
+                    raise AIServiceError(f"AI service error: Network failure ({str(e)})")
+
         if resp.status_code == 429:
-            fallback_models = [m for m in ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite") if m != self.model]
-            for fb_model in fallback_models:
+            alt_candidates = [m for m in candidates if m != current_model][:2]
+            for fb_model in alt_candidates:
+                time.sleep(1)
                 fb_url = f"https://generativelanguage.googleapis.com/v1beta/models/{fb_model}:generateContent"
                 try:
                     fb_resp = requests.post(fb_url, headers=headers, json=payload, timeout=30)
                     if fb_resp.status_code == 200:
+                        self.model = fb_model
+                        resp = fb_resp
+                        break
+                    elif fb_resp.status_code != 429:
                         resp = fb_resp
                         break
                 except Exception:
                     pass
 
         if resp.status_code in (400, 401, 403):
-            raise AIAuthenticationError(f"AI service error: Invalid or expired API key (HTTP {resp.status_code}).")
+            raise AIAuthenticationError(f"Gemini API key is invalid or expired. Check your .env.")
         elif resp.status_code == 429:
-            raise AIQuotaError("AI service error: Gemini API quota exceeded or rate limit reached.")
+            raise AIQuotaError("Gemini API quota exceeded or rate limit reached. Tip: Set GEMINI_API_KEY in your environment or .env to activate live Gemini AI drafting. Alternatively, click 'New Blank Template' above to compose manually in the WYSIWYG editor.")
         elif resp.status_code != 200:
             raise AIServiceError(f"AI service error: HTTP {resp.status_code}")
 
         try:
             data = resp.json()
-            candidates = data.get("candidates", [])
-            if not candidates:
-                raise AIBadResponseError("AI service error: No text candidates returned.")
-            text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            candidates_list = data.get("candidates", [])
+            if not candidates_list:
+                raise AIBadResponseError("AI service returned invalid data. You can build this manually in the editor.")
+            text = candidates_list[0].get("content", {}).get("parts", [{}])[0].get("text", "")
             return text.strip()
         except Exception as e:
-            raise AIBadResponseError(f"AI service error: Failed to parse response: {str(e)}")
+            raise AIBadResponseError(f"AI service returned invalid data. You can build this manually in the editor.")
 
 
 _current_llm_client: Optional[LLMClient] = None
@@ -425,6 +575,7 @@ def get_llm_client() -> LLMClient:
         return _current_llm_client
     api_key = os.environ.get("GEMINI_API_KEY")
     if api_key and api_key.strip():
-        model = os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+        model = os.environ.get("GEMINI_MODEL")
         return GeminiLLMClient(api_key=api_key.strip(), model=model)
     return DummyLLMClient()
+
