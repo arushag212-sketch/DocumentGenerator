@@ -172,19 +172,42 @@ Screenshots archived to `docs/screenshots/baseline/`.
 
 ---
 
+## Phase 6: Production Deployment Readiness (COMPLETED)
+- **Work Completed**:
+  - Authored multi-stage production `Dockerfile`:
+    - Stage 1: `node:20-alpine` builds Vite React frontend application.
+    - Stage 2: `python:3.12-slim` runtime environment with `libreoffice-writer`, `libreoffice-nogpu`, Indian fonts (`fonts-noto`, `fonts-indic`, `fonts-gargi`, `fonts-dejavu-core`, `fonts-liberation`), `curl`, `dumb-init`, and non-root system user `clubdocs`.
+    - Integrated native container HEALTHCHECK against `/health/liveness`.
+  - Created `scripts/docker_start.sh` startup script running system doctor, table migration/seeding check, and launching Uvicorn with 4 workers.
+  - Rebuilt production `docker-compose.yml` with full containerized stack: `clubdocs-app`, `postgres:16-alpine`, `redis:7-alpine`, volume persistence (`postgres_data`, `redis_data`, `clubdocs_data`, `clubdocs_storage`, `clubdocs_outputs`), and health dependencies (`service_healthy`).
+  - Authored `vercel.json` for frontend-on-Vercel + backend-on-Render/Fly hosting alternative, with reverse proxies for `/api/*` and `/health/*`.
+  - Added comprehensive `docs/DEPLOYMENT.md` covering architecture, VM Docker Compose setup, serverless cloud setup, environment variable reference with defaults, and atomic backup/restore procedures for PostgreSQL, SQLite, and storage assets.
+  - Added `/health/liveness` and `/health/readiness` endpoints to `server/app/main.py`.
+  - Created `scripts/predeploy_check.py` automated deployment pre-flight validator.
+- **Verification**:
+  - `python scripts/predeploy_check.py`: ALL 6 checks passed with code 0:
+    - [PASS] Dockerfile multi-stage & security structure
+    - [PASS] Docker Compose production stack syntax
+    - [PASS] Environment variables documentation completeness
+    - [PASS] Absence of hardcoded production secrets
+    - [PASS] Absence of localhost in deployment routing configs
+    - [PASS] Healthcheck endpoints (/health, /liveness, /readiness)
+
+---
+
 ## Current Status & Next Steps
 - **Phase 0**: **DONE** (Commit `69b63d8`)
 - **Phase 1**: **DONE** (Commit `941f16e`)
 - **Phase 2**: **DONE** (Commit `9253148`)
 - **Phase 3**: **DONE** (Commit `0987314`)
 - **Phase 4**: **DONE** (Commit `5fd1c8c`)
-- **Phase 5**: **DONE**
-- **Phase 6 (Next)**: Production Deployment Readiness
-  - Multi-stage Dockerfile (FastAPI + LibreOffice + fonts + built React SPA).
-  - docker-compose.yml configuration with healthchecks.
-  - vercel.json deployment configuration for frontend alternative.
-  - docs/DEPLOYMENT.md guide.
-  - scripts/predeploy_check.py automated deployment pre-flight verification script.
+- **Phase 5**: **DONE** (Commit `493daac`)
+- **Phase 6**: **DONE**
+- **Phase 7 (Next)**: Final Verification, Clean Seed, and Report
+  - Targeted and full test suite execution.
+  - Clean database reset (`python -m server.scripts.seed --clean`).
+  - Final Comprehensive Report according to Section 12.
+
 
 
 

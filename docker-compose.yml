@@ -1,10 +1,41 @@
 version: '3.8'
 
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clubdocs-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://clubdocs_user:clubdocs_password@postgres:5432/clubdocs
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_BACKEND=local
+      - STORAGE_LOCAL_ROOT=/app/storage
+    volumes:
+      - clubdocs_data:/app/data
+      - clubdocs_storage:/app/storage
+      - clubdocs_outputs:/app/outputs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health/liveness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
   postgres:
     image: postgres:16-alpine
     container_name: clubdocs-postgres
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: clubdocs_user
       POSTGRES_PASSWORD: clubdocs_password
@@ -19,5 +50,23 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: clubdocs-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
+  redis_data:
+  clubdocs_data:
+  clubdocs_storage:
+  clubdocs_outputs:

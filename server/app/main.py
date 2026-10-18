@@ -103,6 +103,26 @@ async def health_check():
     }
 
 
+@app.get("/health/liveness", tags=["system"])
+async def health_liveness():
+    return {"status": "alive"}
+
+
+@app.get("/health/readiness", tags=["system"])
+async def health_readiness():
+    try:
+        from server.app.core.database import SessionLocal
+        from sqlalchemy import text
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+        return {
+            "status": "ready",
+            "database": "connected",
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"status": "not_ready", "error": str(exc)})
+
+
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa_fallback(full_path: str):
     if full_path.startswith("api/") or full_path.startswith("assets/"):
