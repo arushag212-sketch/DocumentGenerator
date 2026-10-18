@@ -47,6 +47,7 @@ from docgen.schema import TemplateSchema, load_schema
 from docgen.sources import DatabaseTemplateSource, build_club_config_from_db
 from server.app.core.audit import log_audit
 from server.app.core.numbering_service import reserve_number_for_document
+from server.app.core.doc_retention import prune_document_versions
 from server.app.models import (
     Club,
     Document,
@@ -387,7 +388,7 @@ class BatchGenerator:
             event_data["submitted_to"] = "Dean (Student Welfare), SVNIT Surat"
 
         batch_id = str(uuid.uuid4())
-        batch_dir = Path("storage/batches") / batch_id
+        batch_dir = Path("storage/cache/batches") / batch_id
         batch_dir.mkdir(parents=True, exist_ok=True)
 
         generated_docs: list[dict[str, Any]] = []
@@ -595,15 +596,14 @@ class BatchGenerator:
                 docx_path = render_result.docx_path
                 pdf_path = render_result.pdf_path
 
-                # Rasterize previews
-                preview_dir = Path("storage/previews") / doc_record.id / "v1"
-                preview_dir.mkdir(parents=True, exist_ok=True)
-                pdf_doc = pymupdf.open(str(pdf_path))
-                page_count = len(pdf_doc)
-                for idx, page in enumerate(pdf_doc):
-                    pix = page.get_pixmap(dpi=150)
-                    pix.save(str(preview_dir / f"page_{idx + 1}.png"))
-                pdf_doc.close()
+                # On-demand preview rendering: calculate page count without writing PNGs
+                page_count = 1
+                try:
+                    pdf_doc = pymupdf.open(str(pdf_path))
+                    page_count = len(pdf_doc)
+                    pdf_doc.close()
+                except Exception:
+                    page_count = 1
 
                 # DocumentVersion
                 ver_record = DocumentVersion(
@@ -620,6 +620,7 @@ class BatchGenerator:
                 db.add(ver_record)
                 doc_record.current_version_id = ver_record.id
                 db.flush()
+                prune_document_versions(db, doc_record.id)
 
                 generated_docs.append({
                     "id": doc_record.id,

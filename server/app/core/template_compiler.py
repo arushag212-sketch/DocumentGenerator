@@ -88,9 +88,11 @@ def escape_jinja_delimiters(text: str) -> str:
 
 
 def normalize_logo_image(image_bytes: bytes) -> bytes:
-    """Normalize uploaded club logo: composite RGBA/transparency onto pure white RGB canvas."""
+    """Normalize uploaded club logo: resize to max 1000px, composite RGBA onto pure white RGB canvas, optimize."""
     from PIL import Image
     img = Image.open(io.BytesIO(image_bytes))
+    if img.width > 1000 or img.height > 1000:
+        img.thumbnail((1000, 1000), Image.Resampling.LANCZOS)
     if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
         img = img.convert("RGBA")
         background = Image.new("RGBA", img.size, (255, 255, 255, 255))
@@ -99,7 +101,7 @@ def normalize_logo_image(image_bytes: bytes) -> bytes:
     else:
         rgb_img = img.convert("RGB")
     out = io.BytesIO()
-    rgb_img.save(out, format="PNG")
+    rgb_img.save(out, format="PNG", optimize=True)
     return out.getvalue()
 
 

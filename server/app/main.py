@@ -134,3 +134,39 @@ async def spa_fallback(full_path: str):
         return FileResponse(index_file)
     return {"message": "ClubDocs API is running. Access /docs for Swagger UI."}
 
+
+import logging
+import threading
+import time
+
+logger = logging.getLogger("clubdocs.main")
+_gc_thread: threading.Thread | None = None
+
+
+def _daily_gc_worker():
+    while True:
+        try:
+            time.sleep(86400)
+            from server.scripts.storage_gc import run_storage_gc
+            logger.info("Running daily background storage GC...")
+            run_storage_gc(apply=True)
+        except Exception as e:
+            logger.warning("Daily background GC failed: %s", e)
+
+
+@app.on_event("startup")
+def on_startup_gc():
+    from server.app.core.storage import STORAGE_GC_ENABLED
+    if STORAGE_GC_ENABLED:
+        try:
+            from server.scripts.storage_gc import run_storage_gc
+            logger.info("Running startup light storage GC pass...")
+            run_storage_gc(apply=True)
+        except Exception as e:
+            logger.warning("Startup storage GC failed: %s", e)
+
+        global _gc_thread
+        if _gc_thread is None or not _gc_thread.is_alive():
+            _gc_thread = threading.Thread(target=_daily_gc_worker, daemon=True, name="storage-gc-worker")
+            _gc_thread.start()
+

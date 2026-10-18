@@ -233,10 +233,13 @@ def render_template_thumbnail(
     """
     thumbnails_dir = Path("storage/thumbnails")
     thumbnails_dir.mkdir(parents=True, exist_ok=True)
-    thumb_path = thumbnails_dir / f"{ver.id}.png"
+    thumb_path = thumbnails_dir / f"{ver.id}.webp"
+    thumb_path_png = thumbnails_dir / f"{ver.id}.png"
 
     if thumb_path.exists():
         return thumb_path
+    if thumb_path_png.exists():
+        return thumb_path_png
 
     # Determine DOCX source
     docx_path = None
@@ -289,8 +292,15 @@ def render_template_thumbnail(
             pdf_doc = pymupdf.open(str(render_res.pdf_path))
             if len(pdf_doc) > 0:
                 page = pdf_doc[0]
-                pix = page.get_pixmap(dpi=120)
-                pix.save(str(thumb_path))
+                rect = page.rect
+                scale = 240.0 / max(rect.width, 1.0)
+                mat = pymupdf.Matrix(scale, scale)
+                pix = page.get_pixmap(matrix=mat)
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                try:
+                    img.save(str(thumb_path), format="WEBP", quality=80)
+                except Exception:
+                    img.save(str(thumb_path), format="JPEG", quality=80)
                 pdf_doc.close()
                 return thumb_path
             pdf_doc.close()

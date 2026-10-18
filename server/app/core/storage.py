@@ -8,7 +8,16 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
 
+import hashlib
+import time
+from typing import Optional, Tuple
+
 logger = logging.getLogger("clubdocs.storage")
+
+PREVIEW_TTL_DAYS = int(os.environ.get("PREVIEW_TTL_DAYS", "7"))
+BATCH_TTL_HOURS = int(os.environ.get("BATCH_TTL_HOURS", "24"))
+KEEP_VERSION_FILES = int(os.environ.get("KEEP_VERSION_FILES", "3"))
+STORAGE_GC_ENABLED = os.environ.get("STORAGE_GC_ENABLED", "true").lower() in ("true", "1", "yes")
 
 
 class Storage(ABC):
@@ -17,6 +26,11 @@ class Storage(ABC):
     @abstractmethod
     def save(self, path: str, data: bytes) -> str:
         """Save raw bytes to the given relative path and return its canonical identifier/path."""
+        pass
+
+    @abstractmethod
+    def save_content_addressed(self, prefix: str, data: bytes, ext: str = "docx") -> Tuple[str, str]:
+        """Save data addressed by SHA-256 to {prefix}/sha256_{hash}.{ext}. Returns (relative_path, sha256)."""
         pass
 
     @abstractmethod
@@ -37,6 +51,11 @@ class Storage(ABC):
     @abstractmethod
     def public_url(self, path: str) -> str:
         """Return public or internal download/view URL for the given path."""
+        pass
+
+    @abstractmethod
+    def cleanup_expired(self, subfolder: str, max_age_seconds: float) -> int:
+        """Delete files older than max_age_seconds in subfolder. Returns freed bytes."""
         pass
 
 
@@ -83,6 +102,42 @@ class LocalDiskStorage(Storage):
             return target.is_file()
         except Exception:
             return False
+
+    def save_content_addressed(self, prefix: str, data: bytes, ext: str = "docx") -> Tuple[str, str]:
+        sha = hashlib.sha256(data).hexdigest()
+        clean_ext = ext.lstrip(".")
+        clean_prefix = Path(prefix).as_posix().lstrip("/\\")
+        rel_path = f"{clean_prefix}/sha256_{sha}.{clean_ext}"
+        target = self._resolve_safe_path(rel_path)
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        return Path(target.relative_to(self.base_dir)).as_posix(), sha
+
+    def cleanup_expired(self, subfolder: str, max_age_seconds: float) -> int:
+        target_dir = self._resolve_safe_path(subfolder)
+        if not target_dir.exists():
+            return 0
+        cutoff = time.time() - max_age_seconds
+        freed_bytes = 0
+        for root, dirs, files in os.walk(target_dir, topdown=False):
+            for f in files:
+                fp = Path(root) / f
+                try:
+                    st = fp.stat()
+                    if st.st_mtime < cutoff:
+                        freed_bytes += st.st_size
+                        fp.unlink()
+                except Exception as e:
+                    logger.warning("Error removing expired file %s: %s", fp, e)
+            for d in dirs:
+                dp = Path(root) / d
+                try:
+                    if not any(dp.iterdir()):
+                        dp.rmdir()
+                except Exception:
+                    pass
+        return freed_bytes
 
     def public_url(self, path: str) -> str:
         clean = Path(path).as_posix().lstrip("/\\")
@@ -161,6 +216,33 @@ class S3Storage(Storage):
         except Exception:
             return False
 
+    def save_content_addressed(self, prefix: str, data: bytes, ext: str = "docx") -> Tuple[str, str]:
+        sha = hashlib.sha256(data).hexdigest()
+        clean_ext = ext.lstrip(".")
+        clean_prefix = Path(prefix).as_posix().lstrip("/\\")
+        clean_key = f"{clean_prefix}/sha256_{sha}.{clean_ext}"
+        if not self.exists(clean_key):
+            self.save(clean_key, data)
+        return clean_key, sha
+
+    def cleanup_expired(self, subfolder: str, max_age_seconds: float) -> int:
+        if self.s3_client is None:
+            return 0
+        clean_prefix = Path(subfolder).as_posix().lstrip("/\\")
+        cutoff = time.time() - max_age_seconds
+        freed = 0
+        try:
+            paginator = self.s3_client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=clean_prefix):
+                for obj in page.get("Contents", []):
+                    last_mod = obj["LastModified"].timestamp()
+                    if last_mod < cutoff:
+                        freed += obj["Size"]
+                        self.s3_client.delete_object(Bucket=self.bucket, Key=obj["Key"])
+        except Exception as e:
+            logger.warning("Failed to cleanup expired S3 objects: %s", e)
+        return freed
+
     def public_url(self, path: str) -> str:
         clean_key = Path(path).as_posix().lstrip("/\\")
         if self.public_base_url:
@@ -187,6 +269,14 @@ def get_storage() -> Storage:
     return _active_storage
 
 
-def set_storage(storage: Optional[Storage]) -> None:
+def set_storage(storage_instance: Optional[Storage]) -> None:
     global _active_storage
-    _active_storage = storage
+    _active_storage = storage_instance
+
+
+class StorageProxy:
+    def __getattr__(self, name: str):
+        return getattr(get_storage(), name)
+
+
+storage = StorageProxy()

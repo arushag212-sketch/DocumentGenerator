@@ -11,6 +11,14 @@ web/node_modules/
 dist/
 web/dist/
 docs/downloads/
+*.log
+
+# Screenshots: keep only final and w8
+docs/screenshots/*
+!docs/screenshots/final/
+!docs/screenshots/final/**
+!docs/screenshots/w8/
+!docs/screenshots/w8/**
 
 # Python
 __pycache__/

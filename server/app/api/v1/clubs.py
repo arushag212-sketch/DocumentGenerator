@@ -1807,37 +1807,50 @@ async def upload_club_logo(
     import hashlib
     from pathlib import Path
     from server.app.models import Asset, Letterhead
+    from server.app.core.storage import get_storage
     from server.app.core.template_compiler import normalize_logo_image
 
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Uploaded file exceeds 2 MB limit")
+
     try:
         normalized_bytes = normalize_logo_image(content)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image format: {e}")
 
-    asset_id = str(uuid.uuid4())
-    storage_dir = Path("storage/assets")
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = storage_dir / f"{asset_id}.png"
-    dest_path.write_bytes(normalized_bytes)
+    storage = get_storage()
+    storage_rel_path, sha256 = storage.save_content_addressed("assets", normalized_bytes, "png")
+    dest_path = Path("storage") / storage_rel_path
 
-    sha256 = hashlib.sha256(normalized_bytes).hexdigest()
-    asset = Asset(
-        id=asset_id,
-        club_id=ctx.club.id,
-        kind="logo",
-        filename=file.filename or "logo.png",
-        mime="image/png",
-        sha256=sha256,
-        size=len(normalized_bytes),
-        storage_key=str(dest_path),
-        uploaded_by=ctx.user.id,
-        is_system=False,
+    # Check if this club already has an asset with this sha256
+    existing_asset = (
+        db.query(Asset)
+        .filter(Asset.club_id == ctx.club.id, Asset.sha256 == sha256)
+        .first()
     )
-    db.add(asset)
+
+    if existing_asset:
+        asset = existing_asset
+    else:
+        asset_id = str(uuid.uuid4())
+        asset = Asset(
+            id=asset_id,
+            club_id=ctx.club.id,
+            kind="logo",
+            filename=file.filename or "logo.png",
+            mime="image/png",
+            sha256=sha256,
+            size=len(normalized_bytes),
+            storage_key=str(dest_path),
+            uploaded_by=ctx.user.id,
+            is_system=False,
+        )
+        db.add(asset)
+        db.flush()
 
     # Associate with club letterhead
     lh = (
@@ -2524,4 +2537,96 @@ def list_club_assets(
         )
         for a in assets
     ]
+
+
+@router.get("/{club_id}/storage-stats")
+def get_club_storage_stats(
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Return storage metrics and retention configuration for the current club."""
+    from server.app.models import Document, DocumentVersion, Template, TemplateVersion
+    from server.app.core.storage import KEEP_VERSION_FILES, PREVIEW_TTL_DAYS, BATCH_TTL_HOURS
+    from pathlib import Path
+
+    doc_ids = [d.id for d in db.query(Document).filter(Document.club_id == ctx.club.id).all()]
+    doc_bytes = 0
+    doc_files = 0
+    preview_bytes = 0
+    preview_files = 0
+
+    if doc_ids:
+        versions = db.query(DocumentVersion).filter(DocumentVersion.document_id.in_(doc_ids)).all()
+        for v in versions:
+            for k in (v.docx_key, v.pdf_key):
+                if k:
+                    fp = Path(k)
+                    if not fp.exists() and (Path("storage") / k).exists():
+                        fp = Path("storage") / k
+                    if fp.exists():
+                        doc_files += 1
+                        doc_bytes += fp.stat().st_size
+
+        cache_prev = Path("storage/cache/previews")
+        if cache_prev.exists():
+            for d_id in doc_ids:
+                for pf in cache_prev.glob(f"{d_id}_*"):
+                    if pf.is_file():
+                        preview_files += 1
+                        preview_bytes += pf.stat().st_size
+
+    tmpl_bytes = 0
+    tmpl_files = 0
+    club_tmpls = db.query(Template).filter(Template.club_id == ctx.club.id).all()
+    for t in club_tmpls:
+        t_vers = db.query(TemplateVersion).filter(TemplateVersion.template_id == t.id).all()
+        for tv in t_vers:
+            if tv.docx_storage_key:
+                fp = Path(tv.docx_storage_key)
+                if not fp.exists() and (Path("storage") / tv.docx_storage_key).exists():
+                    fp = Path("storage") / tv.docx_storage_key
+                if fp.exists():
+                    tmpl_files += 1
+                    tmpl_bytes += fp.stat().st_size
+
+    total_bytes = doc_bytes + preview_bytes + tmpl_bytes
+
+    return {
+        "club_id": ctx.club.id,
+        "club_name": ctx.club.name,
+        "usage": {
+            "documents_bytes": doc_bytes,
+            "documents_files": doc_files,
+            "previews_bytes": preview_bytes,
+            "previews_files": preview_files,
+            "templates_bytes": tmpl_bytes,
+            "templates_files": tmpl_files,
+            "total_bytes": total_bytes,
+            "total_mb": round(total_bytes / (1024 * 1024), 2),
+        },
+        "retention_settings": {
+            "keep_version_files": KEEP_VERSION_FILES,
+            "preview_ttl_days": PREVIEW_TTL_DAYS,
+            "batch_ttl_hours": BATCH_TTL_HOURS,
+            "description": "Latest 3 versions of each document are preserved on disk. Older versions are pruned safely and can be regenerated on-demand from original snapshots. Previews cache expires after 7 days.",
+        },
+    }
+
+
+@router.post("/{club_id}/storage-gc")
+def run_club_storage_gc(
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Run a safe storage garbage collection pass for this club."""
+    from server.scripts.storage_gc import run_storage_gc
+    report = run_storage_gc(apply=True, club_id=ctx.club.id)
+    return {
+        "message": f"Storage cleanup completed. Reclaimed {round(report.total_bytes_freed / 1024, 2)} KB.",
+        "freed_bytes": report.total_bytes_freed,
+        "orphans_removed": report.orphans_count,
+        "expired_previews_removed": report.expired_previews_count,
+        "expired_batches_removed": report.expired_batches_count,
+        "pruned_versions_removed": report.pruned_versions_count,
+    }
 

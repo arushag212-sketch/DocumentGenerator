@@ -201,20 +201,36 @@ Screenshots archived to `docs/screenshots/baseline/`.
 - **Work Completed**:
   - Full pytest test suite executed: `python -m pytest tests/ -q --timeout=300`
     - Result: **181 passed, 10 skipped, 0 failed in 148.91s**.
-    - All skipped tests documented in `docs/DECISIONS.md` with explicit technical rationales (PostgreSQL-dependent tests skipped when running in SQLite-only environment; legacy pre-Phase 3 tab browser tests superseded by modern Phase 2 and Phase 4 Selenium suites; live Gemini API test skipped conditionally on upstream free-tier HTTP 429 quota exhaustion).
-  - Browser Selenium verification suites:
-    - Phase 2 TipTap Editor (`scripts/verify_phase2_editor_selenium.py`): **7/7 steps passed** in headless Chrome with 0 console errors. Verified table cells are directly editable, slash commands insert native tables, and LibreOffice live preview renders properly.
-    - Phase 4 Home Flow (`scripts/verify_phase4_home_selenium.py`): **6/6 steps passed** in headless Chrome with 0 console errors. Verified date/time pickers, money field with live Indian grouping, AI draft review requirement, and batch generation of 4 DOCX + 4 PDF documents in a ZIP with unbroken sequential numbering.
-  - Development database cleanly re-seeded:
-    - Executed: `python -m server.scripts.seed --clean`
-    - Verified exact counts via SQLite assert:
-      - System Templates: 6
-      - Dummy Clubs: 3 (ACM, Robotics, Cultural)
-      - Documents: 0
-      - Events: 0
-      - Join Requests: 0
-      - AI Requests: 0
-  - Frontend compiled clean: `npm run build` executed with 0 errors in 4.51s, frontend source footprint maintained under 8,500 lines.
+  - Browser Selenium verification suites passing.
+  - Development database cleanly re-seeded.
+
+---
+
+## Phase W8: Storage Diet & Minimum Questions
+
+### Part A: Storage Diet & Repository Hygiene (COMPLETED)
+- **A.1 Storage Measurement (`server/scripts/storage_report.py`)**:
+  - Created storage audit script reporting folder breakdown, top 20 largest files, SHA-256 duplicate sets, and database-orphaned files.
+  - Recorded initial baseline in `docs/SIZE_REPORT.md` (Baseline: 1.59 GB across 6,958 files; 6,947 orphan files).
+- **A.2 Unnecessary File Elimination**:
+  - **Previews**: Generated on demand and cached as 100 dpi JPEG with 7-day TTL (`PREVIEW_TTL_DAYS=7`) in `storage/cache/previews/`. Eliminated upfront 150 dpi PNG rasterization.
+  - **Thumbnails**: Standardized to 240px wide WebP/JPEG, content-addressed. Forks use copy-on-write and share parent thumbnails until modified.
+  - **Documents & Retention**: Retain DOCX/PDF for latest `KEEP_VERSION_FILES=3` versions. Older versions pruned and regenerated on demand via `regenerate_document_version` from immutable template version and record snapshot.
+  - **Batches/ZIPs**: Built on demand and cached in `storage/cache/batches/` with 24-hour TTL (`BATCH_TTL_HOURS=24`).
+  - **Template Storage**: Content-addressed by SHA-256 in `storage/templates/sha256_<hash>.docx`, sharing duplicate templates and fork files.
+  - **Logos & Assets**: Enforced 2 MB upload cap, normalization to max 1000px WebP/JPEG, and SHA-256 deduplication.
+- **A.3 Safe Storage Garbage Collector (`server/scripts/storage_gc.py`)**:
+  - Safe GC pass removing orphan files, expired preview caches, expired batches, and pruned older versions.
+  - Strictly preserves published templates, current document versions, and finalised files; never touches outside `storage/`.
+  - Added Admin UI "Storage & Retention" card with space used, retention settings, and "Clean up now" button.
+- **A.4 Repository Hygiene & Size Guard**:
+  - Cleaned test leftovers, old screenshots, and duplicate sample PDFs.
+  - Updated `.gitignore` to prevent tracking `storage/`, `data/*.db*`, `outputs/`, `tests/visual/`.
+  - Added size guard: `python -m server.scripts.storage_report --check` enforcing Repo <= 40 MB and Storage <= 100 MB.
+- **A.5 Verification & Exit Checks**:
+  - Unit tests: `tests/test_phase_w8_storage.py` (7/7 passed).
+  - Isolated demo run: 20 documents, 10 edited twice (3 versions each), 3 batches, 3 forks. Storage measured at 14.24 MB (limit 20 MB) and Repo at 24.13 MB (limit 25 MB).
+  - Recorded before/after in `docs/SIZE_REPORT.md`.
 
 ---
 
@@ -226,4 +242,6 @@ Screenshots archived to `docs/screenshots/baseline/`.
 - **Phase 4**: **DONE** (Commit `5fd1c8c`)
 - **Phase 5**: **DONE** (Commit `493daac`)
 - **Phase 6**: **DONE** (Commit `9e16649`)
-- **Phase 7**: **DONE** (All Exit Checks Passed, Clean Seed Confirmed)
+- **Phase 7**: **DONE**
+- **Phase W8 (Part A: Storage Diet)**: **DONE**
+- **Phase W8 (Part B: Minimum Questions)**: In Progress

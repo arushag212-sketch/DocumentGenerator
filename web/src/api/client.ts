@@ -313,6 +313,38 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    getStorageStats: (clubId: string | number) =>
+      apiFetch<{
+        club_id: string;
+        club_name: string;
+        usage: {
+          documents_bytes: number;
+          documents_files: number;
+          previews_bytes: number;
+          previews_files: number;
+          templates_bytes: number;
+          templates_files: number;
+          total_bytes: number;
+          total_mb: number;
+        };
+        retention_settings: {
+          keep_version_files: number;
+          preview_ttl_days: number;
+          batch_ttl_hours: number;
+          description: string;
+        };
+      }>(`/clubs/${clubId}/storage-stats`),
+    runStorageGc: (clubId: string | number) =>
+      apiFetch<{
+        message: string;
+        freed_bytes: number;
+        orphans_removed: number;
+        expired_previews_removed: number;
+        expired_batches_removed: number;
+        pruned_versions_removed: number;
+      }>(`/clubs/${clubId}/storage-gc`, {
+        method: 'POST',
+      }),
   },
 
   documents: {

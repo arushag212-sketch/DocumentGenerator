@@ -16,6 +16,8 @@ import {
   Info,
   Layers,
   MapPin,
+  HardDrive,
+  RefreshCw,
 } from 'lucide-react';
 
 interface AdminTabProps {
@@ -26,10 +28,12 @@ interface AdminTabProps {
 }
 
 export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
-  const [subTab, setSubTab] = useState<'venues' | 'numbering' | 'letterheads'>('venues');
+  const [subTab, setSubTab] = useState<'venues' | 'numbering' | 'letterheads' | 'storage'>('venues');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [storageStats, setStorageStats] = useState<any>(null);
+  const [cleaning, setCleaning] = useState(false);
 
   // Venues state
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -75,11 +79,30 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
         if (lhs.length > 0 && !previewLetterhead) {
           setPreviewLetterhead(lhs[0]);
         }
+      } else if (subTab === 'storage') {
+        const stats = await api.clubs.getStorageStats(clubId);
+        setStorageStats(stats);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load configuration');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCleanStorage = async () => {
+    setCleaning(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await api.clubs.runStorageGc(clubId);
+      setSuccess(res.message || 'Storage cleanup completed successfully.');
+      const stats = await api.clubs.getStorageStats(clubId);
+      setStorageStats(stats);
+    } catch (err: any) {
+      setError(err.message || 'Failed to clean storage.');
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -203,6 +226,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
           { id: 'venues', label: 'Venues & Facilities', icon: MapPin },
           { id: 'letterheads', label: 'Letterheads & Logos', icon: FileSpreadsheet },
           { id: 'numbering', label: 'Numbering Series', icon: Hash },
+          { id: 'storage', label: 'Storage & Retention', icon: HardDrive },
         ].map((t) => {
           const Icon = t.icon;
           const active = subTab === t.id;
@@ -686,6 +710,97 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: STORAGE & RETENTION */}
+      {subTab === 'storage' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-4 sm:p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                <HardDrive className="w-5 h-5 text-[#1b365d]" /> Club Storage & Retention
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Monitor storage consumption for documents, previews, and templates, and perform safe garbage collection.
+              </p>
+            </div>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleCleanStorage}
+                disabled={cleaning}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 ${cleaning ? 'animate-spin' : ''}`} />
+                {cleaning ? 'Cleaning up...' : 'Clean up now'}
+              </button>
+            )}
+          </div>
+
+          {/* Usage Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Total Usage</span>
+              <span className="text-2xl font-black text-slate-900 mt-1 block">
+                {storageStats?.usage?.total_mb ?? 0} MB
+              </span>
+              <span className="text-xs text-slate-500 mt-1 block">
+                {((storageStats?.usage?.total_bytes ?? 0) / 1024).toFixed(1)} KB total disk space
+              </span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Documents</span>
+              <span className="text-2xl font-black text-slate-900 mt-1 block">
+                {(((storageStats?.usage?.documents_bytes ?? 0) / (1024 * 1024))).toFixed(2)} MB
+              </span>
+              <span className="text-xs text-slate-500 mt-1 block">
+                {storageStats?.usage?.documents_files ?? 0} physical files (DOCX + PDF)
+              </span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Previews Cache</span>
+              <span className="text-2xl font-black text-slate-900 mt-1 block">
+                {(((storageStats?.usage?.previews_bytes ?? 0) / 1024)).toFixed(1)} KB
+              </span>
+              <span className="text-xs text-slate-500 mt-1 block">
+                {storageStats?.usage?.previews_files ?? 0} cached page images (100 dpi)
+              </span>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Templates</span>
+              <span className="text-2xl font-black text-slate-900 mt-1 block">
+                {(((storageStats?.usage?.templates_bytes ?? 0) / 1024)).toFixed(1)} KB
+              </span>
+              <span className="text-xs text-slate-500 mt-1 block">
+                {storageStats?.usage?.templates_files ?? 0} template source files
+              </span>
+            </div>
+          </div>
+
+          {/* Retention Policy in Plain Words */}
+          <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4 text-xs sm:text-sm text-blue-950 space-y-2">
+            <h4 className="font-bold text-blue-900 flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-blue-700" /> Storage Retention Policy
+            </h4>
+            <ul className="list-disc list-inside space-y-1.5 text-blue-900/90 leading-relaxed">
+              <li>
+                <strong>Document Versions:</strong> Only the latest {storageStats?.retention_settings?.keep_version_files ?? 3} versions of each document maintain physical DOCX and PDF files on disk. Older version rows remain intact and can be re-created on-demand at any time from immutable template versions and snapshots.
+              </li>
+              <li>
+                <strong>Page Previews:</strong> Generated on-demand as lightweight 100 dpi JPEGs and cached for {storageStats?.retention_settings?.preview_ttl_days ?? 7} days. Expired previews are automatically evicted and re-rendered when requested.
+              </li>
+              <li>
+                <strong>Batch ZIP Downloads:</strong> Assembled on demand and cached for {storageStats?.retention_settings?.batch_ttl_hours ?? 24} hours without duplicating existing document files.
+              </li>
+              <li>
+                <strong>Template Sharing:</strong> Duplicate template files are content-addressed by SHA-256 and shared across identical forks.
+              </li>
+            </ul>
           </div>
         </div>
       )}

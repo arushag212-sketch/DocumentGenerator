@@ -55,6 +55,8 @@ from docgen.schema import TemplateSchema, load_all_schemas, load_schema
 from docgen.sources import DatabaseTemplateSource, build_club_config_from_db
 from server.app.core.audit import log_audit
 from server.app.core.database import get_db
+from server.app.core.storage import storage
+from server.app.core.doc_retention import prune_document_versions
 from server.app.core.permissions import (
     ClubContext,
     Role,
@@ -416,7 +418,29 @@ def get_template_thumbnail(
 
     thumbnails_dir = Path("storage/thumbnails")
     thumbnails_dir.mkdir(parents=True, exist_ok=True)
-    thumb_path = thumbnails_dir / f"{ver.id}.png"
+    thumb_path = thumbnails_dir / f"{ver.id}.webp"
+    if not thumb_path.exists():
+        thumb_path_png = thumbnails_dir / f"{ver.id}.png"
+        if thumb_path_png.exists():
+            thumb_path = thumb_path_png
+
+    # Check copy-on-write fork source template version if not rendered yet
+    if not thumb_path.exists() and tmpl.forked_from_template_id:
+        src_tmpl = db.query(Template).filter(Template.id == tmpl.forked_from_template_id).first()
+        if src_tmpl:
+            src_ver = (
+                db.query(TemplateVersion)
+                .filter(TemplateVersion.template_id == src_tmpl.id)
+                .order_by(TemplateVersion.version_no.desc())
+                .first()
+            )
+            if src_ver:
+                src_webp = thumbnails_dir / f"{src_ver.id}.webp"
+                src_png = thumbnails_dir / f"{src_ver.id}.png"
+                if src_webp.exists():
+                    return FileResponse(src_webp, media_type="image/webp")
+                elif src_png.exists():
+                    return FileResponse(src_png, media_type="image/png")
 
     if not thumb_path.exists():
         thumb_path = render_template_thumbnail(
@@ -426,7 +450,8 @@ def get_template_thumbnail(
             club_slug=ctx.club.slug,
         )
 
-    return FileResponse(thumb_path, media_type="image/png")
+    media_type = "image/webp" if str(thumb_path).endswith(".webp") else "image/png"
+    return FileResponse(thumb_path, media_type=media_type)
 
 
 @router.post("/templates/{template_id}/fork", response_model=TemplateGalleryItemOut, status_code=status.HTTP_201_CREATED)
@@ -456,11 +481,7 @@ def fork_template(
         .first()
     )
 
-    storage_templates_dir = Path("storage/templates")
-    storage_templates_dir.mkdir(parents=True, exist_ok=True)
     new_tmpl_id = str(uuid.uuid4())
-    dest_docx = storage_templates_dir / f"{new_tmpl_id}_v1.docx"
-
     src_docx = None
     if orig_ver and orig_ver.docx_storage_key and Path(orig_ver.docx_storage_key).exists():
         src_docx = Path(orig_ver.docx_storage_key)
@@ -468,8 +489,12 @@ def fork_template(
         src_docx = Path("templates") / orig.slug / "template.docx"
 
     if src_docx and src_docx.exists():
-        shutil.copy2(src_docx, dest_docx)
+        rel_key, _ = storage.save_content_addressed("templates", src_docx.read_bytes(), "docx")
+        dest_docx = Path("storage") / rel_key
     else:
+        storage_templates_dir = Path("storage/templates")
+        storage_templates_dir.mkdir(parents=True, exist_ok=True)
+        dest_docx = storage_templates_dir / f"{new_tmpl_id}_v1.docx"
         dest_docx.touch()
 
     if orig_ver and orig_ver.schema_yaml:
@@ -586,11 +611,6 @@ def fork_template(
         user_id=ctx.user.id,
         meta={"source_template_id": orig.id, "source_template_name": orig.name, "forked_name": forked_name},
     )
-
-    if orig_ver:
-        orig_thumb = Path("storage/thumbnails") / f"{orig_ver.id}.png"
-        if orig_thumb.exists():
-            shutil.copy2(orig_thumb, Path("storage/thumbnails") / f"{forked_ver.id}.png")
 
     series_key = None
     try:
@@ -824,10 +844,6 @@ def create_blank_template(
         {"key": "venue", "label": "Venue", "type": "text", "required": True, "ask": "What is the event venue?"},
     ]
 
-    storage_templates_dir = Path("storage/templates")
-    storage_templates_dir.mkdir(parents=True, exist_ok=True)
-    dest_docx = storage_templates_dir / f"{new_id}_v1.docx"
-
     docx_bytes, schema_yaml, report = TemplateCompiler.compile(
         editor_json=initial_json,
         fields=initial_fields,
@@ -840,7 +856,8 @@ def create_blank_template(
         },
         club_slug=ctx.club.slug,
     )
-    dest_docx.write_bytes(docx_bytes)
+    rel_key, _ = storage.save_content_addressed("templates", docx_bytes, "docx")
+    dest_docx = Path("storage") / rel_key
 
     tmpl = Template(
         id=new_id,
@@ -1327,10 +1344,8 @@ def compile_template(
         letterhead_cfg=letterhead_cfg,
     )
 
-    storage_templates_dir = Path("storage/templates")
-    storage_templates_dir.mkdir(parents=True, exist_ok=True)
-    docx_dest = storage_templates_dir / f"{tmpl.id}_v{ver.version_no}.docx"
-    docx_dest.write_bytes(docx_bytes)
+    rel_key, _ = storage.save_content_addressed("templates", docx_bytes, "docx")
+    docx_dest = Path("storage") / rel_key
 
     ver.docx_storage_key = str(docx_dest)
     ver.schema_yaml = schema_yaml
@@ -1343,9 +1358,12 @@ def compile_template(
 
     thumbnails_dir = Path("storage/thumbnails")
     thumbnails_dir.mkdir(parents=True, exist_ok=True)
-    thumb_path = thumbnails_dir / f"{ver.id}.png"
+    thumb_path = thumbnails_dir / f"{ver.id}.webp"
+    thumb_path_png = thumbnails_dir / f"{ver.id}.png"
     if thumb_path.exists():
         thumb_path.unlink()
+    if thumb_path_png.exists():
+        thumb_path_png.unlink()
 
     db.commit()
 
@@ -1549,10 +1567,8 @@ def publish_template(
                     "errors": report.get("errors", []),
                 },
             )
-        storage_templates_dir = Path("storage/templates")
-        storage_templates_dir.mkdir(parents=True, exist_ok=True)
-        docx_dest = storage_templates_dir / f"{tmpl.id}_v{ver.version_no}.docx"
-        docx_dest.write_bytes(docx_bytes)
+        rel_key, _ = storage.save_content_addressed("templates", docx_bytes, "docx")
+        docx_dest = Path("storage") / rel_key
         ver.docx_storage_key = str(docx_dest)
         ver.schema_yaml = schema_yaml
         ver.validation_report = report
@@ -1982,6 +1998,12 @@ def generate_document(
             submitted_to_raw = (getattr(v_cand, "default_addressee", None) or (v_cand.get("addressee") if isinstance(v_cand, dict) else None)) if v_cand else None
     if not submitted_to_raw and data.get("default_addressee"):
         submitted_to_raw = data.get("default_addressee")
+    if not submitted_to_raw and data.get("venue"):
+        v_obj = db.query(Venue).filter(Venue.club_id == club_id, Venue.name == data.get("venue")).first()
+        if not v_obj:
+            v_obj = db.query(Venue).filter(Venue.name == data.get("venue")).first()
+        if v_obj and v_obj.default_addressee:
+            submitted_to_raw = v_obj.default_addressee
 
     def user_field(val: Any, key: str) -> TrackedField:
         if val is None or str(val).strip() == "":
@@ -2354,18 +2376,18 @@ def generate_document(
     docx_path = render_result.docx_path
     pdf_path = render_result.pdf_path
 
-    # 5. Generate high-res page preview PNGs using PyMuPDF
-    preview_dir = Path("storage/previews") / doc_record.id / "v1"
-    preview_dir.mkdir(parents=True, exist_ok=True)
-    page_urls: list[str] = []
+    # 5. Previews are served on-demand via get_document_page_preview (100 dpi JPEG)
+    try:
+        pdf_doc = pymupdf.open(str(pdf_path))
+        page_count = len(pdf_doc)
+        pdf_doc.close()
+    except Exception:
+        page_count = 1
 
-    pdf_doc = pymupdf.open(str(pdf_path))
-    page_count = len(pdf_doc)
-    for idx, page in enumerate(pdf_doc):
-        pix = page.get_pixmap(dpi=150)
-        img_dest = preview_dir / f"page_{idx + 1}.png"
-        pix.save(str(img_dest))
-        page_urls.append(f"/api/v1/clubs/{club_id}/documents/{doc_record.id}/pages/{idx + 1}?v=1")
+    page_urls = [
+        f"/api/v1/clubs/{club_id}/documents/{doc_record.id}/pages/{idx + 1}?v=1"
+        for idx in range(page_count)
+    ]
 
     # 6. Save DocumentVersion
     ver_record = DocumentVersion(
@@ -2381,7 +2403,7 @@ def generate_document(
     )
     db.add(ver_record)
     doc_record.current_version_id = ver_record.id
-
+    prune_document_versions(db, doc_record.id)
 
     db.commit()
 
@@ -2580,7 +2602,11 @@ def download_batch_zip(
     ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
     db: Session = Depends(get_db),
 ):
-    """Download ZIP archive of batch-generated documents with cross-club protection."""
+    """Download ZIP archive of batch-generated documents with cross-club protection and on-demand regeneration."""
+    import time
+    import zipfile
+    from server.app.core.storage import BATCH_TTL_HOURS
+
     audit_repo = ScopedRepository(db, AuditLog, club_id=ctx.club.id)
     audit_entries = audit_repo.all(AuditLog.action == "documents_batch_generated")
     matching_log = next(
@@ -2593,19 +2619,59 @@ def download_batch_zip(
             detail="Batch archive not found or access denied for this club.",
         )
 
-    batch_dir = Path("storage/batches") / batch_id
-    if not batch_dir.exists():
-        raise HTTPException(status_code=404, detail="Batch folder not found on storage.")
+    zip_filename = matching_log.meta.get("zip_filename") or f"batch_{batch_id[:8]}_documents.zip"
+    cache_dir = Path("storage/cache/batches") / batch_id
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = cache_dir / zip_filename
 
-    zip_files = list(batch_dir.glob("*.zip"))
-    if not zip_files:
-        raise HTTPException(status_code=404, detail="ZIP archive not found in batch folder.")
+    # Also check legacy location if present
+    legacy_zip = Path("storage/batches") / batch_id / zip_filename
 
-    zip_file = zip_files[0]
-    zip_filename = matching_log.meta.get("zip_filename") or zip_file.name
+    ttl_seconds = BATCH_TTL_HOURS * 3600
+    if zip_path.exists() and (time.time() - zip_path.stat().st_mtime) <= ttl_seconds:
+        return FileResponse(
+            path=zip_path,
+            media_type="application/zip",
+            filename=zip_filename,
+            headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+        )
+    elif legacy_zip.exists():
+        return FileResponse(
+            path=legacy_zip,
+            media_type="application/zip",
+            filename=zip_filename,
+            headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+        )
+
+    # Build ZIP on demand from generated documents without duplicate copies
+    meta_docs = matching_log.meta.get("documents", [])
+    files_to_zip = []
+    for d_info in meta_docs:
+        d_id = d_info.get("id")
+        clean_ref = (d_info.get("ref_no") or "doc").replace("/", "_")
+        clean_title = (d_info.get("title") or "document").replace(" ", "_").replace("/", "_")
+        base_name = f"{clean_ref}_{clean_title}"
+        doc_v = (
+            db.query(DocumentVersion)
+            .filter(DocumentVersion.document_id == d_id)
+            .order_by(DocumentVersion.version_no.desc())
+            .first()
+        )
+        if doc_v:
+            if doc_v.docx_key and Path(doc_v.docx_key).exists():
+                files_to_zip.append((Path(doc_v.docx_key), f"{base_name}.docx"))
+            if doc_v.pdf_key and Path(doc_v.pdf_key).exists():
+                files_to_zip.append((Path(doc_v.pdf_key), f"{base_name}.pdf"))
+
+    if not files_to_zip:
+        raise HTTPException(status_code=404, detail="Batch documents not available on storage.")
+
+    with zipfile.ZipFile(str(zip_path), "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for src, arcname in files_to_zip:
+            zf.write(str(src), arcname=arcname)
 
     return FileResponse(
-        path=zip_file,
+        path=zip_path,
         media_type="application/zip",
         filename=zip_filename,
         headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
@@ -2634,14 +2700,20 @@ def get_document_details(
         raise HTTPException(status_code=404, detail="Document has no generated versions")
 
     latest_ver = versions[0]
-    preview_dir = Path("storage/previews") / doc_id / f"v{latest_ver.version_no}"
-    page_urls = []
-    if preview_dir.exists():
-        page_files = sorted(preview_dir.glob("page_*.png"), key=lambda p: int(p.stem.split("_")[1]))
-        page_urls = [
-            f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/pages/{p.stem.split('_')[1]}?v={latest_ver.version_no}"
-            for p in page_files
-        ]
+    page_count = 1
+    if latest_ver.pdf_key and Path(latest_ver.pdf_key).exists():
+        try:
+            import pymupdf
+            pdf_doc = pymupdf.open(str(latest_ver.pdf_key))
+            page_count = len(pdf_doc)
+            pdf_doc.close()
+        except Exception:
+            page_count = 1
+
+    page_urls = [
+        f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/pages/{p}?v={latest_ver.version_no}"
+        for p in range(1, page_count + 1)
+    ]
 
     tmpl = db.query(Template).filter(Template.id == doc_record.template_id).first()
     tmpl_slug = tmpl.slug if tmpl else "document"
@@ -2655,7 +2727,7 @@ def get_document_details(
         status=doc_record.status,
         created_at=doc_record.created_at,
         current_version_no=latest_ver.version_no,
-        page_count=len(page_urls) or 1,
+        page_count=page_count,
         docx_url=f"/api/v1/clubs/{ctx.club.id}/documents/{doc_record.id}/download?format=docx",
         pdf_url=f"/api/v1/clubs/{ctx.club.id}/documents/{doc_record.id}/download?format=pdf",
         page_images=page_urls,
@@ -2682,30 +2754,79 @@ def get_document_page_preview(
     ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
     db: Session = Depends(get_db),
 ):
-    """Serve high-resolution rasterized PNG page preview of rendered document."""
-    page_file = Path("storage/previews") / doc_id / f"v{v}" / f"page_{page_no}.png"
-    if not page_file.exists():
-        query = db.query(DocumentVersion).filter(
-            DocumentVersion.document_id == doc_id,
-            DocumentVersion.version_no == v,
-        )
-        version = query.first()
-        if version and version.pdf_key and Path(version.pdf_key).exists():
-            try:
-                import pymupdf
-                page_file.parent.mkdir(parents=True, exist_ok=True)
-                pdf_doc = pymupdf.open(version.pdf_key)
-                if 1 <= page_no <= len(pdf_doc):
-                    page = pdf_doc[page_no - 1]
-                    pix = page.get_pixmap(dpi=150)
-                    pix.save(str(page_file))
-                pdf_doc.close()
-            except Exception:
-                pass
+    """Serve on-demand 100 dpi JPEG page preview cached with PREVIEW_TTL_DAYS."""
+    import time
+    from PIL import Image
+    import pymupdf
+    from server.app.core.storage import PREVIEW_TTL_DAYS
+    from server.app.core.doc_retention import regenerate_document_version
 
-    if not page_file.exists():
+    cache_dir = Path("storage/cache/previews")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / f"{doc_id}_v{v}_p{page_no}.jpg"
+
+    ttl_seconds = PREVIEW_TTL_DAYS * 86400
+    if cache_file.exists():
+        if (time.time() - cache_file.stat().st_mtime) <= ttl_seconds:
+            return FileResponse(cache_file, media_type="image/jpeg")
+        else:
+            cache_file.unlink(missing_ok=True)
+
+    query = db.query(DocumentVersion).filter(
+        DocumentVersion.document_id == doc_id,
+        DocumentVersion.version_no == v,
+    )
+    version = query.first()
+    if not version:
+        raise HTTPException(status_code=404, detail="Document version not found")
+
+    pdf_path = None
+    if version.pdf_key and Path(version.pdf_key).exists():
+        pdf_path = Path(version.pdf_key)
+    else:
+        # Check if we can regenerate on demand for an older version
+        try:
+            _, pdf_path = regenerate_document_version(db, doc_id, v)
+        except Exception:
+            pdf_path = None
+
+    if not pdf_path or not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="PDF source file not found on storage")
+
+    try:
+        pdf_doc = pymupdf.open(str(pdf_path))
+        if 1 <= page_no <= len(pdf_doc):
+            page = pdf_doc[page_no - 1]
+            pix = page.get_pixmap(dpi=100)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img.save(str(cache_file), format="JPEG", quality=70, optimize=True)
+        pdf_doc.close()
+    except Exception as e:
+        logger.warning("Failed to render preview page: %s", e)
+
+    if not cache_file.exists():
         raise HTTPException(status_code=404, detail="Page preview image not found")
-    return FileResponse(page_file, media_type="image/png")
+    return FileResponse(cache_file, media_type="image/jpeg")
+
+
+@router.post("/{doc_id}/versions/{version_no}/recreate")
+def recreate_document_version_endpoint(
+    doc_id: str,
+    version_no: int,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Regenerate physical DOCX and PDF files for an older pruned version on demand."""
+    from server.app.core.doc_retention import regenerate_document_version
+    try:
+        docx_p, pdf_p = regenerate_document_version(db, doc_id, version_no)
+        return {
+            "message": f"Version {version_no} re-created successfully.",
+            "docx_path": str(docx_p),
+            "pdf_path": str(pdf_p),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to re-create version: {e}")
 
 
 @router.get("/{doc_id}/download")
@@ -2718,19 +2839,25 @@ def download_document_file(
     db: Session = Depends(get_db),
 ):
     """Download generated document in official PDF or editable DOCX format."""
+    from server.app.core.doc_retention import regenerate_document_version
+
     doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
     doc_record = doc_repo.get(doc_id)
     if not doc_record:
         raise HTTPException(status_code=404, detail="Document not found")
 
     query = db.query(DocumentVersion).filter(DocumentVersion.document_id == doc_id)
+    latest_v = query.order_by(DocumentVersion.version_no.desc()).first()
+
     if v is not None:
         version = query.filter(DocumentVersion.version_no == v).first()
     else:
-        version = query.order_by(DocumentVersion.version_no.desc()).first()
+        version = latest_v
 
     if not version:
         raise HTTPException(status_code=404, detail="Version not found")
+
+    is_latest = (latest_v and version.id == latest_v.id)
 
     if format == "pdf":
         file_path = Path(version.pdf_key) if version.pdf_key else None
@@ -2742,7 +2869,13 @@ def download_document_file(
         filename = f"{doc_record.ref_no or 'document'}.docx".replace("/", "_")
 
     if not file_path or not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not available on storage ({format.upper()})")
+        if is_latest:
+            # Rule: Never regenerate silently on download of the latest version!
+            raise HTTPException(status_code=404, detail=f"File not available on storage ({format.upper()})")
+        else:
+            # Older pruned version: regenerate on demand from immutable template version + snapshot
+            docx_p, pdf_p = regenerate_document_version(db, doc_id, version.version_no)
+            file_path = pdf_p if format == "pdf" else docx_p
 
     disp = "inline" if disposition == "inline" and format == "pdf" else "attachment"
     return FileResponse(
