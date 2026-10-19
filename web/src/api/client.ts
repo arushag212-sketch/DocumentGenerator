@@ -303,7 +303,7 @@ export const api = {
     uploadLogo: async (clubId: string | number, file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      return apiFetch<{ asset_id: string; filename: string; url: string; letterhead_id: string }>(`/clubs/${clubId}/upload-logo`, {
+      return apiFetch<{ asset_id: string; filename: string; url: string; letterhead_id: string }>(`/clubs/${clubId}/logo`, {
         method: 'POST',
         body: formData,
       });

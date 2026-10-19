@@ -497,6 +497,9 @@ def create_club(
         ip=client_ip,
     )
 
+    db.commit()
+    db.refresh(club)
+
     return _club_to_out(club, Role.OWNER, db)
 
 
@@ -624,6 +627,9 @@ def create_join_request(
         meta={"position": jr.position},
         ip=client_ip,
     )
+
+    db.commit()
+    db.refresh(jr)
 
     return JoinRequestOut(
         id=jr.id,

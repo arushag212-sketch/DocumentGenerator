@@ -24,7 +24,8 @@ export const OnboardingClubPage: React.FC = () => {
   const [newClubName, setNewClubName] = useState('');
   const [newClubShortName, setNewClubShortName] = useState('');
   const [newClubChapterCode, setNewClubChapterCode] = useState('');
-  const [myPositionInNewClub, setMyPositionInNewClub] = useState('Chairperson');
+  const [newClubLogo, setNewClubLogo] = useState<File | null>(null);
+  const [myPositionInNewClub, setMyPositionInNewClub] = useState('Student Head/Chairperson');
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -88,6 +89,14 @@ export const OnboardingClubPage: React.FC = () => {
       setCreateError('Please enter club name and short acronym.');
       return;
     }
+    if (!newClubLogo) {
+      setCreateError('Please choose a club logo to use on official documents.');
+      return;
+    }
+    if (!newClubLogo.type.startsWith('image/')) {
+      setCreateError('Logo must be an image file.');
+      return;
+    }
 
     setCreateSubmitting(true);
     setCreateError(null);
@@ -99,6 +108,7 @@ export const OnboardingClubPage: React.FC = () => {
         position: myPositionInNewClub.trim() || 'Chairperson',
         is_signatory: true,
       });
+      await api.clubs.uploadLogo(created.id, newClubLogo);
       await refreshClubs();
       setActiveClubId(created.id);
       navigate('/home');
@@ -316,6 +326,18 @@ export const OnboardingClubPage: React.FC = () => {
                   className="w-full text-xs sm:text-sm px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#1b365d] focus:outline-none uppercase"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Club Logo</label>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                required
+                onChange={(e) => setNewClubLogo(e.target.files?.[0] || null)}
+                className="w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-emerald-700 hover:file:bg-emerald-100"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">PNG, JPEG, or WebP; up to 2 MB. It will be placed on the club letterhead.</p>
             </div>
 
             <div>

@@ -42,8 +42,11 @@ export const AuthPage: React.FC = () => {
   const [tab, setTab] = useState<'login' | 'register' | 'forgot' | 'reset'>(initialInvite ? 'register' : 'login');
 
   // Form states
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [forgotEmail, setForgotEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -90,8 +93,8 @@ export const AuthPage: React.FC = () => {
 
     try {
       const params = new URLSearchParams();
-      params.append('username', email.trim());
-      params.append('password', password);
+      params.append('username', loginEmail.trim());
+      params.append('password', loginPassword);
       await login(params);
 
       // If logging in via an invite link, accept the invite
@@ -114,7 +117,7 @@ export const AuthPage: React.FC = () => {
     e.preventDefault();
     resetFormFeedback();
 
-    if (password.length < 10) {
+    if (registerPassword.length < 10) {
       setError('Password must be at least 10 characters long.');
       return;
     }
@@ -122,15 +125,15 @@ export const AuthPage: React.FC = () => {
     setLoading(true);
     try {
       await api.auth.register({
-        email: email.trim(),
-        password,
+        email: registerEmail.trim(),
+        password: registerPassword,
         full_name: fullName.trim(),
         invite_code: inviteCode.trim() || undefined,
       });
       // Automatically log in after registration
       const params = new URLSearchParams();
-      params.append('username', email.trim());
-      params.append('password', password);
+      params.append('username', registerEmail.trim());
+      params.append('password', registerPassword);
       await login(params);
       navigate(from, { replace: true });
     } catch (err: any) {
@@ -146,7 +149,7 @@ export const AuthPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await api.auth.forgotPassword(email.trim());
+      const res = await api.auth.forgotPassword(forgotEmail.trim());
       setSuccess(
         `${res.message} (Note: in dev mode, the link is logged directly to the server console log).`
       );
@@ -172,7 +175,7 @@ export const AuthPage: React.FC = () => {
       setSuccess(`${res.message}. You can now sign in with your new password.`);
       setTimeout(() => {
         setTab('login');
-        setPassword('');
+        setLoginPassword('');
         resetFormFeedback();
       }, 2500);
     } catch (err: any) {
@@ -294,8 +297,8 @@ export const AuthPage: React.FC = () => {
           {/* LOGIN FORM */}
           {tab === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
-              <AuthInput icon={Mail} label="Email Address" type="email" required value={email} onChange={(e: any) => setEmail(e.target.value)} placeholder="student@example.com" />
-              <AuthInput icon={Lock} label="Password" type="password" required value={password} onChange={(e: any) => setPassword(e.target.value)} placeholder="••••••••••••" />
+              <AuthInput icon={Mail} label="Email Address" type="email" required value={loginEmail} onChange={(e: any) => setLoginEmail(e.target.value)} placeholder="student@example.com" />
+              <AuthInput icon={Lock} label="Password" type="password" required value={loginPassword} onChange={(e: any) => setLoginPassword(e.target.value)} placeholder="••••••••••••" />
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-slate-500">HttpOnly cookie session</span>
                 <button type="button" onClick={() => { setTab('forgot'); resetFormFeedback(); }} className="text-amber-600 hover:text-amber-700 font-medium">Forgot password?</button>
@@ -311,8 +314,8 @@ export const AuthPage: React.FC = () => {
           {tab === 'register' && (
             <form onSubmit={handleRegister} className="space-y-4">
               <AuthInput icon={User} label="Full Name" type="text" required value={fullName} onChange={(e: any) => setFullName(e.target.value)} placeholder="Student Lead" />
-              <AuthInput icon={Mail} label="Email" type="email" required value={email} onChange={(e: any) => setEmail(e.target.value)} placeholder="lead@example.com" />
-              <AuthInput icon={Lock} label="Password (min 10 characters)" type="password" required minLength={10} value={password} onChange={(e: any) => setPassword(e.target.value)} placeholder="Min 10 characters" helper="Enforces strong password policy. Common dictionary passwords are rejected." />
+              <AuthInput icon={Mail} label="Email" type="email" required value={registerEmail} onChange={(e: any) => setRegisterEmail(e.target.value)} placeholder="lead@example.com" />
+              <AuthInput icon={Lock} label="Password (min 10 characters)" type="password" required minLength={10} value={registerPassword} onChange={(e: any) => setRegisterPassword(e.target.value)} placeholder="Min 10 characters" helper="Enforces strong password policy. Common dictionary passwords are rejected." />
               <AuthInput icon={KeyRound} label="Club Invite Code (Optional)" type="text" value={inviteCode} onChange={(e: any) => setInviteCode(e.target.value.toUpperCase())} placeholder="e.g. ACM-A7B8C9" className="font-mono uppercase" />
               <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2 px-4 rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50">
                 {loading ? 'Creating Account...' : 'Create Account'}
@@ -324,7 +327,7 @@ export const AuthPage: React.FC = () => {
           {tab === 'forgot' && (
             <div className="space-y-4">
               <form onSubmit={handleForgotPassword} className="space-y-4">
-                <AuthInput icon={Mail} label="Registered Email Address" type="email" required value={email} onChange={(e: any) => setEmail(e.target.value)} placeholder="student@example.com" helper="Returns enumeration-safe confirmation. Tokens expire in 30 minutes." />
+                <AuthInput icon={Mail} label="Registered Email Address" type="email" required value={forgotEmail} onChange={(e: any) => setForgotEmail(e.target.value)} placeholder="student@example.com" helper="Returns enumeration-safe confirmation. Tokens expire in 30 minutes." />
                 <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50">
                   {loading ? 'Dispatching...' : 'Send Reset Link'}
                 </button>
