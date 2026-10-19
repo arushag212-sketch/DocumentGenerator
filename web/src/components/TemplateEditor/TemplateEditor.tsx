@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
+import Underline from '@tiptap/extension-underline';
 import {
   ArrowLeft, Save, Eye, CheckCircle2, AlertCircle, RefreshCw,
   Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon,
@@ -140,6 +141,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
   // AI Review Gate State
   const [unreviewedModal, setUnreviewedModal] = useState<any[] | null>(null);
   const [reviewingAi, setReviewingAi] = useState(false);
+  const [dragOverCanvas, setDragOverCanvas] = useState(false);
 
   const autosaveTimerRef = useRef<any>(null);
   const contentLoadedRef = useRef<boolean>(false);
@@ -153,6 +155,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
+      Underline,
       CustomTable.configure({
         resizable: true,
       }),
@@ -578,6 +581,21 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
     },
   ];
 
+  const blockPalette = [
+    { id: 'infoTable', label: 'Info table', description: 'Key-value event details', icon: <TableIcon className="w-4 h-4 text-indigo-600" /> },
+    { id: 'repeatingTable', label: 'Repeating table', description: 'Items, amounts and totals', icon: <Rows className="w-4 h-4 text-blue-600" /> },
+    { id: 'signatureGrid', label: 'Signature grid', description: 'Signer blocks and lines', icon: <Columns className="w-4 h-4 text-emerald-600" /> },
+    { id: 'pageBreak', label: 'Page break', description: 'Start a new page', icon: <SplitSquareVertical className="w-4 h-4 text-rose-500" /> },
+  ];
+
+  const insertDraggedBlock = (blockId: string) => {
+    if (blockId === 'infoTable') insertInfoTable(editor);
+    if (blockId === 'repeatingTable') insertRepeatingTable(editor);
+    if (blockId === 'signatureGrid') insertSignatureGrid(editor, 2);
+    if (blockId === 'pageBreak') editor?.chain().focus().insertContent({ type: 'pageBreak' }).run();
+    setDragOverCanvas(false);
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[600px] text-slate-500">
@@ -847,7 +865,28 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
         {/* Main Work Area: Desk view with A4 Page and Fields Sidebar */}
         <div className="flex-1 flex justify-center items-start gap-6 p-6 overflow-y-auto">
           {/* A4 Desk Page */}
-          <div className="bg-white shadow-2xl rounded-xs min-h-[1050px] max-w-[800px] w-full p-12 border border-slate-300/70 relative">
+          <div
+            className={`bg-white shadow-2xl rounded-xs min-h-[1050px] max-w-[800px] w-full p-12 border relative transition-colors ${dragOverCanvas ? 'border-indigo-500 ring-4 ring-indigo-100' : 'border-slate-300/70'}`}
+            onDragOver={(event) => {
+              if (event.dataTransfer.types.includes('application/x-clubdocs-block')) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+                setDragOverCanvas(true);
+              }
+            }}
+            onDragLeave={() => setDragOverCanvas(false)}
+            onDrop={(event) => {
+              const blockId = event.dataTransfer.getData('application/x-clubdocs-block');
+              if (!blockId) return;
+              event.preventDefault();
+              insertDraggedBlock(blockId);
+            }}
+          >
+            {dragOverCanvas && (
+              <div className="absolute inset-x-12 top-4 z-10 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-center text-xs font-semibold text-indigo-800 shadow-sm">
+                Drop to insert this document block at the cursor
+              </div>
+            )}
             {/* SVNIT Official Header Simulation */}
             <div className="border-b-2 border-slate-800 pb-4 mb-6 flex items-center justify-between">
               <div className="w-16 h-16 bg-slate-50 border border-slate-200 rounded flex items-center justify-center text-[10px] text-slate-400 font-mono">
@@ -1028,6 +1067,32 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
 
           {/* Right Sidebar: Fields & Template Settings */}
           <aside className="w-80 bg-white rounded-lg border border-slate-200 shadow-sm p-4 flex flex-col gap-5 shrink-0 sticky top-[110px]">
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Rows className="w-4 h-4 text-indigo-600" />
+                <h3 className="font-bold text-sm text-slate-800">Drag blocks into the page</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {blockPalette.map((block) => (
+                  <button
+                    key={block.id}
+                    type="button"
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData('application/x-clubdocs-block', block.id);
+                      event.dataTransfer.effectAllowed = 'copy';
+                    }}
+                    onClick={() => insertDraggedBlock(block.id)}
+                    className="flex min-h-16 flex-col items-start gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-left transition hover:border-indigo-300 hover:bg-indigo-50 active:cursor-grabbing"
+                    title={`${block.description}. Click or drag to insert.`}
+                  >
+                    {block.icon}
+                    <span className="text-[11px] font-semibold text-slate-800">{block.label}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-relaxed text-slate-400">Click a block to insert it, or drag it onto the page for a faster layout workflow.</p>
+            </div>
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-1.5">

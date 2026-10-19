@@ -39,6 +39,7 @@ export const FieldChip = Node.create({
   inline: true,
   atom: true,
   selectable: true,
+  draggable: true,
 
   addAttributes() {
     return {
@@ -198,6 +199,7 @@ export const PageBreak = Node.create({
   name: 'pageBreak',
   group: 'block',
   atom: true,
+  draggable: true,
 
   parseHTML() {
     return [{ tag: 'div[data-type="page-break"]' }];
@@ -463,4 +465,3 @@ export function migrateTipTapContent(content: any): any {
   }
   return { ...content, content: newContent };
 }
-
