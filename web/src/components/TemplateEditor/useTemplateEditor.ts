@@ -15,12 +15,14 @@ import {
   PageBreak,
   BlockIdExtension,
 } from './extensions';
+import { handleEditorDrop, moveTopLevelBlock } from './blockDragDrop';
 
 interface UseTemplateEditorOptions {
   onDocChange?: () => void;
+  clubId?: string;
 }
 
-export function useTemplateEditor({ onDocChange }: UseTemplateEditorOptions = {}) {
+export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOptions = {}) {
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [chipPopover, setChipPopover] = useState<any>(null);
@@ -48,6 +50,9 @@ export function useTemplateEditor({ onDocChange }: UseTemplateEditorOptions = {}
       BlockIdExtension,
     ],
     editorProps: {
+      handleDrop: (view, event) => {
+        return handleEditorDrop(view, event, clubId);
+      },
       handleClick: (view, pos, event) => {
         const target = event.target as HTMLElement;
         const imageTarget = target.closest('.image-block');
@@ -94,11 +99,17 @@ export function useTemplateEditor({ onDocChange }: UseTemplateEditorOptions = {}
         }
         return false;
       },
-      handleKeyDown: (_view, event) => {
+      handleKeyDown: (view, event): boolean => {
         if (event.key === 'Escape') {
           setChipPopover(null);
           setSelectedImageBlock(null);
           setShowSlashMenu(false);
+          return true;
+        }
+        if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+          event.preventDefault();
+          const direction = event.key === 'ArrowUp' ? 'up' : 'down';
+          return moveTopLevelBlock(view, direction);
         }
         return false;
       },

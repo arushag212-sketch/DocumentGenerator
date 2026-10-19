@@ -387,5 +387,47 @@ Screenshots archived to `docs/screenshots/baseline/`.
   - Pytest unit suite `tests/test_editor_assistant.py`: **10 passed, 0 failed in 0.78s** (all 24 action types, hostile payloads, Jinja escaping, cross-club asset rejection, role permissions, and offline heuristics).
   - Real browser smoke test (`scripts/verify_part2_copilot_selenium.py`): **PASSED** (logged in, created template, executed prompt "make the heading blue and add a signature box for the treasurer", verified AI preview with "AI-suggested" badge, applied actions, verified single-step Undo, triggered quick-action chip, verified live preview modal, 0 severe browser console errors, saved screenshot `docs/screenshots/part2_chat_copilot.png`).
 
+---
+
+## Studio Part 3: Drag and Drop, Direct Manipulation & Block Controls
+- **Status**: **DONE**
+- **Changes**:
+  - **Block Drag Handle & Alt+Arrow Reordering (`BlockDragHandle.tsx`, `blockDragDrop.ts`)**:
+    - Floating left-margin grip icon appearing on block hover, offering one-click `Alt+ArrowUp` / `Alt+ArrowDown` block reordering, duplication, deletion, and locked status indicator.
+    - Keyboard shortcut reordering (`Alt+ArrowUp` / `Alt+ArrowDown`) atomic swapping of top-level blocks in ProseMirror document.
+    - Top-level drag reordering (`application/x-clubdocs-block-reorder`) with safe drop position calculation (`findSafeBlockInsertPos`).
+    - Protected SVNIT letterhead and locked blocks (`isLockedNode`): locked blocks cannot be moved or deleted.
+  - **Palette Drag & Drop (`PalettePanel.tsx`, `blockDragDrop.ts`)**:
+    - HTML5 Drag and drop from left palette directly onto canvas for:
+      - Field chips (`application/x-clubdocs-field`), droppable inline or into table cells (`event_title`, `amount`, etc.).
+      - Structural blocks (`application/x-clubdocs-block`): heading, paragraph, clause, pageBreak, infoTable, repeatingTable, signatureGrid.
+      - Club library assets (`application/x-clubdocs-asset`): creates `imageBlock` with placement and size presets.
+      - External image drops: local images normalized and converted to `imageBlock` with 2 MB safety cap.
+  - **Native Table Manipulation (`tableHelper.ts`, `TableControls.tsx`, `tableExtensions.ts`)**:
+    - Floating table controls toolbar when cursor is inside any table:
+      - Row reordering: "Move row up" and "Move row down" using atomic single-transaction row swapping (`moveTableRow`).
+      - Column reordering: "Move column left" and "Move column right" (`moveTableColumn`).
+      - Cell operations: merge cells, split cell, add/remove row, add/remove column.
+    - Table attributes support: `columns` and `class` attributes added to schema, with `addNodeView` styling for `cd-table`, `cd-info-table`, `cd-repeating-table`, and `cd-signature-grid`.
+  - **Image Block Controls (`ImageBlockPopover.tsx`, `imageBlock.ts`)**:
+    - Interactive popover on image selection:
+      - Text wrapping modes: `inline`, `behind`, `inFront`.
+      - Alignment presets: `left`, `center`, `right`.
+      - Width presets: `120px`, `240px`, `360px`, `100%`.
+      - Asset picker drawer: swap image with any asset from club library.
+  - **Resilient Preview Dry-Rendering (`template_compiler.py`, `documents.py`)**:
+    - Added `_add_image_block` into `TemplateCompiler` to embed figures and images into compiled DOCX files.
+    - Updated `_build_editor_dummy_context` to recursively scan all `fieldChip` nodes from `editor_json` (and `migrated_json`) to guarantee dummy context entries for all dragged chips.
+    - Updated `safe_render_docx` to support `strict=False` (using Jinja `DebugUndefined`) during `/preview` so draft templates with temporary undeclared variables preview gracefully.
+  - **Modularity Compliance**:
+    - All 26 editor modules in `web/src/components/TemplateEditor/` strictly under 400 lines (largest file is 377 lines).
+- **Verification**:
+  - `npm run build`: 0 TypeScript errors (built in 5.05s).
+  - Browser E2E Selenium verification (`scripts/verify_part3_drag_drop_selenium.py`): **ALL 8 STEPS PASSED** (opened blank template, reordered paragraphs via Alt+ArrowUp, dragged field chip into table cell, dropped signatureGrid block from palette, reordered table rows via TableControls, dropped logo asset from club library, compiled & rendered document preview via LibreOffice, 0 severe console errors).
+  - Evidence screenshot saved to `docs/screenshots/part3_drag_drop.png`.
+
+---
+
+
 
 

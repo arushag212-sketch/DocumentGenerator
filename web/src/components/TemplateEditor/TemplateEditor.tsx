@@ -39,7 +39,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 }) => {
   const [template, setTemplate] = useState<any>(null);
   const [fields, setFields] = useState<TemplateField[]>([]);
-  const [clubLogoOptions] = useState<ClubLogoOption[]>(providedClubLogoOptions || []);
+  const [clubLogoOptions, setClubLogoOptions] = useState<ClubLogoOption[]>(providedClubLogoOptions || []);
   const [loading, setLoading] = useState(true);
   const [zoom, setZoom] = useState(1);
 
@@ -94,7 +94,14 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     selectedImageBlock,
   } = useTemplateEditor({
     onDocChange: () => markUnsaved(),
+    clubId,
   });
+
+  useEffect(() => {
+    if (editor) {
+      (window as any).editorInstance = editor;
+    }
+  }, [editor]);
 
   // Autosave
   const { saveStatus, conflictMessage, markUnsaved, saveNow } = useEditorAutosave({
@@ -123,6 +130,23 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         if (editor && draftData.editor_json && !contentLoadedRef.current) {
           editor.commands.setContent(migrateTipTapContent(draftData.editor_json));
           contentLoadedRef.current = true;
+        }
+        if (clubId && (!providedClubLogoOptions || providedClubLogoOptions.length === 0)) {
+          api.clubs
+            .getAssets(clubId)
+            .then((assets) => {
+              if (isMounted && Array.isArray(assets)) {
+                setClubLogoOptions(
+                  assets.map((a: any) => ({
+                    id: a.id,
+                    name: a.filename || 'Logo',
+                    url: a.url || `/api/v1/clubs/${clubId}/assets/${a.id}`,
+                    kind: a.kind || 'logo',
+                  }))
+                );
+              }
+            })
+            .catch(() => {});
         }
       } catch (err: any) {
         console.error('Failed to load template:', err);
@@ -247,6 +271,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             editor={editor}
             isOpen={leftOpen}
             onToggle={() => setLeftOpen(!leftOpen)}
+            clubLogoOptions={clubLogoOptions}
           />
         </EditorErrorBoundary>
 

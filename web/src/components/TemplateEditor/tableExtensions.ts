@@ -50,6 +50,16 @@ export const CustomTable = Table.extend({
         parseHTML: (element: any) => element.getAttribute('data-total-var'),
         renderHTML: (attributes: any) => (attributes.totalVarName ? { 'data-total-var': attributes.totalVarName } : {}),
       },
+      columns: {
+        default: 2,
+        parseHTML: (element: any) => Number(element.getAttribute('data-columns')) || 2,
+        renderHTML: (attributes: any) => (attributes.columns ? { 'data-columns': attributes.columns } : {}),
+      },
+      class: {
+        default: null,
+        parseHTML: (element: any) => element.getAttribute('class'),
+        renderHTML: (attributes: any) => (attributes.class ? { class: attributes.class } : {}),
+      },
     };
   },
 
@@ -72,6 +82,30 @@ export const CustomTable = Table.extend({
       return parentRender;
     }
     return ['table', mergeAttributes(HTMLAttributes, { class: tableClass, 'data-block-type': bt }), 0];
+  },
+
+  addNodeView() {
+    const parentView = this.parent?.();
+    if (parentView) {
+      return (props: any) => {
+        const view = (parentView as any)(props);
+        if (view && view.table) {
+          const bt = props.node.attrs.blockType || 'generic';
+          view.table.classList.add(
+            'cd-table',
+            `cd-${bt}`,
+            bt === 'signatureGrid'
+              ? 'cd-signature-grid'
+              : bt === 'infoTable'
+              ? 'cd-info-table'
+              : 'cd-repeating-table'
+          );
+          view.table.setAttribute('data-block-type', bt);
+        }
+        return view;
+      };
+    }
+    return null;
   },
 });
 

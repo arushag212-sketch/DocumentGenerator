@@ -32,7 +32,7 @@ from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls, qn
 from docx.shared import Inches, Pt, RGBColor
 from docxtpl import DocxTemplate
-from jinja2 import StrictUndefined
+from jinja2 import DebugUndefined, StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
 
 from docgen.functions import (
@@ -376,11 +376,12 @@ def safe_cap_collections(obj: Any, max_items: int = 1000) -> None:
             safe_cap_collections(item, max_items)
 
 
-def safe_render_docx(tpl: DocxTemplate, context: dict[str, Any], timeout: float = 30.0) -> None:
-    """Render a DocxTemplate with SandboxedEnvironment, StrictUndefined, 30s timeout, and 1000-row cap."""
+def safe_render_docx(tpl: DocxTemplate, context: dict[str, Any], timeout: float = 30.0, strict: bool = True) -> None:
+    """Render a DocxTemplate with SandboxedEnvironment, 30s timeout, and 1000-row cap."""
     safe_cap_collections(context, max_items=1000)
 
-    env = SandboxedEnvironment(autoescape=True, undefined=StrictUndefined)
+    undefined_cls = StrictUndefined if strict else DebugUndefined
+    env = SandboxedEnvironment(autoescape=True, undefined=undefined_cls)
 
     def safe_range(*args):
         r = range(*args)
@@ -599,6 +600,8 @@ class TipTapDocxCompiler:
                 self._add_repeating_table(block)
             elif b_type == "signatureGrid":
                 self._add_signature_grid(block)
+            elif b_type == "imageBlock":
+                self._add_image_block(block)
             elif b_type in ("pageBreak", "horizontalRule"):
                 self._add_page_break()
             else:
@@ -727,6 +730,71 @@ class TipTapDocxCompiler:
         self._apply_alignment(p, align_str)
 
         self._render_inline_content(p, block.get("content", []))
+
+    def _add_image_block(self, block: dict[str, Any]):
+        """Render image block or figure into DOCX."""
+        attrs = block.get("attrs", {})
+        src = attrs.get("src") or ""
+        caption = attrs.get("caption")
+        width_str = attrs.get("width") or "240px"
+        alignment = attrs.get("alignment") or "center"
+
+        width_in = Inches(2.5)
+        if "px" in str(width_str):
+            try:
+                px = float(str(width_str).replace("px", "").strip())
+                width_in = Inches(min(max(px / 96.0, 0.5), 6.5))
+            except Exception:
+                pass
+        elif "%" in str(width_str):
+            width_in = Inches(6.5)
+
+        p = self.doc.add_paragraph()
+        if alignment == "center":
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        elif alignment == "right":
+            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        else:
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+        image_data = None
+        if src.startswith("data:image/") and ";base64," in src:
+            try:
+                import base64
+                b64_part = src.split(";base64,")[1]
+                image_data = base64.b64decode(b64_part)
+            except Exception:
+                pass
+        elif attrs.get("assetId"):
+            try:
+                from server.app.core.storage import get_storage, LocalDiskStorage
+                from server.app.models.club import ClubAsset
+                from server.app.db.session import SessionLocal
+                with SessionLocal() as db:
+                    asset = db.query(ClubAsset).filter(ClubAsset.id == attrs["assetId"]).first()
+                    if asset:
+                        active_storage = get_storage()
+                        if isinstance(active_storage, LocalDiskStorage):
+                            p_asset = active_storage.local_path(asset.storage_key)
+                            if p_asset.exists():
+                                image_data = p_asset.read_bytes()
+            except Exception:
+                pass
+
+        if image_data:
+            try:
+                img_stream = io.BytesIO(image_data)
+                p.add_run().add_picture(img_stream, width=width_in)
+            except Exception:
+                pass
+
+        if caption:
+            p_cap = self.doc.add_paragraph()
+            p_cap.alignment = p.alignment
+            run_cap = p_cap.add_run(caption)
+            run_cap.italic = True
+            run_cap.font.size = Pt(9)
+            run_cap.font.color.rgb = RGBColor(100, 116, 139)
 
     def _add_list(self, block: dict[str, Any], ordered: bool = False):
         """Render bullet or numbered list items."""
@@ -1825,6 +1893,22 @@ def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, A
             tot_var = attrs.get("totalVarName") or f"total_{list_var}_amount"
             if tot_var not in ctx:
                 ctx[tot_var] = fn_format_inr(Decimal("150000"))
+
+    # Ensure all fieldChips in editor_json have a default value in ctx
+    def _extract_chips(node: Any):
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "fieldChip":
+            fn = node.get("attrs", {}).get("fieldName")
+            if fn and (fn not in ctx or ctx[fn] is None):
+                label = node.get("attrs", {}).get("label") or fn.replace("_", " ").title()
+                ctx[fn] = f"Demo {label}"
+        for child in node.get("content", []):
+            _extract_chips(child)
+
+    _extract_chips(migrated_json)
+    if editor_json and isinstance(editor_json, dict):
+        _extract_chips(editor_json)
 
     # Ensure all schema fields have a default value to satisfy StrictUndefined
     for f_schema in schema.fields:

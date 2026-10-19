@@ -13,6 +13,7 @@ export interface ImageBlockAttributes {
   width: string | number;
   height: number;
   fit: 'contain' | 'cover' | string;
+  textWrap: 'inline' | 'behind' | 'inFront' | string;
 }
 
 export const ImageBlock = Node.create({
@@ -99,6 +100,11 @@ export const ImageBlock = Node.create({
         parseHTML: (element: any) => element.getAttribute('data-fit') || 'contain',
         renderHTML: (attributes: any) => ({ 'data-fit': attributes.fit || 'contain' }),
       },
+      textWrap: {
+        default: 'inline',
+        parseHTML: (element: any) => element.getAttribute('data-text-wrap') || 'inline',
+        renderHTML: (attributes: any) => ({ 'data-text-wrap': attributes.textWrap || 'inline' }),
+      },
     };
   },
 
@@ -132,6 +138,7 @@ export const ImageBlock = Node.create({
       width,
       height,
       fit,
+      textWrap,
       class: _className,
       ...rest
     } = attrs;
@@ -151,7 +158,8 @@ export const ImageBlock = Node.create({
       'data-width': width || 'auto',
       'data-height': height || 180,
       'data-fit': fit || 'contain',
-      class: `image-block image-block--${normalizedType} image-block--${placement || 'center'}${selectedAssetId ? ' image-block--resolved' : ' image-block--placeholder'}`,
+      'data-text-wrap': textWrap || 'inline',
+      class: `image-block image-block--${normalizedType} image-block--${placement || 'center'} image-block--wrap-${textWrap || 'inline'}${selectedAssetId ? ' image-block--resolved' : ' image-block--placeholder'}`,
     });
 
     if (src) {
@@ -218,6 +226,7 @@ export function createImageBlockNode(attributes: Partial<ImageBlockAttributes> =
       width: attributes.width || 'auto',
       height: attributes.height || 180,
       fit: attributes.fit || 'contain',
+      textWrap: attributes.textWrap || 'inline',
     },
   };
 }

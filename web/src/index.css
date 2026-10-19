@@ -161,6 +161,19 @@ body {
   align-items: flex-end;
 }
 
+.ProseMirror figure.image-block--wrap-behind {
+  position: absolute;
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ProseMirror figure.image-block--wrap-inFront {
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
 .ProseMirror figure.image-block--placeholder {
   border: 1px dashed #7dd3fc;
   background: linear-gradient(135deg, #f0f9ff, #f8fafc);

@@ -25,9 +25,15 @@ interface PalettePanelProps {
   editor: any;
   isOpen: boolean;
   onToggle: () => void;
+  clubLogoOptions?: Array<{ id: string; name: string; url: string; kind?: string }>;
 }
 
-export const PalettePanel: React.FC<PalettePanelProps> = ({ editor, isOpen, onToggle }) => {
+export const PalettePanel: React.FC<PalettePanelProps> = ({
+  editor,
+  isOpen,
+  onToggle,
+  clubLogoOptions = [],
+}) => {
   const [activeCategory, setActiveCategory] = useState<'blocks' | 'clauses'>('blocks');
 
   const handleDragStart = (e: React.DragEvent, blockType: string, customPayload?: any) => {
@@ -245,6 +251,56 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({ editor, isOpen, onTo
                   <Sparkles className="w-4 h-4 text-indigo-600" />
                   <span className="font-semibold text-slate-800 text-xs">Club Logo Block</span>
                 </button>
+
+                {clubLogoOptions.map((asset) => (
+                  <button
+                    key={asset.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', `[Logo: ${asset.name}]`);
+                      e.dataTransfer.setData(
+                        'application/x-clubdocs-asset',
+                        JSON.stringify({
+                          assetId: asset.id,
+                          url: asset.url,
+                          filename: asset.name,
+                          kind: asset.kind,
+                        })
+                      );
+                      e.dataTransfer.setData(
+                        'application/x-clubdocs-block',
+                        JSON.stringify({
+                          type: 'imageBlock',
+                          src: asset.url,
+                          assetId: asset.id,
+                          alt: asset.name,
+                          imageType: asset.kind || 'club-logo',
+                        })
+                      );
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }}
+                    onClick={() =>
+                      insertImageBlock(editor, {
+                        src: asset.url,
+                        assetId: asset.id,
+                        imageType: asset.kind || 'club-logo',
+                        alt: asset.name,
+                      })
+                    }
+                    className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  >
+                    <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <div className="flex-1 truncate">
+                      <div className="font-semibold text-slate-800 text-xs truncate">
+                        {asset.name}
+                      </div>
+                      <div className="text-[10px] text-slate-500 uppercase">
+                        {asset.kind || 'Logo'}
+                      </div>
+                    </div>
+                  </button>
+                ))}
 
                 <button
                   draggable

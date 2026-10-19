@@ -1498,7 +1498,7 @@ def preview_template(
         dummy_ctx = _build_editor_dummy_context(schema_obj, fields, editor_json)
 
         doc = DocxTemplate(str(tmpl_docx))
-        safe_render_docx(doc, dummy_ctx, timeout=30.0)
+        safe_render_docx(doc, dummy_ctx, timeout=30.0, strict=False)
         rendered_docx = tmp_dir / "rendered.docx"
         doc.save(str(rendered_docx))
 
