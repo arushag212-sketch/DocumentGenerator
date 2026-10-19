@@ -12,6 +12,7 @@ Rules:
 from __future__ import annotations
 
 import re
+from docgen.extractors.template_field_filler import fill_template_fields
 from docgen.field_aliases import apply_field_aliases
 from typing import Any, Optional
 import yaml
@@ -60,6 +61,8 @@ class EventRecommendationResponse(BaseModel):
     templates: list[TemplateRecommendationOut]
     other_templates: list[TemplateRecommendationOut] = Field(default_factory=list)
     grouped_missing_fields: list[GroupedMissingFieldOut]
+    # Custom-template fields read from the user's sentence, shown prefilled for review.
+    filled_from_text: list[GroupedMissingFieldOut] = Field(default_factory=list)
 
 
 BUDGET_REGEX = re.compile(
@@ -311,6 +314,35 @@ class EventRecommender:
             extracted,
             wanted={f.get("key") for tid in active_ids for f in parsed_schemas.get(tid, {}).get("fields", []) if f.get("key")},
         )
+        # Custom templates name their own fields (recipient_name, position, ...); read those
+        # values from the sentence too, keeping only values the user actually wrote.
+        custom_fields = [
+            f
+            for t in tmpls
+            if t.id in active_ids and not t.is_system
+            for f in parsed_schemas.get(t.id, {}).get("fields", [])
+        ]
+        filled_from_text: list[GroupedMissingFieldOut] = []
+        if custom_fields and text.strip():
+            filled = fill_template_fields(text, custom_fields, extracted, extractor.llm)
+            extracted.update(filled)
+            for f in custom_fields:
+                key = f.get("key")
+                if key in filled and all(x.key != key for x in filled_from_text):
+                    filled_from_text.append(
+                        GroupedMissingFieldOut(
+                            key=key,
+                            label=f.get("label") or key.replace("_", " ").title(),
+                            type=f.get("type", "text"),
+                            ask=f.get("ask") or f.get("label") or key.replace("_", " ").title(),
+                            required=bool(f.get("required", False)),
+                            importance="essential" if f.get("required") else "optional",
+                            defer_ok=bool(f.get("defer_ok", False)),
+                            sensitive=bool(f.get("sensitive", False)),
+                            columns=f.get("columns"),
+                            needed_by=[t.name for t in tmpls if t.id in active_ids and not t.is_system],
+                        )
+                    )
 
         for tmpl_id in active_ids:
             schema_dict = parsed_schemas.get(tmpl_id, {})
@@ -400,4 +432,5 @@ class EventRecommender:
             templates=template_recs,
             other_templates=other_template_recs,
             grouped_missing_fields=missing_list,
+            filled_from_text=filled_from_text,
         )

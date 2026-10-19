@@ -21,6 +21,7 @@ import {
 import { api } from '../api/client';
 import { TemplateGalleryItem, ClubPermissions } from '../types';
 import { TemplateWizardModal } from './TemplateWizardModal';
+import { rememberTemplatePrompt } from '../utils/templatePrompt';
 import { TemplateImportModal } from './TemplateImportModal';
 
 interface TemplateGalleryTabProps {
@@ -106,6 +107,8 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
           templateId: res.template.id,
         });
       } else {
+        rememberTemplatePrompt(res.template.id, aiPrompt.trim());
+        if (res.template.slug) rememberTemplatePrompt(res.template.slug, aiPrompt.trim());
         setAiCreatedTemplate({
           id: res.template.id,
           name: res.template.name,
@@ -380,26 +383,28 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                 Template Ready: &quot;{aiCreatedTemplate.name}&quot;
               </p>
               <p className="text-xs text-emerald-700">
-                Generated from your description. You can now use it on Home to generate documents immediately!
+                Open it to check the layout, approve the AI suggestions and publish. Then use &quot;Create document&quot; to fill it in.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onSelectTemplate(aiCreatedTemplate.slug || aiCreatedTemplate.id)}
-              className="px-3.5 py-1.5 bg-[#1b365d] hover:bg-[#132742] text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              Use This Template
-            </button>
-            {onOpenEditor && (
+            {onOpenEditor ? (
               <button
                 type="button"
                 onClick={() => onOpenEditor(aiCreatedTemplate.id)}
-                className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition-colors"
+                className="px-3.5 py-1.5 bg-[#1b365d] hover:bg-[#132742] text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
               >
-                Customize in Editor
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                Review &amp; publish
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onSelectTemplate(aiCreatedTemplate.slug || aiCreatedTemplate.id)}
+                className="px-3.5 py-1.5 bg-[#1b365d] hover:bg-[#132742] text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                Use This Template
               </button>
             )}
           </div>

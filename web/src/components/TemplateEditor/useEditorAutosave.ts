@@ -9,6 +9,8 @@ interface UseEditorAutosaveOptions {
   template: any;
   editor: any;
   designSettings?: any;
+  /** Live field list from the Fields panel; saved instead of the copy loaded with the template. */
+  fields?: any[];
   onSaveSuccess?: (updatedTemplate: any) => void;
   debounceMs?: number;
 }
@@ -19,9 +21,13 @@ export function useEditorAutosave({
   template,
   editor,
   designSettings,
+  fields,
   onSaveSuccess,
   debounceMs = 1000,
 }: UseEditorAutosaveOptions) {
+  // Read through a ref so a save fired right after setFields still sends the latest list.
+  const fieldsRef = useRef<any[] | undefined>(fields);
+  fieldsRef.current = fields;
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -52,7 +58,7 @@ export function useEditorAutosave({
           name: template.name,
           category: template.category,
           description: template.description,
-          fields: template.fields || [],
+          fields: fieldsRef.current ?? template.fields ?? [],
           editor_json: editorJson,
           letterhead_id: template.letterhead_id || null,
           design_settings: designSettings || template.design_settings || null,
@@ -93,7 +99,7 @@ export function useEditorAutosave({
         setIsSaving(false);
       }
     },
-    [clubId, templateId, template, editor, onSaveSuccess]
+    [clubId, templateId, template, editor, designSettings, onSaveSuccess]
   );
 
   const markUnsaved = useCallback(() => {
@@ -117,7 +123,15 @@ export function useEditorAutosave({
     isSaving,
     lastSavedAt,
     conflictMessage,
-    saveNow: () => save(true),
+    // An explicit save supersedes any queued autosave, so a debounced save cannot
+    // fire afterwards (e.g. right after publishing) and turn the template back into a draft.
+    saveNow: () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      return save(true);
+    },
     markUnsaved,
     setSaveStatus,
     clearConflict: () => setConflictMessage(null),

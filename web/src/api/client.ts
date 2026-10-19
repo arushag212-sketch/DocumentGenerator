@@ -72,8 +72,10 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
 
   if (!res.ok) {
     let errorDetail = 'Request failed';
+    let rawDetail: any = undefined;
     try {
       const data = await res.json();
+      rawDetail = data?.detail;
       if (typeof data.detail === 'string') {
         errorDetail = data.detail;
       } else if (data.detail && typeof data.detail === 'object') {
@@ -97,7 +99,11 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
       errorDetail = 'Your session has expired. Please sign in again.';
     }
 
-    throw new Error(errorDetail);
+    // Keep status and structured detail so callers can react (e.g. 409 unreviewed AI items).
+    const error = new Error(errorDetail) as Error & { status?: number; detail?: any };
+    error.status = res.status;
+    error.detail = rawDetail;
+    throw error;
   }
 
   if (res.status === 204) {

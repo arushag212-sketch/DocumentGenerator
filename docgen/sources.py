@@ -44,6 +44,22 @@ class FileSystemTemplateSource:
         return load_schema(self.templates_dir / template_id)
 
 
+def _resolve_docx_key(key: Optional[str]) -> Path:
+    """Template DOCX keys are absolute paths or keys relative to the storage root."""
+    path = Path(key or "")
+    if path.is_absolute() or path.exists():
+        return path
+    try:
+        from server.app.core.storage import get_storage, LocalDiskStorage
+
+        storage = get_storage()
+        if isinstance(storage, LocalDiskStorage):
+            return storage.local_path(str(key))
+    except Exception:
+        pass
+    return path
+
+
 class DatabaseTemplateSource:
     """Template source that loads from database models (TemplateVersion & storage)."""
 
@@ -66,7 +82,7 @@ class DatabaseTemplateSource:
             .all()
         )
         for tmpl, ver in versions:
-            docx_path = Path(ver.docx_storage_key)
+            docx_path = _resolve_docx_key(ver.docx_storage_key)
             self.data_store[tmpl.slug] = (ver.schema_yaml, docx_path)
             self.data_store[tmpl.id] = (ver.schema_yaml, docx_path)
 

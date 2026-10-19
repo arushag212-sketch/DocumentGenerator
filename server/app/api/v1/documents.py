@@ -1689,6 +1689,7 @@ def publish_template(
             fields=fields,
             template_meta={"id": tmpl.id, "name": tmpl.name, "category": tmpl.category, "description": tmpl.description},
             club_slug=ctx.club.slug,
+            design_settings=(ver.editor_json or {}).get("design_settings") if isinstance(ver.editor_json, dict) else None,
         )
         if not report["is_valid"]:
             raise HTTPException(

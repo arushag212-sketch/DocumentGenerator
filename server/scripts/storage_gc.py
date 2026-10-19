@@ -81,6 +81,12 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
             q_tmpls = q_tmpls.filter((Template.club_id == club_id) | (Template.club_id.is_(None)))
         for tmpl in q_tmpls.all():
             for tv in db.query(TemplateVersion).filter(TemplateVersion.template_id == tmpl.id).all():
+                # Gallery thumbnails are named after the version id and have no DB column;
+                # without this every thumbnail is "orphaned" and deleted on each startup.
+                for ext in ("webp", "png"):
+                    thumb = active_storage.local_path(f"thumbnails/{tv.id}.{ext}")
+                    referenced.add(str(thumb))
+                    protected.add(str(thumb))
                 if tv.docx_storage_key:
                     p = active_storage.local_path(tv.docx_storage_key)
                     referenced.add(str(p))
@@ -115,6 +121,11 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
         db.close()
     except Exception as e:
         print(f"[WARN] Failed to query database for GC references: {e}")
+
+    # Shared fallback image used for templates without a rendered thumbnail.
+    placeholder = active_storage.local_path("thumbnails/neutral_placeholder.png")
+    referenced.add(str(placeholder))
+    protected.add(str(placeholder))
 
     return referenced, protected
 

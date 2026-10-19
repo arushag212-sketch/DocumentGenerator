@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { TemplateEditor } from '../components/TemplateEditor/TemplateEditor';
+import { documentNewUrl } from '../utils/templatePrompt';
 
 export const TemplateEditorPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +30,7 @@ export const TemplateEditorPage: React.FC = () => {
       clubId={String(activeClub.id)}
       templateId={id}
       onBack={() => navigate('/templates')}
+      onCreateDocument={() => navigate(documentNewUrl(id))}
     />
   );
 };

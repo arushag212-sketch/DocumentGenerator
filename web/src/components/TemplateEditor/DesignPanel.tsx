@@ -18,6 +18,8 @@ export interface DesignSettings {
   orientation: 'portrait' | 'landscape';
   margins: 'normal' | 'compact' | 'wide';
   pageBorder: 'none' | 'single' | 'double';
+  /** 'certificate' uses display typography (large title/name) and spreads content down the page. */
+  layout?: 'document' | 'certificate';
   watermark: string;
   watermarkOpacity: number;
 }
@@ -299,6 +301,34 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
                 <option value="normal">Normal (25mm)</option>
                 <option value="wide">Wide (32mm)</option>
               </select>
+            </div>
+          </div>
+
+          <div>
+            <span className="block text-[11px] font-medium text-slate-600 mb-1">Layout</span>
+            <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Page layout">
+              {(['document', 'certificate'] as const).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  role="radio"
+                  aria-checked={(settings.layout || 'document') === l}
+                  onClick={() =>
+                    onChange(
+                      l === 'certificate'
+                        ? { layout: l, orientation: 'landscape', pageBorder: 'double', margins: 'wide' }
+                        : { layout: l }
+                    )
+                  }
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                    (settings.layout || 'document') === l
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {l === 'document' ? 'Document / Letter' : 'Certificate / Award'}
+                </button>
+              ))}
             </div>
           </div>
 

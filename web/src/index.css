@@ -368,3 +368,29 @@ body {
 .template-editor-image-controls select:focus {
   box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.45);
 }
+
+/* Certificate layout: display typography mirroring the compiled DOCX (30pt title, 24pt name). */
+.cd-certificate .ProseMirror h1 {
+  font-size: 2.5rem;
+  line-height: 1.2;
+  margin: 1.25rem 0 1rem;
+  letter-spacing: 0.04em;
+}
+.cd-certificate .ProseMirror h2 {
+  font-size: 2rem;
+  margin: 0.75rem 0;
+}
+.cd-certificate .ProseMirror h3 {
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cd-certificate .ProseMirror p {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-bottom: 0.75rem;
+}
+.cd-certificate .ProseMirror table[data-block-type='signatureGrid'],
+.cd-certificate .ProseMirror .cd-signature-grid {
+  margin-top: 4.5rem;
+}

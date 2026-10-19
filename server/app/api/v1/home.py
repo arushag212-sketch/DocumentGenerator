@@ -259,6 +259,25 @@ def understand_user_need(
             )
         )
 
+    # Values read from the sentence for custom templates: show them prefilled so the
+    # user can check them before they go into the document.
+    for ff in getattr(rec, "filled_from_text", []) or []:
+        if any(q.key == ff.key for q in missing_questions):
+            continue
+        missing_questions.append(
+            HomeMissingQuestion(
+                key=ff.key,
+                question=f"{_clean_jargon(ff.ask)} (from your request, please check)",
+                label=_clean_jargon(ff.label),
+                type=ff.type if ff.type in ("int", "money", "longtext") else "text",
+                required=ff.required,
+                importance=ff.importance,
+                defer_ok=ff.defer_ok,
+                needed_by=[_clean_jargon(n) for n in ff.needed_by],
+                current_value=extracted.get(ff.key),
+            )
+        )
+
     # Check for roles with multiple active signatories
     if ctx.club.academic_year_default:
         active_role_holders = (

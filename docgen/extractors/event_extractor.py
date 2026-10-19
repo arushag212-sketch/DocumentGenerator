@@ -12,6 +12,34 @@ from docgen.config import ClubConfig, load_config
 from docgen.llm import LLMClient, get_llm_client
 from docgen.models import EventRecord, FieldSource, tf
 
+_MONTHS = ["january", "february", "march", "april", "may", "june", "july",
+           "august", "september", "october", "november", "december"]
+
+
+_NULL_LIKE = {"", "null", "none", "n/a", "na", "nil", "unknown", "not specified", "not mentioned", "-"}
+
+
+def _is_null_like(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and value.strip().lower() in _NULL_LIKE)
+
+
+def _date_is_stated(iso_value: Any, text: str) -> bool:
+    """True when the user's text names this date's day and month.
+
+    Stops the LLM fallback from inventing dates (e.g. "summer" -> 1 June).
+    """
+    try:
+        d = datetime.strptime(str(iso_value)[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return False
+    lower = text.lower()
+    if not re.search(rf"(?<!\d)0?{d.day}(?:st|nd|rd|th)?(?!\d)", lower):
+        return False
+    month = _MONTHS[d.month - 1]
+    words = re.findall(r"[a-z]+", lower)
+    numeric = re.search(rf"(?<!\d)0?{d.day}\s*[/.-]\s*0?{d.month}(?!\d)", lower)
+    return month in words or month[:3] in words or bool(numeric)
+
 
 MONTH_NAMES = {
     "jan", "january", "feb", "february", "mar", "march", "apr", "april",
@@ -263,7 +291,8 @@ class EventExtractor:
                 re.IGNORECASE,
             )
         if not title_match:
-            if not re.match(r'^\s*(?:i need|we need|please|request|can you)\b', text, re.IGNORECASE):
+            # Instructions ("create a certificate for ...") are requests, not event titles.
+            if not re.match(r'^\s*(?:i need|we need|i want|we want|please|request|can you|create|make|generate|draft|prepare|write|design|give me)\b', text, re.IGNORECASE):
                 title_match = re.match(
                     r'^\s*([A-Za-z0-9\s_-]+?)(?=\s+(?:on|at|from|during)\b|[.,;]|$)',
                     text,
@@ -341,10 +370,14 @@ class EventExtractor:
         if not event.event_name.is_present or not event.venue.is_present or not event.date_start.is_present:
             try:
                 llm_res = self.llm.generate_json(
-                    f"Extract event information from the following sentence:\n{text}",
+                    "Extract event information from the following sentence. Use proper title capitalisation "
+                    "for names (acronyms such as ACM or IEEE in capitals). Leave out anything the sentence "
+                    f"does not state.\n{text}",
                     llm_schema
                 )
                 if llm_res:
+                    # Models often answer "null"/"N/A" for unknown values; treat those as absent.
+                    llm_res = {k: v for k, v in llm_res.items() if not _is_null_like(v)}
                     if not event.event_name.is_present and llm_res.get("event_name"):
                         event.event_name = tf(llm_res["event_name"], FieldSource.extracted_llm, confirmed=False)
                     if not event.venue.is_present and llm_res.get("venue"):
@@ -353,7 +386,7 @@ class EventExtractor:
                         event.expected_participants = tf(int(llm_res["expected_participants"]), FieldSource.extracted_llm, confirmed=False)
                     if llm_res.get("target_audience"):
                         event.target_audience = tf(llm_res["target_audience"], FieldSource.extracted_llm, confirmed=False)
-                    if not event.date_start.is_present and llm_res.get("date_start"):
+                    if not event.date_start.is_present and llm_res.get("date_start") and _date_is_stated(llm_res["date_start"], text):
                         event.date_start = tf(llm_res["date_start"], FieldSource.extracted_llm, confirmed=False)
                         event.date_end = tf(llm_res.get("date_end", llm_res["date_start"]), FieldSource.extracted_llm, confirmed=False)
                         if not event.dates.is_present:

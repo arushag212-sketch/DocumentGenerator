@@ -9,7 +9,7 @@ import re
 import uuid
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import yaml
 from fastapi import HTTPException, status
@@ -111,6 +111,20 @@ class TemplateBlockSpec(BaseModel):
     ai_suggested: bool = True
 
 
+class TemplateDesignSpec(BaseModel):
+    """Page-level look; keys match the editor's DesignSettings."""
+
+    orientation: Optional[Literal["portrait", "landscape"]] = None
+    pageBorder: Optional[Literal["none", "single", "double"]] = None
+    borderColor: Optional[str] = None
+    headingColor: Optional[str] = None
+    textColor: Optional[str] = None
+    fontFamily: Optional[str] = None
+    headingFontFamily: Optional[str] = None
+    margins: Optional[Literal["normal", "compact", "wide"]] = None
+    layout: Optional[Literal["document", "certificate"]] = None
+
+
 class TemplateSpec(BaseModel):
     name: str
     category: str = "Official Event Documents"
@@ -118,6 +132,7 @@ class TemplateSpec(BaseModel):
     description: str
     fields: list[TemplateFieldSpec]
     blocks: list[TemplateBlockSpec]
+    design: Optional[TemplateDesignSpec] = None
 
 
 class _ModelFieldSpec(BaseModel):
@@ -144,6 +159,7 @@ class _ModelTemplateSpec(BaseModel):
     description: str
     fields: list[_ModelFieldSpec]
     blocks: list[_ModelBlockSpec]
+    design: Optional[TemplateDesignSpec] = None
 
 
 # Schema sent to the model. Block bodies and table columns travel as JSON strings because
@@ -282,6 +298,27 @@ def derive_unique_series_key(
     while f"{base}{suffix}" in used_series:
         suffix += 1
     return f"{base}{suffix}"
+
+
+ALLOWED_DESIGN_FONTS = {"Tinos", "Merriweather", "Roboto", "Open Sans", "Montserrat", "Playfair Display", "Roboto Mono"}
+_HEX_COLOR = re.compile(r"^#?[0-9a-fA-F]{6}$")
+
+
+def _sanitize_design(design: Optional[TemplateDesignSpec]) -> Optional[dict[str, Any]]:
+    """Keep only well-formed design values (hex colours, known fonts)."""
+    if design is None:
+        return None
+    out: dict[str, Any] = {}
+    for key, value in design.model_dump(exclude_none=True).items():
+        if key.endswith("Color"):
+            if isinstance(value, str) and _HEX_COLOR.match(value.strip()):
+                out[key] = "#" + value.strip().lstrip("#").upper()
+        elif key in ("fontFamily", "headingFontFamily"):
+            if value in ALLOWED_DESIGN_FONTS:
+                out[key] = value
+        else:
+            out[key] = value
+    return out or None
 
 
 def sanitize_template_spec(spec: TemplateSpec, original_prompt: str) -> TemplateSpec:
@@ -443,6 +480,32 @@ def _sanitize_inline_content(content: list[dict[str, Any]]) -> None:
             _sanitize_inline_content(node["content"])
 
 
+RECOGNITION_WORDS = ("secured", "participated", "participation", "awarded", "won", "achieved", "achievement",
+                     "completed", "position", "place", "rank", "appreciation", "recognition", "volunteer")
+# Standard certificate openers that state no fact of their own.
+CERTIFICATE_LEAD_INS = {
+    normalize_text_for_match(s)
+    for s in ("This is to certify that", "This is to certify that Mr./Ms.", "This certificate is proudly presented to")
+}
+INSTITUTIONAL_TRIGGERS = [t for t in OFFICIAL_WORDING_TRIGGERS if t not in ("certify", "certification")]
+
+
+def _is_recognition_statement(block: TemplateBlockSpec, text_lower: str) -> bool:
+    """A certificate line ("This is to certify that <recipient> secured <position> in <event>").
+
+    Its facts all come from declared fields (chips), and it uses only "certify" wording, never
+    approval/sanction/undertaking/declaration language, so it does not invent an official decision.
+    """
+    if normalize_text_for_match(text_lower) in CERTIFICATE_LEAD_INS:
+        return True
+    has_chip = any(n.get("type") == "fieldChip" for n in (block.content or []))
+    if not has_chip:
+        return False
+    if any(trig in text_lower for trig in INSTITUTIONAL_TRIGGERS):
+        return False
+    return any(word in text_lower for word in RECOGNITION_WORDS)
+
+
 def _enforce_official_wording(spec: TemplateSpec, prompt: str) -> None:
     """Enforce that official wording (approvals, undertakings, certifications) is not invented.
 
@@ -468,6 +531,9 @@ def _enforce_official_wording(spec: TemplateSpec, prompt: str) -> None:
             p_lower = p_text.lower()
 
             is_official = any(trig in p_lower for trig in OFFICIAL_WORDING_TRIGGERS)
+            if is_official and _is_recognition_statement(block, p_lower):
+                found_official_block = True
+                continue
             if is_official:
                 p_norm = normalize_text_for_match(p_text)
                 exact_in_prompt = p_norm in user_full_norm
@@ -597,6 +663,22 @@ ALLOWED BLOCK TYPES (blocks[]):
 4. "repeatingTable": {type: "repeatingTable", attrs: {listVariable: "declared_table_key", itemAlias: "item", columns: [{key: "col_key", label: "Column Title", align: "left"|"center"|"right"}], hasTotal: true|false, totalLabel: "Total Amount", totalField: "col_key", totalVarName: "total_var"}}
 5. "signatureGrid": {type: "signatureGrid", attrs: {columns: 2|3|4, signatures: [{label: "Role", designation: "Club / Department"}]}}
 6. "pageBreak": {type: "pageBreak"}
+
+PAGE DESIGN (optional top-level "design" object):
+{"orientation": "portrait"|"landscape", "pageBorder": "none"|"single"|"double", "borderColor": "#RRGGBB",
+ "headingColor": "#RRGGBB", "textColor": "#RRGGBB", "fontFamily": FONT, "headingFontFamily": FONT, "margins": "normal"|"compact"|"wide",
+ "layout": "document"|"certificate"}
+FONT is one of: Tinos, Merriweather, Roboto, Open Sans, Montserrat, Playfair Display.
+Honour colours and borders the user asks for (gold = #B8860B, silver = #8A8D91, navy = #1E3A8A, maroon = #7B1E2B).
+
+CERTIFICATES, AWARDS AND APPRECIATION LETTERS:
+- design: layout "certificate", orientation "landscape", pageBorder "double", borderColor from the request (default #B8860B), headingFontFamily "Playfair Display", margins "wide".
+- Layout, all centred: small heading with the organising club/event; large level-1 title (e.g. "CERTIFICATE OF ACHIEVEMENT" or "CERTIFICATE OF PARTICIPATION");
+  paragraph "This is to certify that"; level-2 heading containing ONLY the recipient_name fieldChip;
+  a paragraph like "has secured <position chip> in <event_name chip> organised by <organiser chip> on <award_date chip>.";
+  then a signatureGrid with exactly the number of signatories requested (e.g. three judges -> 3 signatures labelled "Judge").
+- Names, positions, events and dates given in the request are DATA for the document: declare them as fields
+  (recipient_name, position, event_name, award_date, ...) and reference them with fieldChips; never type them into text runs.
 
 CRITICAL RULES:
 - Put fieldChip references, infoTable row fields, and repeatingTable listVariables ONLY for fields explicitly declared in fields[].
@@ -794,6 +876,9 @@ def generate_draft_template(
         "type": "doc",
         "content": [b.model_dump(exclude_none=True) for b in spec.blocks],
     }
+    design_settings = _sanitize_design(spec.design)
+    if design_settings:
+        editor_json["design_settings"] = design_settings
     fields_list = [f.model_dump(exclude_none=True) for f in spec.fields]
 
     storage_templates_dir = local_storage.base_dir / "templates"
@@ -833,6 +918,7 @@ def generate_draft_template(
         },
         club_slug=club_slug,
         letterhead_cfg=letterhead_cfg,
+        design_settings=design_settings,
     )
     dest_docx.write_bytes(docx_bytes)
 
@@ -842,7 +928,7 @@ def generate_draft_template(
         version_no=1,
         editor_json=editor_json,
         schema_yaml=schema_yaml,
-        docx_storage_key=dest_docx.relative_to(local_storage.base_dir).as_posix(),
+        docx_storage_key=str(dest_docx),
         validation_report=report,
         letterhead_id=letterhead_id,
         created_by=user_id,

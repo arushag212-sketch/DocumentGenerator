@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { TemplateGalleryTab } from '../components/TemplateGalleryTab';
 import { useClubPermissions } from '../hooks/useClubPermissions';
+import { documentNewUrl } from '../utils/templatePrompt';
 
 export const TemplatesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ export const TemplatesPage: React.FC = () => {
         clubId={activeClub.id}
         permissions={permissions}
         onSelectTemplate={(templateId) => {
-          navigate(`/documents/new?template=${templateId}`);
+          navigate(documentNewUrl(templateId));
         }}
         onOpenEditor={(templateId) => {
           navigate(`/templates/${templateId}`);

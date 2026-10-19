@@ -10,6 +10,7 @@ export const DocumentNewPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { activeClub } = useAuth();
   const templateId = searchParams.get('template');
+  const initialPrompt = searchParams.get('prompt');
   const [generateResult, setGenerateResult] = useState<HomeGenerateResponse | null>(null);
 
   if (!activeClub) {
@@ -26,6 +27,7 @@ export const DocumentNewPage: React.FC = () => {
         <HomePage
           clubId={activeClub.id}
           initialTemplateId={templateId}
+          initialPrompt={initialPrompt}
           onDocumentsGenerated={(res) => setGenerateResult(res)}
         />
       </div>

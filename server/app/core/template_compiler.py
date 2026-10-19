@@ -621,6 +621,9 @@ class TipTapDocxCompiler:
         self.heading_font = self.design_settings.get("headingFontFamily") or self.design_settings.get("heading_font") or self.body_font
         self.heading_color_rgb = hex_to_rgb(self.design_settings.get("headingColor") or self.design_settings.get("heading_color"))
         self.text_color_rgb = hex_to_rgb(self.design_settings.get("textColor") or self.design_settings.get("text_color"))
+        # Certificates and awards use display typography and spread content down the page.
+        self.is_certificate = self.design_settings.get("layout") == "certificate"
+        self.body_size = 13 if self.is_certificate else 11
 
         th_bg = self.design_settings.get("tableHeaderBg") or self.design_settings.get("table_header_bg") or ""
         self.table_header_bg_hex = th_bg.strip().lstrip("#").upper()
@@ -692,7 +695,7 @@ class TipTapDocxCompiler:
         style = self.doc.styles['Normal']
         font = style.font
         font.name = self.body_font
-        font.size = Pt(11)
+        font.size = Pt(self.body_size)
         font.color.rgb = self.text_color_rgb or RGBColor(0x1F, 0x29, 0x37)
 
     def build(self) -> Document:
@@ -818,19 +821,19 @@ class TipTapDocxCompiler:
         self._apply_alignment(p, align_str)
 
         if level == 1:
-            p.paragraph_format.space_before = Pt(12)
-            p.paragraph_format.space_after = Pt(4)
-            font_size = 14
+            p.paragraph_format.space_before = Pt(22 if self.is_certificate else 12)
+            p.paragraph_format.space_after = Pt(14 if self.is_certificate else 4)
+            font_size = 30 if self.is_certificate else 14
             color = self.heading_color_rgb or RGBColor(0x1E, 0x5B, 0x94)  # SVNIT Blue
         elif level == 2:
-            p.paragraph_format.space_before = Pt(8)
-            p.paragraph_format.space_after = Pt(3)
-            font_size = 12
+            p.paragraph_format.space_before = Pt(12 if self.is_certificate else 8)
+            p.paragraph_format.space_after = Pt(12 if self.is_certificate else 3)
+            font_size = 24 if self.is_certificate else 12
             color = self.heading_color_rgb or RGBColor(0x11, 0x18, 0x27)
         else:
-            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_before = Pt(10 if self.is_certificate else 6)
             p.paragraph_format.space_after = Pt(2)
-            font_size = 11
+            font_size = 13 if self.is_certificate else 11
             color = self.heading_color_rgb or RGBColor(0x37, 0x41, 0x51)
 
         self._render_inline_content(p, block.get("content", []), default_size=font_size,
@@ -843,11 +846,11 @@ class TipTapDocxCompiler:
 
         p = self.doc.add_paragraph()
         p.paragraph_format.space_before = Pt(0)
-        p.paragraph_format.space_after = Pt(4)
-        p.paragraph_format.line_spacing = 1.15
+        p.paragraph_format.space_after = Pt(10 if self.is_certificate else 4)
+        p.paragraph_format.line_spacing = 1.4 if self.is_certificate else 1.15
         self._apply_alignment(p, align_str)
 
-        self._render_inline_content(p, block.get("content", []))
+        self._render_inline_content(p, block.get("content", []), default_size=self.body_size)
 
     def _add_image_block(self, block: dict[str, Any]):
         """Render image block or figure into DOCX."""
@@ -1127,7 +1130,7 @@ class TipTapDocxCompiler:
 
         # Preceding spacing
         p_lead = self.doc.add_paragraph()
-        p_lead.paragraph_format.space_before = Pt(14)
+        p_lead.paragraph_format.space_before = Pt(30 if self.is_certificate else 14)
         p_lead.paragraph_format.space_after = Pt(4)
         set_paragraph_keep_with_next(p_lead)
 
@@ -1372,7 +1375,7 @@ class TipTapDocxCompiler:
         cell_width = Inches(6.67 / cols_count)
 
         p_lead = self.doc.add_paragraph()
-        p_lead.paragraph_format.space_before = Pt(14)
+        p_lead.paragraph_format.space_before = Pt(30 if self.is_certificate else 14)
         p_lead.paragraph_format.space_after = Pt(4)
         set_paragraph_keep_with_next(p_lead)
 
@@ -1415,6 +1418,9 @@ class TipTapDocxCompiler:
 
             if col_idx < len(cells):
                 self._render_cell_paragraphs(cell, cells[col_idx], is_bold=True)
+                # Name and designation lines sit centred under the signature line.
+                for cell_p in cell.paragraphs:
+                    cell_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     def _render_generic_table(self, block: dict[str, Any]):
         rows = block.get("content", [])

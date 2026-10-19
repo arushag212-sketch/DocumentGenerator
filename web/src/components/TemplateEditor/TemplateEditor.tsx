@@ -35,6 +35,8 @@ interface TemplateEditorProps {
   clubId: string;
   templateId: string;
   onBack: () => void;
+  /** Opens the generate page for this template (shown once it is published). */
+  onCreateDocument?: () => void;
   assistantSlot?: React.ReactNode;
   clubLogoOptions?: ClubLogoOption[];
 }
@@ -43,6 +45,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   clubId,
   templateId,
   onBack,
+  onCreateDocument,
   clubLogoOptions: providedClubLogoOptions,
 }) => {
   const [template, setTemplate] = useState<any>(null);
@@ -65,6 +68,13 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [validationReport] = useState<any>(null);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [unreviewedModal, setUnreviewedModal] = useState<any[] | null>(null);
+  const [unreviewedAiCount, setUnreviewedAiCount] = useState(0);
+  const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
   const [reviewingAi, setReviewingAi] = useState(false);
 
   const [designSettings, setDesignSettings] = useState<DesignSettings>(DEFAULT_DESIGN_SETTINGS);
@@ -77,6 +87,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       const width = window.innerWidth;
       setIsMobile(width < 768);
       if (width < 1024) setLeftOpen(false);
+      // Below desktop width the side panels would squeeze the page to a sliver.
+      if (width < 1280) setRightOpen(false);
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -84,6 +96,26 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   }, []);
 
   const [translating, setTranslating] = useState(false);
+
+  // Fit the page to the space between the panels until the user picks a zoom.
+  const userZoomRef = useRef(false);
+  const handleZoomChange = (z: number) => {
+    userZoomRef.current = true;
+    setZoom(z);
+  };
+  useEffect(() => {
+    const fit = () => {
+      if (userZoomRef.current) return;
+      const pageWidth = designSettings.orientation === 'landscape' ? 1123 : 794;
+      const side = (leftOpen ? 256 : 48) + (rightOpen && !isMobile ? 384 : 48);
+      const available = window.innerWidth - side - 48;
+      const next = Math.max(0.3, Math.min(1, Math.floor((available / pageWidth) * 20) / 20));
+      setZoom(next);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [designSettings.orientation, leftOpen, rightOpen, isMobile]);
 
   const {
     editor,
@@ -116,6 +148,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     template,
     editor,
     designSettings,
+    fields,
     onSaveSuccess: (updated) => setTemplate(updated),
   });
 
@@ -214,18 +247,37 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     }
   };
 
+  // Keep the "Review & Publish (N)" badge in sync with AI-suggested blocks and fields.
+  useEffect(() => {
+    if (!editor) return;
+    const count = () => {
+      let n = 0;
+      editor.state.doc.descendants((node: any) => {
+        if (node.attrs?.ai_suggested) n += 1;
+      });
+      n += fields.filter((f) => f.ai_suggested).length;
+      setUnreviewedAiCount(n);
+    };
+    count();
+    editor.on('update', count);
+    return () => {
+      editor.off('update', count);
+    };
+  }, [editor, fields]);
+
   const handlePublish = async () => {
     if (!editor || !template) return;
     await saveNow();
     try {
       const res = await api.documents.publishTemplate(clubId, templateId);
       setTemplate((prev: any) => ({ ...prev, status: 'published' }));
-      alert(`Template "${res.name}" published successfully!`);
+      setUnreviewedAiCount(0);
+      setNotice({ tone: 'success', text: `"${res.name}" is published. Click "Create document" to fill it in.` });
     } catch (err: any) {
       if (err.status === 409 && err.detail?.unreviewed_items) {
         setUnreviewedModal(err.detail.unreviewed_items);
       } else {
-        alert(err.message || 'Publishing failed');
+        setNotice({ tone: 'error', text: err.message || 'Publishing failed' });
       }
     }
   };
@@ -234,8 +286,21 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     setReviewingAi(true);
     try {
       await api.documents.reviewAiTemplate(clubId, templateId, { all: true });
+      // Mirror the server-side review locally; otherwise the autosave in handlePublish
+      // would write the AI flags back and publishing would be refused again.
+      if (editor) {
+        editor.commands.command(({ tr }: any) => {
+          tr.doc.descendants((node: any, pos: number) => {
+            if (node.attrs?.ai_suggested) tr.setNodeMarkup(pos, undefined, { ...node.attrs, ai_suggested: false });
+          });
+          return true;
+        });
+      }
+      setFields((prev) => prev.map((f) => ({ ...f, ai_suggested: false })));
       setUnreviewedModal(null);
-      await saveNow();
+      // Let React commit the cleared fields before publish saves them.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await handlePublish();
     } catch (err: any) {
       alert(err.message || 'Failed to approve AI content');
     } finally {
@@ -291,7 +356,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         onBack={onBack}
         editor={editor}
         zoom={zoom}
-        onZoomChange={setZoom}
+        onZoomChange={handleZoomChange}
         onOpenFindReplace={() => setShowFindReplace(true)}
         onOpenShortcuts={() => setShowShortcuts(true)}
         onPreview={handlePreview}
@@ -299,7 +364,23 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         previewLoading={previewLoading}
         onTranslate={handleTranslate}
         translating={translating}
+        unreviewedAiCount={unreviewedAiCount}
+        isPublished={template?.status === 'published'}
+        onCreateDocument={onCreateDocument}
       />
+
+      {notice && (
+        <div
+          role="status"
+          className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl shadow-lg text-xs font-semibold border ${
+            notice.tone === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-red-50 text-red-700 border-red-200'
+          }`}
+        >
+          {notice.text}
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden relative">
         <EditorErrorBoundary title="Palette Error">
@@ -315,6 +396,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           <Canvas
             editor={editor}
             zoom={zoom}
+            designSettings={designSettings}
             watermarkText={designSettings.watermark}
             orientation={designSettings.orientation}
             margins={designSettings.margins}

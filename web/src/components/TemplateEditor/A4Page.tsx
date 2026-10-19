@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface A4PageProps {
   children: React.ReactNode;
@@ -9,6 +9,8 @@ interface A4PageProps {
   margins?: 'normal' | 'compact' | 'wide';
   pageBg?: string;
   pageBorder?: 'none' | 'single' | 'double';
+  borderColor?: string;
+  layout?: 'document' | 'certificate';
   headingColor?: string;
   textColor?: string;
   fontFamily?: string;
@@ -26,6 +28,8 @@ export const A4Page: React.FC<A4PageProps> = ({
   margins = 'normal',
   pageBg = '#ffffff',
   pageBorder = 'none',
+  borderColor = '#94a3b8',
+  layout = 'document',
   headingColor = '#1e3a8a',
   textColor = '#0f172a',
   fontFamily = 'Tinos',
@@ -33,6 +37,20 @@ export const A4Page: React.FC<A4PageProps> = ({
   tableHeaderBg = '#1e3a8a',
   tableHeaderTextColor = '#ffffff',
 }) => {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [sheetHeight, setSheetHeight] = useState<number | null>(null);
+
+  // transform: scale() does not shrink layout size, so reserve exactly the scaled
+  // box; otherwise a zoomed-out page still forces a full-width horizontal scrollbar.
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setSheetHeight(el.offsetHeight));
+    ro.observe(el);
+    setSheetHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
+
   const isLandscape = orientation === 'landscape';
   const widthPx = isLandscape ? 1123 : 794;
   const minHeightPx = isLandscape ? 794 : 1123;
@@ -43,12 +61,15 @@ export const A4Page: React.FC<A4PageProps> = ({
     wide: 'px-20 py-16',
   };
 
-  const borderStyles: React.CSSProperties =
+  // The sheet edge stays a hairline; the printed page border is drawn as an inset
+  // frame in the chosen colour, matching how the DOCX/PDF renders it.
+  const borderStyles: React.CSSProperties = { border: '1px solid rgba(226, 232, 240, 0.8)' };
+  const frameStyle: React.CSSProperties | null =
     pageBorder === 'double'
-      ? { border: '4px double #94a3b8' }
+      ? { border: `7px double ${borderColor}`, inset: 18 }
       : pageBorder === 'single'
-      ? { border: '1px solid #cbd5e1' }
-      : { border: '1px solid rgba(226, 232, 240, 0.8)' };
+      ? { border: `2px solid ${borderColor}`, inset: 22 }
+      : null;
 
   const customProperties = {
     '--cd-heading-color': headingColor,
@@ -65,19 +86,29 @@ export const A4Page: React.FC<A4PageProps> = ({
 
   return (
     <div
-      className="flex justify-center my-6 transition-transform origin-top duration-150"
+      className="my-6 mx-auto"
       style={{
-        transform: zoom !== 1 ? `scale(${zoom})` : undefined,
+        width: `${widthPx * zoom}px`,
+        height: sheetHeight ? `${sheetHeight * zoom}px` : undefined,
       }}
     >
       <div
-        className={`relative shadow-2xl rounded-sm ${marginMap[margins]} transition-all`}
+        ref={sheetRef}
+        className={`relative shadow-2xl rounded-sm ${marginMap[margins]} transition-[width,padding] duration-150 ${
+          layout === 'certificate' ? 'cd-certificate' : ''
+        }`}
         style={{
           width: `${widthPx}px`,
           minHeight: `${minHeightPx}px`,
+          transform: zoom !== 1 ? `scale(${zoom})` : undefined,
+          transformOrigin: 'top left',
           ...customProperties,
         }}
       >
+        {frameStyle && (
+          <div className="pointer-events-none absolute rounded-[2px] z-0" style={frameStyle} aria-hidden="true" />
+        )}
+
         {/* Document Watermark */}
         {watermarkText && watermarkText.trim() && (
           <div

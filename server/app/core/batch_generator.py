@@ -244,10 +244,18 @@ class BatchGenerator:
         # config-backed settings (e.g. mode) are permitted as system defaults.
         missing_blockers: list[dict[str, Any]] = []
 
-        # (a) Date confirmation check
+        # (a) Date confirmation check. Event dates are required for every system template and
+        # for custom templates that print a date; a certificate without a date field needs none.
+        schedule_keys = {"dates", "date_start", "date_end", "event_dates", "date_of_event", "activity_date"}
+        needs_dates = any(
+            tmpl.is_system or any(f.get("key") in schedule_keys for f in (s_dict.get("fields") or []))
+            for tmpl, _, s_dict in templates_to_render
+        )
         dates_confirmed = bool(event_data.get("dates_confirmed"))
         dates_val = event_data.get("dates") or event_data.get("date_start")
-        if not dates_val:
+        if not needs_dates:
+            pass
+        elif not dates_val:
             missing_blockers.append({
                 "key": "dates",
                 "ask": "Event schedule dates?",

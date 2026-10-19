@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, FileText, CheckSquare, Square, AlertCircle, ArrowRight, Calendar, Clock, MapPin, Users, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { api } from '../api/client';
@@ -37,6 +37,8 @@ export const formatIndianCurrency = (num: number | string): string => {
 interface HomePageProps {
   clubId: string | number;
   initialTemplateId?: string | null;
+  /** Sentence to prefill and analyse right away (e.g. the prompt an AI template came from). */
+  initialPrompt?: string | null;
   initialText?: string;
   onDocumentsGenerated: (result: HomeGenerateResponse) => void;
 }
@@ -98,6 +100,7 @@ const EXAMPLE_CHIPS = [
 export const HomePage: React.FC<HomePageProps> = ({
   clubId,
   initialTemplateId = null,
+  initialPrompt = null,
   initialText = '',
   onDocumentsGenerated,
 }) => {
@@ -114,6 +117,10 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   // User form / edits state
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
+  // Set when the page opens for one specific template (with its prompt): keep the
+  // selection to that template instead of adding other recommendations.
+  const exclusiveSelectionRef = useRef(false);
+  const promptHandledRef = useRef<string | null>(null);
   const [refNumbersAccepted, setRefNumbersAccepted] = useState(false);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [datesConfirmed, setDatesConfirmed] = useState(false);
@@ -192,6 +199,15 @@ export const HomePage: React.FC<HomePageProps> = ({
   useEffect(() => {
     if (initialTemplateId) {
       setSelectedTemplateIds([initialTemplateId]);
+      if (initialPrompt && initialPrompt.trim()) {
+        // Coming from a specific template: generate just that document.
+        if (promptHandledRef.current === `${initialTemplateId}:${initialPrompt}`) return;
+        promptHandledRef.current = `${initialTemplateId}:${initialPrompt}`;
+        exclusiveSelectionRef.current = true;
+        setInputText(initialPrompt);
+        handleUnderstand(initialPrompt, [initialTemplateId]);
+        return;
+      }
       const matched = STANDARD_DOC_TYPES.find((d) => d.slug === initialTemplateId);
       if (matched && !inputText) {
         setInputText(matched.defaultPrompt);
@@ -225,10 +241,14 @@ export const HomePage: React.FC<HomePageProps> = ({
         .filter((d) => d.recommended)
         .map((d) => d.slug || d.template_id);
       const explicitIds = selectedTemplateIdsOverride || selectedTemplateIds;
-      setSelectedTemplateIds(Array.from(new Set([
-        ...explicitIds,
-        ...(recIds.length > 0 ? recIds : res.recommended_documents.slice(0, 1).map(d => d.slug || d.template_id)),
-      ])));
+      if (exclusiveSelectionRef.current && explicitIds.length > 0) {
+        setSelectedTemplateIds(explicitIds);
+      } else {
+        setSelectedTemplateIds(Array.from(new Set([
+          ...explicitIds,
+          ...(recIds.length > 0 ? recIds : res.recommended_documents.slice(0, 1).map(d => d.slug || d.template_id)),
+        ])));
+      }
 
       setUnderstood(res.understood);
       setEventName(res.understood.event_name || '');

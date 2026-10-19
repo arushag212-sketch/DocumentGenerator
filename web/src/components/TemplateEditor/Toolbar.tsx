@@ -13,6 +13,7 @@ import {
   ZoomOut,
   Sparkles,
   Languages,
+  FilePlus2,
 } from 'lucide-react';
 import { SaveStatus } from './useEditorAutosave';
 
@@ -34,6 +35,8 @@ interface ToolbarProps {
   unreviewedAiCount?: number;
   onTranslate?: (lang: 'hi' | 'gu') => void;
   translating?: boolean;
+  isPublished?: boolean;
+  onCreateDocument?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -52,6 +55,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onPublish,
   previewLoading = false,
   unreviewedAiCount = 0,
+  isPublished = false,
+  onCreateDocument,
   onTranslate,
   translating = false,
 }) => {
@@ -255,9 +260,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               <span>Review & Publish ({unreviewedAiCount})</span>
             </>
           ) : (
-            <span>Publish</span>
+            <span>{isPublished ? 'Republish' : 'Publish'}</span>
           )}
         </button>
+
+        {isPublished && onCreateDocument && (
+          <button
+            onClick={onCreateDocument}
+            title="Fill this template and generate DOCX/PDF"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition"
+          >
+            <FilePlus2 className="w-3.5 h-3.5" />
+            <span>Create document</span>
+          </button>
+        )}
       </div>
     </header>
   );
