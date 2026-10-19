@@ -155,6 +155,9 @@ This generates `clubdocs_share.zip` in the root directory (typically under 10 MB
 
 ## 📚 Documentation Links
 
+- [Template Editor & Design Studio Guide](docs/TEMPLATE_EDITOR_GUIDE.md)
 - [AI Setup & Gemini Configuration Guide](docs/AI_SETUP.md)
 - [Non-Technical Club Member User Guide](docs/USER_GUIDE.md)
 - [Official Numbering Specification](docs/NUMBERING_SPEC.md)
+- [Deployment Guide (Vercel + Supabase + Container)](docs/DEPLOYMENT.md)
+- [Known Issues & Troubleshooting](docs/KNOWN_ISSUES.md)

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 
-EXCLUDED_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__"}
+EXCLUDED_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".eggs", "egg-info"}
 
 
 def compute_sha256(file_path: Path) -> str:

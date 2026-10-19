@@ -51,3 +51,16 @@ This document logs known technical limitations, environment boundaries, and arch
 - **Workaround & Verification**:
   - The legacy tests are marked with `@pytest.mark.skip(reason="Legacy pre-Phase 3 tab UI superseded by scripts/verify_phase2_editor_selenium.py and scripts/verify_phase4_home_selenium.py")`.
   - Full end-to-end browser flows are continuously verified via headless Chrome in `scripts/verify_phase2_editor_selenium.py` (7/7 steps passed) and `scripts/verify_phase4_home_selenium.py` (6/6 steps passed).
+
+---
+
+## 5. Multi-Threaded LibreOffice PDF Conversion on Windows
+
+- **Description**: On Windows, concurrent calls to `soffice --headless` share the default user profile lock file, which can cause concurrent conversions (such as background gallery thumbnail generation during template editing) to fail or fall back to Microsoft Word COM.
+- **Evidence**:
+  - Running concurrent conversions produced `PermissionError: [WinError 32]` or COM RPC errors when Word COM was invoked across threads.
+- **Workaround & Resolution**:
+  - In `docgen/renderer.py`, every LibreOffice conversion invocation now passes `-env:UserInstallation=file:///<isolated_temp_dir>` using `tempfile.TemporaryDirectory(ignore_cleanup_errors=True)` and awaits filesystem write completion before checking `pdf_path.exists()`.
+  - In `server/app/api/v1/documents.py`, `preview_template` includes an automatic 1-second retry on conversion failure.
+  - As verified in `scripts/verify_part5_ai_selenium.py`, all concurrent conversions and live previews execute reliably using LibreOffice.
+

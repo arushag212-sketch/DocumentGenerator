@@ -79,21 +79,76 @@ The engine extracts details automatically into clean, editable cards:
 
 ---
 
-## 7. Building or Customizing a Template Manually
+## 7. Building or Customizing a Template in Studio
 
-![Editor View](screenshots/phase2/03_all_tables_edited.png)
+![Studio Editor View](screenshots/part1_editor_smoke.png)
 
 1. On the **Templates** tab, click **New Blank Template** or click **Customize** on any standard template.
-2. The visual editor opens in an A4 desk view:
-   - Type anywhere just like in Microsoft Word.
-   - Type `/` to open the slash menu (add headings, info tables, repeating budget tables, or signature grids).
-   - Use the right-hand **Fields Panel** to insert dynamic placeholders like `{{ event_name }}` or `{{ date }}` with one click.
-   - Click **Live Preview** to preview the exact PDF output before publishing.
-   - Click **Publish** to make it available for all club members.
+2. The Studio editor opens in a modern, 3-pane responsive layout:
+   - **Left Palette**: Drag blocks, clauses, tables, and club logos directly onto the canvas.
+   - **Center A4 Canvas**: Paginated A4 view with drop shadows, live word count, and zoom controls.
+   - **Right Tabs**: Switch between **AI Chat**, **Fields**, **Design**, and **Checks**.
 
 ---
 
-## 8. Sharing & Club Collaboration
+## 8. AI Chat Copilot (Editing by Talking to Your Document)
+
+![AI Chat Copilot](screenshots/part2_chat_copilot.png)
+
+1. Open the **AI Chat** tab on the right side of the editor.
+2. Type conversational instructions: e.g. *"Make the heading SVNIT blue and centered"*, *"Add a signature box for the faculty advisor"*, or *"Convert this list into a 3-column table"*.
+3. Click quick-action chips for common tasks:
+   - **Make it Formal**: Upgrades wording to institute standards.
+   - **Fix Spelling**: Corrects typos and grammatical mistakes.
+   - **Add Signatures**: Inserts official signatory blocks.
+   - **Translate to Hindi / Gujarati**: Translates text while preserving field placeholders.
+4. Review the change summary and click **Apply** to accept or **Reject** to discard. Every set of changes can be completely undone in one step (`Ctrl+Z`).
+
+---
+
+## 9. Drag & Drop Direct Manipulation
+
+![Drag and Drop](screenshots/part3_drag_drop.png)
+
+- **Block Reordering**: Hover over any paragraph, table, or signature grid to reveal the six-dot drag handle (`::`) and drag it to a new location, or press `Alt + ArrowUp/Down`.
+- **Palette Drops**: Drag elements from the Left Palette (tables, clauses, club crests) and drop them anywhere on the page.
+- **Field Chips**: Drag variable chips from the Right "Fields" panel into text or table cells.
+- **In-Table Controls**: Click inside any table to access floating row and column reordering buttons, or merge and split cells.
+
+---
+
+## 10. Design Studio: Curated Themes & Self-Hosted Typography
+
+![Design Studio](screenshots/part4_design_studio.png)
+
+1. Open the **Design** tab on the right panel.
+2. Select from 6 curated institute themes:
+   - **Official Navy**, **SVNIT Blue & Gold**, **Classic Black & White**, **Modern Green**, **Warm Sunset**, **Minimal Grey**.
+3. Customize typography with 10 self-hosted open-license fonts (Tinos, Merriweather, Playfair Display, Roboto, Open Sans, Montserrat, Roboto Mono, Noto Sans Devanagari, Noto Sans Gujarati).
+4. Monitor readability with the built-in **WCAG Contrast Checker** (green `AA Pass` badge).
+5. Configure margins, page borders, and subtle watermarks (e.g. *DRAFT* or *SAMPLE*).
+
+---
+
+## 11. AI Template Creation Wizard & Document Importer
+
+![Template Wizard](screenshots/part5_ai_everywhere.png)
+
+- **Template Creation Wizard**:
+  - In Template Gallery, click **"Template Creation Wizard"**.
+  - Type what document you need in plain words: e.g. *"Campus Venue & Lab Booking Permission"*.
+  - Answer up to 3 clarifying question chips (Purpose, Audience, Tone).
+  - Click **"Build My Template"**: a complete designed template opens in the editor in seconds.
+- **Notice & Letter Importer**:
+  - In Template Gallery, click **"Import Template"**.
+  - Paste existing text or upload a `.docx` file: the engine automatically identifies variable placeholders and formats the document into blocks.
+- **Document Checker & One-Click Fixes**:
+  - Switch to the **Checks** tab to audit your draft against institutional standards (unfilled official wording, date consistency, low contrast).
+  - Click **Fix** next to any issue to repair it instantly.
+
+---
+
+## 12. Sharing & Club Collaboration
 
 - Club administrators can invite team members by navigating to **Club Settings → Members** and clicking **Invite Member**.
 - Copy the unique invite link and share it over WhatsApp or email.

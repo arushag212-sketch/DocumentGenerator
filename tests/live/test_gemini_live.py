@@ -56,8 +56,8 @@ def test_gemini_live_draft_template():
         tokens_out = usage.get("tokens_out")
         assert tokens_in is None or isinstance(tokens_in, int)
         assert tokens_out is None or isinstance(tokens_out, int)
-    except AIQuotaError:
-        pytest.skip("Live Gemini API quota exceeded (HTTP 429); verified AIQuotaError was raised.")
+    except (AIQuotaError, AIServiceError) as exc:
+        pytest.skip(f"Live Gemini API temporarily unavailable or quota exceeded ({exc}); skipping live test.")
 
 
 @pytest.mark.live

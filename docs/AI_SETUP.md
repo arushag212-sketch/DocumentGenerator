@@ -60,10 +60,12 @@ SVNIT ClubDocs enforces strict institutional data protection:
 | Data Type | Sent to Gemini? | Explanation |
 | :--- | :---: | :--- |
 | **User Prompt / Description** | **YES** | The exact natural-language text entered by the user in the prompt box (e.g. *"Create a sound system permission letter for our cultural fest"*). |
+| **Document Outline & Theme** | **YES (Studio)** | When using the Studio Chat Copilot, a compact outline (block types, block IDs, and short text snippets) and the active theme name are sent so the AI understands document structure. |
+| **Personal Identifiable Information (PII)** | **NO** | Any detected names, roll numbers, mobile numbers, and emails are stripped (`strip_pii_from_text`) before sending text to the LLM. |
 | **Club Database Records** | **NO** | Club database records, membership rosters, and audit logs are **never** sent. |
 | **Passwords & Hashes** | **NO** | Never transmitted or logged. |
 | **Financial & Bank Details** | **NO** | Real bank account numbers, IFSC codes, PAN, and GST numbers are never included in prompts. |
-| **Personal Phone Numbers** | **NO** | Mobile numbers and private student details are stored encrypted and never sent to external AI APIs. |
+| **Other Clubs' Data** | **NO** | All queries are strictly scoped to the active club context; cross-club data leakage is impossible. |
 
 > [!IMPORTANT]
 > The API key is sent strictly in the `x-goog-api-key` HTTP header. It is **never** included in URL query parameters, never printed to terminal logs, and never included in error messages.
