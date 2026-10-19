@@ -13,7 +13,6 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://clubdocs_user:clubdocs_password@postgres:5432/clubdocs
-      - REDIS_URL=redis://redis:6379/0
       - STORAGE_BACKEND=local
       - STORAGE_LOCAL_ROOT=/app/storage
     volumes:
@@ -22,8 +21,6 @@ services:
       - clubdocs_outputs:/app/outputs
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health/liveness || exit 1"]
@@ -50,23 +47,8 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: clubdocs-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
 volumes:
   postgres_data:
-  redis_data:
   clubdocs_data:
   clubdocs_storage:
   clubdocs_outputs:

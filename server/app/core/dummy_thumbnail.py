@@ -39,6 +39,7 @@ from docgen.models import (
 from docgen.renderer import Renderer
 from docgen.sources import DatabaseTemplateSource, build_club_config_from_db
 from server.app.models import Template, TemplateVersion
+from server.app.core.storage import require_local_storage
 
 
 def get_dummy_thumbnail_event_record() -> EventRecord:
@@ -189,7 +190,7 @@ def get_dummy_thumbnail_event_record() -> EventRecord:
 
 def get_neutral_placeholder(target_path: Optional[Path] = None) -> Path:
     """Generate or retrieve a neutral document placeholder image."""
-    placeholder_dir = Path("storage/thumbnails")
+    placeholder_dir = require_local_storage().base_dir / "thumbnails"
     placeholder_dir.mkdir(parents=True, exist_ok=True)
     placeholder_file = placeholder_dir / "neutral_placeholder.png"
 
@@ -231,7 +232,8 @@ def render_template_thumbnail(
     Pipeline: render DOCX -> convert to PDF via LibreOffice -> rasterize page 1 via PyMuPDF ->
     save to storage/thumbnails/{ver.id}.png.
     """
-    thumbnails_dir = Path("storage/thumbnails")
+    local_storage = require_local_storage()
+    thumbnails_dir = local_storage.base_dir / "thumbnails"
     thumbnails_dir.mkdir(parents=True, exist_ok=True)
     thumb_path = thumbnails_dir / f"{ver.id}.webp"
     thumb_path_png = thumbnails_dir / f"{ver.id}.png"
@@ -243,15 +245,17 @@ def render_template_thumbnail(
 
     # Determine DOCX source
     docx_path = None
-    if ver.docx_storage_key and Path(ver.docx_storage_key).exists():
-        docx_path = Path(ver.docx_storage_key)
-    elif (Path("templates") / tmpl.slug / "template.docx").exists():
+    if ver.docx_storage_key:
+        candidate = local_storage.local_path(ver.docx_storage_key)
+        if candidate.exists():
+            docx_path = candidate
+    if docx_path is None and (Path("templates") / tmpl.slug / "template.docx").exists():
         docx_path = Path("templates") / tmpl.slug / "template.docx"
 
     if not docx_path or not docx_path.exists():
         return get_neutral_placeholder(thumb_path)
 
-    temp_out_dir = Path("storage/temp_thumbnails") / str(uuid.uuid4())
+    temp_out_dir = local_storage.base_dir / "temp_thumbnails" / str(uuid.uuid4())
     temp_out_dir.mkdir(parents=True, exist_ok=True)
 
     try:

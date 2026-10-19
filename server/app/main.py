@@ -170,3 +170,47 @@ def on_startup_gc():
             _gc_thread = threading.Thread(target=_daily_gc_worker, daemon=True, name="storage-gc-worker")
             _gc_thread.start()
 
+
+def check_db_schema_up_to_date(target_engine=None) -> bool:
+    import sqlalchemy as sa
+    from server.app.core.database import engine as default_engine
+    eng = target_engine or default_engine
+    try:
+        with eng.connect() as conn:
+            inspector = sa.inspect(conn)
+            tables = set(inspector.get_table_names())
+            if not tables:
+                return True
+            if "rate_limit_buckets" not in tables:
+                return False
+            if "document_versions" in tables:
+                cols = {c["name"] for c in inspector.get_columns("document_versions")}
+                if "template_version_id" not in cols:
+                    return False
+            return True
+    except Exception as exc:
+        logger.warning("Schema check failed during inspection: %s", exc)
+        return True
+
+
+@app.on_event("startup")
+def on_startup_database_check():
+    import os
+    from server.app.core.database import engine
+
+    # Do not auto-migrate or mutate dev DB when running within pytest
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        return
+
+    if os.environ.get("AUTO_MIGRATE", "true").lower() in ("1", "true", "yes"):
+        try:
+            from server.scripts.migrate import run_migrations
+            run_migrations()
+        except Exception as e:
+            logger.warning("Startup auto-migration skipped or failed: %s", e)
+
+    if not check_db_schema_up_to_date(engine):
+        msg = "Your database is out of date. Run: python -m server.scripts.migrate"
+        print(f"\n[FATAL] {msg}\n")
+        raise RuntimeError(msg)
+

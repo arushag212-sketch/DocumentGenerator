@@ -27,6 +27,8 @@ from server.app.core.storage import (
     BATCH_TTL_HOURS,
     KEEP_VERSION_FILES,
     PREVIEW_TTL_DAYS,
+    LocalDiskStorage,
+    get_storage,
 )
 
 
@@ -51,6 +53,10 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
     referenced: Set[str] = set()
     protected: Set[str] = set()
 
+    active_storage = get_storage()
+    if not isinstance(active_storage, LocalDiskStorage):
+        return referenced, protected
+
     try:
         from server.app.core.database import SessionLocal
         from server.app.models import Asset, Document, DocumentVersion, Template, TemplateVersion
@@ -63,7 +69,7 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
             q_assets = q_assets.filter((Asset.club_id == club_id) | (Asset.club_id.is_(None)))
         for a in q_assets.all():
             if a.storage_key:
-                p = Path(a.storage_key).resolve()
+                p = active_storage.local_path(a.storage_key)
                 referenced.add(str(p))
                 referenced.add(Path(a.storage_key).as_posix())
                 protected.add(str(p))
@@ -76,7 +82,7 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
         for tmpl in q_tmpls.all():
             for tv in db.query(TemplateVersion).filter(TemplateVersion.template_id == tmpl.id).all():
                 if tv.docx_storage_key:
-                    p = Path(tv.docx_storage_key).resolve()
+                    p = active_storage.local_path(tv.docx_storage_key)
                     referenced.add(str(p))
                     referenced.add(Path(tv.docx_storage_key).as_posix())
                     # Published or current versions are protected
@@ -99,7 +105,7 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
             for idx, dv in enumerate(versions):
                 for k in (dv.docx_key, dv.pdf_key):
                     if k:
-                        p = Path(k).resolve()
+                        p = active_storage.local_path(k)
                         referenced.add(str(p))
                         referenced.add(Path(k).as_posix())
                         if idx < KEEP_VERSION_FILES or dv.id == doc.current_version_id:
@@ -116,7 +122,13 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
 def run_storage_gc(apply: bool = False, club_id: Optional[str] = None) -> GCReport:
     """Run safe storage garbage collection pass."""
     report = GCReport(dry_run=not apply)
-    base_storage = Path("storage").resolve()
+    active_storage = get_storage()
+    if not isinstance(active_storage, LocalDiskStorage):
+        report.logs.append(
+            "Storage GC is local-filesystem only; configure STORAGE_BACKEND=local before running it."
+        )
+        return report
+    base_storage = active_storage.base_dir
     if not base_storage.exists():
         report.logs.append("Storage directory storage/ does not exist. Nothing to clean.")
         return report
@@ -188,9 +200,7 @@ def run_storage_gc(apply: bool = False, club_id: Optional[str] = None) -> GCRepo
                     for key_attr in ("docx_key", "pdf_key"):
                         val = getattr(old_ver, key_attr)
                         if val:
-                            fp = Path(val)
-                            if not fp.is_absolute():
-                                fp = Path("storage") / fp
+                            fp = active_storage.local_path(val)
                             if fp.exists():
                                 try:
                                     sz = fp.stat().st_size

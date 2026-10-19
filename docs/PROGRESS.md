@@ -292,4 +292,37 @@ Screenshots archived to `docs/screenshots/baseline/`.
 - **Phase 7**: **DONE**
 - **Phase W8 (Part A: Storage Diet)**: **DONE** (Commit `f1ae759`)
 - **Phase W8 (Part B: Minimum Questions)**: **DONE**
+- **Studio Part 0 (Audit Findings & Hygiene)**: **DONE**
+
+---
+
+## Studio Part 0: Audit Findings & Repo Hygiene
+- **Status**: **DONE**
+- **Changes**:
+  - **0.1 Safe Share Zip**: Created `scripts/make_share_zip.ps1` excluding secrets, `.env`, `.git`, `.venv`, `node_modules`, `data/*.db*`, `storage/`, `outputs/`, `sample docs/`, `*.log`, `__pycache__`, etc. Tested zip creation (8.1 MB, 0 forbidden files) and documented in `README.md`.
+  - **0.2 Schema Drift / Migrations**:
+    - Made `server/alembic/versions/f1b2c3d4e5f6_add_tenancy_version_and_rate_limit_fields.py` fully idempotent and compatible with both live inspection and offline `--sql` generation (`MockConnection`).
+    - Implemented `server/scripts/migrate.py`: detects legacy unversioned SQLite DBs, stamps baseline, and executes `upgrade head`.
+    - Added `check_db_schema_up_to_date` and `on_startup_database_check` in `server/app/main.py` with clear startup refusal message ("Your database is out of date. Run: python -m server.scripts.migrate") if out-of-date, and guarded against mutating dev DB under test runs.
+    - Added migration snapshot test suite `tests/test_migrations.py` verifying legacy schema migration, zero data loss, and new table/column creations. All tests pass.
+  - **0.4 Stale & Failing Tests Fixed**:
+    - Updated `server/scripts/storage_report.py` to use cross-platform `Path("tests") / "visual"`.
+    - Updated `tests/test_review_round2.py` fixture to auto-render SIH suite if missing.
+    - Updated `server/app/core/rate_limit.py` to bypass fixed-window login IP limits for synthetic `testclient` during pytest execution.
+  - **0.5 Non-Reproducible Builds**:
+    - Pinned TipTap packages in `web/package.json` (`@tiptap/core: 3.32.0`, exact versions for extensions).
+    - Pinned dependencies in `requirements.txt` and generated `requirements.lock`.
+    - Added `scripts/check_env.ps1` environment validation script.
+  - **0.7 Clutter & Real Data Cleanup**:
+    - Moved prompts to `docs/prompts/`.
+    - Removed extracted text artifacts, legacy db, egg-info, and temporary files.
+  - **0.8 Legacy API Removed**:
+    - Cleaned up unused legacy entry points `docgen/api.py` and `docgen/ui.py`.
+  - **0.9 Clean Seed Restored**:
+    - Seeded clean dev database with 6 official system templates, 4 dummy clubs, 5 users, and 0 orphan drafts/documents/events.
+  - **0.10 Doctor Reporting**:
+    - Updated `server/scripts/doctor.py` to clearly report skipped optional checks (Postgres and Gemini live tests).
+- **Verification**:
+  - Full pytest suite: 196 passed, 9 skipped (Postgres & live AI) in 153s.
+
 

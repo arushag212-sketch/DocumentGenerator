@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- Stage 1: Build Frontend SPA ---
-FROM node:20-alpine AS frontend-builder
+FROM node:20.18.0-alpine AS frontend-builder
 
 WORKDIR /build
 COPY web/package.json web/package-lock.json ./
@@ -15,12 +15,13 @@ COPY web/ ./
 RUN npm run build
 
 # --- Stage 2: Production Runtime ---
-FROM python:3.12-slim AS runtime
+FROM python:3.12.8-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
-    PORT=8000
+    PORT=8000 \
+    STORAGE_LOCAL_ROOT=/app/storage
 
 # Install LibreOffice (writer), true-type Indian/Devanagari fonts, curl, dumb-init
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -53,6 +54,9 @@ COPY --from=frontend-builder /build/dist /app/web/dist
 COPY docgen /app/docgen
 COPY server /app/server
 COPY scripts /app/scripts
+COPY assets /app/assets
+COPY templates /app/templates
+COPY config /app/config
 COPY alembic.ini /app/alembic.ini
 COPY pyproject.toml /app/pyproject.toml
 

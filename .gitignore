@@ -12,6 +12,8 @@ dist/
 web/dist/
 docs/downloads/
 *.log
+*.zip
+tests/visual/
 
 # Screenshots: keep only final and w8
 docs/screenshots/*

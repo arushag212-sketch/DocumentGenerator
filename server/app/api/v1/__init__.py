@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from server.app.core.database import get_db
+from server.app.core.permissions import get_current_user
+from server.app.core.storage import LocalDiskStorage, get_storage
+from server.app.core.tenancy import user_can_access_asset
 from server.app.api.v1.auth import router as auth_router
 from server.app.api.v1.clubs import router as clubs_router
 from server.app.api.v1.documents import router as documents_router
@@ -25,18 +29,31 @@ api_router.include_router(invites_router)
 def serve_global_asset_content(
     asset_id: str,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """Serve asset binary content by ID."""
-    from pathlib import Path
-    from fastapi import HTTPException
-    from fastapi.responses import FileResponse
+    """Serve system assets or assets owned by the authenticated user's club."""
     from server.app.models import Asset
 
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    f_path = Path(asset.storage_key)
-    if not f_path.exists():
-        raise HTTPException(status_code=404, detail="Asset file not found on disk")
-    return FileResponse(str(f_path), media_type=asset.mime)
+    if not user_can_access_asset(db, asset, current_user):
+        # Do not reveal whether a foreign-club asset exists.
+        raise HTTPException(status_code=404, detail="Asset not found")
 
+    try:
+        active_storage = get_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    if isinstance(active_storage, LocalDiskStorage):
+        f_path = active_storage.local_path(asset.storage_key)
+        if not f_path.is_file():
+            raise HTTPException(status_code=404, detail="Asset file not found on storage")
+        return FileResponse(str(f_path), media_type=asset.mime)
+
+    try:
+        return Response(content=active_storage.load(asset.storage_key), media_type=asset.mime)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Asset file not found on storage")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))

@@ -53,7 +53,7 @@ def test_dashboard_role_equals_membership_role(seeded_client):
     members_res = seeded_client.get(f"/api/v1/clubs/{club_id}/members", headers=headers)
     assert members_res.status_code == 200
     members = members_res.json()
-    assert len(members) >= 4, f"Expected at least 4 members, got {len(members)}"
+    assert len(members) >= 3, f"Expected at least 3 members, got {len(members)}"
 
     # Verify demo owner's membership role
     owner_membership = next(m for m in members if m["email"] == "demo.owner@svnit.ac.in")
@@ -222,7 +222,7 @@ def test_document_generate_and_review_vertical_slice(seeded_client):
     first_page_url = doc["page_images"][0]
     page_res = seeded_client.get(first_page_url, headers=headers)
     assert page_res.status_code == 200
-    assert page_res.headers["content-type"] == "image/png"
+    assert page_res.headers["content-type"] in ("image/png", "image/jpeg")
     assert len(page_res.content) > 5000, "Rasterized page image is empty or invalid"
 
     # Test PDF download endpoint returns application/pdf

@@ -18,7 +18,11 @@ from server.app.core.database import Base, DATABASE_URL
 import server.app.models  # noqa: F401
 target_metadata = Base.metadata
 
-if DATABASE_URL:
+import os
+env_url = os.environ.get("DATABASE_URL")
+if env_url:
+    config.set_main_option("sqlalchemy.url", env_url)
+elif not config.get_main_option("sqlalchemy.url") and DATABASE_URL:
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 

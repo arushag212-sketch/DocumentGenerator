@@ -21,6 +21,12 @@ from server.app.core.permissions import (
 import re
 from server.app.core.scoped_repo import ScopedRepository
 from server.app.core.security import decrypt_field, encrypt_field, mask_sensitive_field
+from server.app.core.storage import LocalDiskStorage, get_storage
+from server.app.core.tenancy import (
+    get_asset_for_club,
+    letterhead_is_visible_to_club,
+    validate_letterhead_asset_refs,
+)
 from server.app.models import (
     Asset,
     AuditLog,
@@ -786,6 +792,8 @@ def approve_join_request(
         meta={"assigned_role": payload.role, "position": jr.position, "target_user_id": jr.user_id},
         ip=client_ip,
     )
+
+    db.commit()
 
     return JoinRequestOut(
         id=jr.id,
@@ -1813,7 +1821,6 @@ async def upload_club_logo(
     import hashlib
     from pathlib import Path
     from server.app.models import Asset, Letterhead
-    from server.app.core.storage import get_storage
     from server.app.core.template_compiler import normalize_logo_image
 
     content = await file.read()
@@ -1830,7 +1837,10 @@ async def upload_club_logo(
 
     storage = get_storage()
     storage_rel_path, sha256 = storage.save_content_addressed("assets", normalized_bytes, "png")
-    dest_path = Path("storage") / storage_rel_path
+    # Storage implementations return a canonical relative key.  Do not prefix
+    # it with ``storage/``: that made S3 keys unreadable and produced
+    # ``storage/storage/...`` on local reads.
+    dest_path = storage_rel_path
 
     # Check if this club already has an asset with this sha256
     existing_asset = (
@@ -1851,7 +1861,7 @@ async def upload_club_logo(
             mime="image/png",
             sha256=sha256,
             size=len(normalized_bytes),
-            storage_key=str(dest_path),
+            storage_key=storage_rel_path,
             uploaded_by=ctx.user.id,
             is_system=False,
         )
@@ -1866,6 +1876,8 @@ async def upload_club_logo(
     )
     if not lh:
         system_lh = db.query(Letterhead).filter(Letterhead.club_id.is_(None)).first()
+        if system_lh:
+            validate_letterhead_asset_refs(db, ctx.club.id, letterhead=system_lh)
         lh = Letterhead(
             id=str(uuid.uuid4()),
             club_id=ctx.club.id,
@@ -2402,6 +2414,13 @@ def create_club_letterhead(
     """Create a new letterhead configuration (admin only)."""
     system_lh = db.query(Letterhead).filter(Letterhead.club_id.is_(None)).first()
     inst_crest = system_lh.institute_logo_asset_id if system_lh else None
+    validate_letterhead_asset_refs(
+        db,
+        ctx.club.id,
+        left_logo_asset_id=payload.left_logo_asset_id or inst_crest,
+        right_logo_asset_id=payload.right_logo_asset_id,
+        institute_logo_asset_id=inst_crest,
+    )
 
     lh = Letterhead(
         id=str(uuid.uuid4()),
@@ -2469,6 +2488,16 @@ def update_club_letterhead(
             detail={"code": "LETTERHEAD_NOT_FOUND", "message": "Letterhead not found in this club"},
         )
 
+    # Validate the complete resulting reference set before mutating anything.
+    validate_letterhead_asset_refs(
+        db,
+        ctx.club.id,
+        letterhead=lh,
+        left_logo_asset_id=payload.left_logo_asset_id if payload.left_logo_asset_id is not None else lh.left_logo_asset_id,
+        right_logo_asset_id=payload.right_logo_asset_id if payload.right_logo_asset_id is not None else lh.right_logo_asset_id,
+        institute_logo_asset_id=lh.institute_logo_asset_id,
+    )
+
     if payload.name is not None:
         lh.name = payload.name.strip()
     if payload.left_logo_asset_id is not None:
@@ -2525,7 +2554,10 @@ def list_club_assets(
     """List club and system assets (logos, letterhead crests). Editors/viewers can view."""
     assets = (
         db.query(Asset)
-        .filter((Asset.club_id == ctx.club.id) | (Asset.is_system.is_(True)))
+        .filter(
+            (Asset.club_id == ctx.club.id)
+            | ((Asset.is_system.is_(True)) & (Asset.club_id.is_(None)))
+        )
         .order_by(Asset.created_at.desc())
         .all()
     )
@@ -2552,10 +2584,17 @@ def get_club_storage_stats(
 ):
     """Return storage metrics and retention configuration for the current club."""
     from server.app.models import Document, DocumentVersion, Template, TemplateVersion
-    from server.app.core.storage import KEEP_VERSION_FILES, PREVIEW_TTL_DAYS, BATCH_TTL_HOURS
+    from server.app.core.storage import KEEP_VERSION_FILES, PREVIEW_TTL_DAYS, BATCH_TTL_HOURS, require_local_storage
     from pathlib import Path
 
-    doc_ids = [d.id for d in db.query(Document).filter(Document.club_id == ctx.club.id).all()]
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    from server.app.core.scoped_repo import ScopedRepository
+    doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
+    doc_ids = [d.id for d in doc_repo.all()]
     doc_bytes = 0
     doc_files = 0
     preview_bytes = 0
@@ -2566,14 +2605,12 @@ def get_club_storage_stats(
         for v in versions:
             for k in (v.docx_key, v.pdf_key):
                 if k:
-                    fp = Path(k)
-                    if not fp.exists() and (Path("storage") / k).exists():
-                        fp = Path("storage") / k
+                    fp = local_storage.local_path(k)
                     if fp.exists():
                         doc_files += 1
                         doc_bytes += fp.stat().st_size
 
-        cache_prev = Path("storage/cache/previews")
+        cache_prev = local_storage.base_dir / "cache" / "previews"
         if cache_prev.exists():
             for d_id in doc_ids:
                 for pf in cache_prev.glob(f"{d_id}_*"):
@@ -2588,9 +2625,7 @@ def get_club_storage_stats(
         t_vers = db.query(TemplateVersion).filter(TemplateVersion.template_id == t.id).all()
         for tv in t_vers:
             if tv.docx_storage_key:
-                fp = Path(tv.docx_storage_key)
-                if not fp.exists() and (Path("storage") / tv.docx_storage_key).exists():
-                    fp = Path("storage") / tv.docx_storage_key
+                fp = local_storage.local_path(tv.docx_storage_key)
                 if fp.exists():
                     tmpl_files += 1
                     tmpl_bytes += fp.stat().st_size
@@ -2635,4 +2670,3 @@ def run_club_storage_gc(
         "expired_batches_removed": report.expired_batches_count,
         "pruned_versions_removed": report.pruned_versions_count,
     }
-

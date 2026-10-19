@@ -26,6 +26,8 @@ from docgen.llm import (
     get_llm_client,
 )
 from server.app.core.rate_limit import check_rate_limit
+from server.app.core.storage import LocalDiskStorage, get_storage, require_local_storage
+from server.app.core.tenancy import get_asset_for_club, validate_letterhead_asset_refs
 from server.app.core.template_compiler import (
     TemplateCompiler,
     escape_jinja_delimiters,
@@ -422,7 +424,7 @@ def resolve_club_logo_by_text(club_id: str, text: str, db: Session) -> dict[str,
     """Resolve logo from text (e.g. 'use the ACM logo on the left') to an asset in the club's library."""
     text_lower = text.lower()
     club_assets = db.query(Asset).filter(Asset.club_id == club_id).all()
-    system_assets = db.query(Asset).filter(Asset.is_system == True).all()
+    system_assets = db.query(Asset).filter(Asset.is_system == True, Asset.club_id.is_(None)).all()
     all_assets = club_assets + system_assets
 
     logo_assets = [
@@ -570,9 +572,14 @@ def generate_draft_template(
     llm_client: Optional[LLMClient] = None,
 ) -> tuple[Template, TemplateVersion, dict[str, Any]]:
     """Generate a club draft template from plain text with LLM and strict validation."""
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
     # 1. Rate limiting
-    check_rate_limit(f"ai_user:{user_id}", max_requests=10, window_seconds=60)
-    check_rate_limit(f"ai_club:{club_id}", max_requests=20, window_seconds=60)
+    check_rate_limit(f"ai_user:{user_id}", max_requests=10, window_seconds=60, db=db)
+    check_rate_limit(f"ai_club:{club_id}", max_requests=20, window_seconds=60, db=db)
 
     # 2. Check LLM client availability
     client = llm_client or get_llm_client()
@@ -698,7 +705,7 @@ def generate_draft_template(
     }
     fields_list = [f.model_dump(exclude_none=True) for f in spec.fields]
 
-    storage_templates_dir = Path("storage/templates")
+    storage_templates_dir = local_storage.base_dir / "templates"
     storage_templates_dir.mkdir(parents=True, exist_ok=True)
     dest_docx = storage_templates_dir / f"{tmpl.id}_v1.docx"
 
@@ -713,11 +720,15 @@ def generate_draft_template(
                 "title_text": lh.title_text,
                 "subtitle_text": lh.subtitle_text,
             }
+            validate_letterhead_asset_refs(db, club_id, letterhead=lh)
             target_asset_id = lh.right_logo_asset_id or lh.left_logo_asset_id
             if target_asset_id:
-                asset_rec = db.query(Asset).filter(Asset.id == target_asset_id).first()
-                if asset_rec and Path(asset_rec.storage_key).exists():
-                    letterhead_cfg["club_logo_path"] = asset_rec.storage_key
+                asset_rec = get_asset_for_club(db, target_asset_id, club_id)
+                active_storage = get_storage()
+                if asset_rec and isinstance(active_storage, LocalDiskStorage):
+                    asset_path = active_storage.local_path(asset_rec.storage_key)
+                    if asset_path.exists():
+                        letterhead_cfg["club_logo_path"] = str(asset_path)
 
     docx_bytes, schema_yaml, report = TemplateCompiler.compile(
         editor_json=editor_json,
@@ -740,7 +751,7 @@ def generate_draft_template(
         version_no=1,
         editor_json=editor_json,
         schema_yaml=schema_yaml,
-        docx_storage_key=str(dest_docx),
+        docx_storage_key=dest_docx.relative_to(local_storage.base_dir).as_posix(),
         validation_report=report,
         letterhead_id=letterhead_id,
         created_by=user_id,
@@ -749,7 +760,10 @@ def generate_draft_template(
     db.add(ver)
     db.flush()
     tmpl.current_version_id = ver.id
-    db.commit()
+    # The request/session owns the transaction boundary.  Flushing here keeps
+    # the generated rows available to the caller without committing a partial
+    # draft if a later response/audit step fails.
+    db.flush()
     db.refresh(tmpl)
     db.refresh(ver)
 

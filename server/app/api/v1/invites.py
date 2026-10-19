@@ -31,8 +31,8 @@ def get_invite_preview(code: str, request: Request, db: Session = Depends(get_db
     clean_code = code.strip()
 
     # Rate limiting: 10 per minute per IP and per code
-    check_rate_limit(f"invite_preview:ip:{client_ip}", max_requests=10, window_seconds=60)
-    check_rate_limit(f"invite_preview:code:{clean_code}", max_requests=10, window_seconds=60)
+    check_rate_limit(f"invite_preview:ip:{client_ip}", max_requests=10, window_seconds=60, db=db)
+    check_rate_limit(f"invite_preview:code:{clean_code}", max_requests=10, window_seconds=60, db=db)
 
     target_hash = hashlib.sha256(clean_code.encode("utf-8")).hexdigest()
     invite = (
@@ -68,6 +68,7 @@ def get_invite_preview(code: str, request: Request, db: Session = Depends(get_db
             user_id=None,
             meta={"code_hash": target_hash[:16], "reason": reason},
             ip=client_ip,
+            commit=True,
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -108,8 +109,8 @@ def accept_invite(
     clean_code = code.strip()
 
     # Rate limiting: 10 per minute per IP and per code
-    check_rate_limit(f"invite_accept:ip:{client_ip}", max_requests=10, window_seconds=60)
-    check_rate_limit(f"invite_accept:code:{clean_code}", max_requests=10, window_seconds=60)
+    check_rate_limit(f"invite_accept:ip:{client_ip}", max_requests=10, window_seconds=60, db=db)
+    check_rate_limit(f"invite_accept:code:{clean_code}", max_requests=10, window_seconds=60, db=db)
 
     target_hash = hashlib.sha256(clean_code.encode("utf-8")).hexdigest()
     invite = (
@@ -145,6 +146,7 @@ def accept_invite(
             user_id=current_user.id,
             meta={"code_hash": target_hash[:16], "reason": reason},
             ip=client_ip,
+            commit=True,
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -201,7 +203,7 @@ def accept_invite(
     if invite.use_count >= invite.max_uses:
         invite.accepted_at = now
 
-    db.commit()
+    db.flush()
     db.refresh(membership_rec)
 
     client_ip = request.client.host if request and request.client else None

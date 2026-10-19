@@ -140,7 +140,7 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
     client_ip = request.client.host if request.client else "unknown"
 
     # Rate limiting: max 10 registrations per hour per IP
-    check_rate_limit(f"reg_ip_{client_ip}", max_requests=10, window_seconds=3600)
+    check_rate_limit(f"reg_ip_{client_ip}", max_requests=10, window_seconds=3600, db=db)
 
     try:
         validate_password_policy(payload.password)
@@ -184,6 +184,7 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
                 user_id=None,
                 meta={"code_hash": inv_hash[:16], "reason": "invalid_or_expired_at_register"},
                 ip=client_ip,
+                commit=True,
             )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -198,7 +199,7 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
         token_version=1,
     )
     db.add(user)
-    db.commit()
+    db.flush()
     db.refresh(user)
 
     if invite_obj:
@@ -213,7 +214,7 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
         invite_obj.use_count += 1
         if invite_obj.use_count >= invite_obj.max_uses:
             invite_obj.accepted_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        db.commit()
+        db.flush()
 
         log_audit(
             db=db,
@@ -255,8 +256,8 @@ def login(payload: UserLogin, request: Request, response: Response, db: Session 
     clean_email = payload.email.lower().strip()
 
     # Rate limiting: max 5 login attempts per minute per IP, and per email
-    check_rate_limit(f"login_ip_{client_ip}", max_requests=10, window_seconds=60)
-    check_rate_limit(f"login_email_{clean_email}", max_requests=10, window_seconds=60)
+    check_rate_limit(f"login_ip_{client_ip}", max_requests=10, window_seconds=60, db=db)
+    check_rate_limit(f"login_email_{clean_email}", max_requests=10, window_seconds=60, db=db)
 
     user = db.query(User).filter(User.email == clean_email).first()
 
@@ -313,7 +314,7 @@ def login(payload: UserLogin, request: Request, response: Response, db: Session 
     user.failed_login_attempts = 0
     user.locked_until = None
     user.last_login_at = now
-    db.commit()
+    db.flush()
 
     log_audit(
         db=db,
@@ -405,7 +406,7 @@ def logout(response: Response, current_user: User = Depends(get_current_user), d
     """Revoke user sessions server-side and clear authentication cookies."""
     # Increment token_version to immediately revoke all existing JWTs for this user
     current_user.token_version += 1
-    db.commit()
+    db.flush()
 
     response.delete_cookie(key="access_token", path="/")
     response.delete_cookie(key="refresh_token", path="/api/v1/auth")
@@ -437,7 +438,7 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
         user.password_reset_token_hash = token_hash
         user.password_reset_expires_at = now + timedelta(minutes=settings.RESET_TOKEN_EXPIRE_MINUTES)
         user.password_reset_used_at = None
-        db.commit()
+        db.flush()
 
         # Dispatch via EmailSender (logs reset link to server log in dev)
         sender = get_email_sender()
@@ -499,7 +500,7 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     user.password_reset_token_hash = None
     # Invalidate existing sessions
     user.token_version += 1
-    db.commit()
+    db.flush()
 
     log_audit(
         db=db,

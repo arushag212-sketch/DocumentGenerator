@@ -16,8 +16,17 @@ def log_audit(
     entity_id: Optional[str] = None,
     meta: Optional[dict[str, Any]] = None,
     ip: Optional[str] = None,
+    *,
+    commit: bool = False,
 ) -> AuditLog:
-    """Record an audit trail event in the audit_log table."""
+    """Record an audit trail event in the current transaction.
+
+    Audit entries must commit with the operation they describe.  Historically
+    this helper committed immediately, which left orphan audit rows when a
+    subsequent write failed and also committed unrelated pending changes.  It
+    now only flushes by default; isolated callers may explicitly request a
+    commit when they truly own the transaction.
+    """
     audit_entry = AuditLog(
         club_id=club_id,
         user_id=user_id,
@@ -28,6 +37,8 @@ def log_audit(
         ip=ip,
     )
     db.add(audit_entry)
-    db.commit()
+    db.flush()
+    if commit:
+        db.commit()
     db.refresh(audit_entry)
     return audit_entry

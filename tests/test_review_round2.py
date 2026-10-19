@@ -45,9 +45,14 @@ def rendered_sih_pdfs():
         "bill_certificate": out_dir / "bill_certificate_v1.pdf",
         "mom": out_dir / "mom_v1.pdf",
     }
+    if not all(p.exists() for p in pdf_paths.values()):
+        from scripts.render_sih_suite import main as render_sih
+        render_sih()
+
     for name, p in pdf_paths.items():
         assert p.exists(), f"Rendered PDF for {name} does not exist at {p}!"
     return pdf_paths
+
 
 
 def test_item1_clean_headers_no_hardcoded_leakage(rendered_sih_pdfs):
@@ -244,7 +249,7 @@ def test_item7_page_counts_and_mom_header(rendered_sih_pdfs):
     doc_mom.close()
 
 
-def test_item8_numbering_series_separation():
+def test_item8_numbering_series_separation(rendered_sih_pdfs):
     """Test 8: Permission Letter uses ROOM series; Approval Note uses {academic_year}/{event_code}."""
     schemas = load_all_schemas()
     config = load_config()
@@ -258,12 +263,12 @@ def test_item8_numbering_series_separation():
     assert appr_num.value.startswith("ACM/2026-27/SIH")
 
     # Step 0 Requirement 1: Rendered-PDF test: the Permission Letter ref contains ROOM, the Approval Note ref does not.
-    doc_perm = pymupdf.open("outputs/sih_test/internal_hackathon_of_sih/permission_letter_v1.pdf")
+    doc_perm = pymupdf.open(str(rendered_sih_pdfs["permission_letter"]))
     text_perm = doc_perm[0].get_text()
     doc_perm.close()
     assert "ROOM" in text_perm, "Rendered Permission Letter PDF must contain 'ROOM' in its reference line!"
 
-    doc_appr = pymupdf.open("outputs/sih_test/internal_hackathon_of_sih/approval_note_v1.pdf")
+    doc_appr = pymupdf.open(str(rendered_sih_pdfs["approval_note"]))
     text_appr = doc_appr[0].get_text()
     doc_appr.close()
     assert "ROOM" not in text_appr, "Rendered Approval Note PDF must NOT contain 'ROOM' in its reference line!"

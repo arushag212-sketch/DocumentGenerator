@@ -38,6 +38,7 @@ export const FieldChip = Node.create({
   group: 'inline',
   inline: true,
   atom: true,
+  isolating: true,
   selectable: true,
   draggable: true,
 
@@ -89,6 +90,9 @@ export const FieldChip = Node.create({
         'data-required': importance === 'essential' ? 'true' : 'false',
         'data-sensitive': HTMLAttributes.sensitive ? 'true' : 'false',
         'data-ask': HTMLAttributes.ask || '',
+        role: 'button',
+        tabindex: '0',
+        title: `Dynamic field: ${label}`,
         class:
           'field-chip inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-900 border border-indigo-300 shadow-sm mx-1 cursor-pointer select-none hover:bg-indigo-100',
       }),
@@ -119,6 +123,215 @@ export const FieldChip = Node.create({
     ];
   },
 });
+
+/**
+ * A block-level image placeholder.  Images deliberately live in the editor
+ * JSON instead of being represented as a hard-coded React element so they can
+ * be moved, selected, and saved alongside the rest of a template.  A
+ * club-logo block keeps both the selected asset id and its resolved URL; this
+ * means a template remains understandable even when an asset is unavailable
+ * while it is being edited or previewed.
+ */
+export const ImageBlock = Node.create({
+  name: 'imageBlock',
+  group: 'block',
+  atom: true,
+  isolating: true,
+  selectable: true,
+  draggable: true,
+
+  addAttributes() {
+    return {
+      imageType: {
+        default: 'image',
+        parseHTML: (element: any) => element.getAttribute('data-image-type') || 'image',
+        renderHTML: (attributes: any) => ({ 'data-image-type': attributes.imageType || 'image' }),
+      },
+      src: {
+        default: '',
+        parseHTML: (element: any) => {
+          const img = element.querySelector?.('img');
+          return element.getAttribute('data-image-src') || img?.getAttribute('src') || '';
+        },
+        renderHTML: (attributes: any) => (attributes.src ? { 'data-image-src': attributes.src } : {}),
+      },
+      alt: {
+        default: 'Image placeholder',
+        parseHTML: (element: any) => element.getAttribute('data-image-alt') || element.querySelector?.('img')?.getAttribute('alt') || 'Image placeholder',
+        renderHTML: (attributes: any) => ({ 'data-image-alt': attributes.alt || 'Image placeholder' }),
+      },
+      caption: {
+        default: '',
+        parseHTML: (element: any) => element.getAttribute('data-caption') || element.querySelector?.('figcaption')?.textContent || '',
+        renderHTML: (attributes: any) => (attributes.caption ? { 'data-caption': attributes.caption } : {}),
+      },
+      placeholderText: {
+        default: 'Select an image to place here',
+        parseHTML: (element: any) => element.getAttribute('data-placeholder-text') || 'Select an image to place here',
+        renderHTML: (attributes: any) => ({ 'data-placeholder-text': attributes.placeholderText || 'Select an image to place here' }),
+      },
+      clubLogoAssetId: {
+        default: null,
+        parseHTML: (element: any) => element.getAttribute('data-club-logo-id') || element.getAttribute('data-logo-asset-id') || null,
+        renderHTML: (attributes: any) => (attributes.clubLogoAssetId ? { 'data-club-logo-id': attributes.clubLogoAssetId } : {}),
+      },
+      // Keep the shorter aliases for templates created by integrations before
+      // the explicit clubLogoAssetId attribute was introduced.
+      logoAssetId: {
+        default: null,
+        parseHTML: (element: any) => element.getAttribute('data-logo-asset-id') || element.getAttribute('data-club-logo-id') || null,
+        renderHTML: (attributes: any) => (attributes.logoAssetId ? { 'data-logo-asset-id': attributes.logoAssetId } : {}),
+      },
+      assetId: {
+        default: null,
+        parseHTML: (element: any) => element.getAttribute('data-asset-id') || null,
+        renderHTML: (attributes: any) => (attributes.assetId ? { 'data-asset-id': attributes.assetId } : {}),
+      },
+      placement: {
+        default: 'center',
+        parseHTML: (element: any) => element.getAttribute('data-placement') || 'center',
+        renderHTML: (attributes: any) => ({ 'data-placement': attributes.placement || 'center' }),
+      },
+      width: {
+        default: 'auto',
+        parseHTML: (element: any) => element.getAttribute('data-width') || 'auto',
+        renderHTML: (attributes: any) => ({ 'data-width': attributes.width || 'auto' }),
+      },
+      height: {
+        default: 180,
+        parseHTML: (element: any) => Number(element.getAttribute('data-height')) || 180,
+        renderHTML: (attributes: any) => ({ 'data-height': attributes.height || 180 }),
+      },
+      fit: {
+        default: 'contain',
+        parseHTML: (element: any) => element.getAttribute('data-fit') || 'contain',
+        renderHTML: (attributes: any) => ({ 'data-fit': attributes.fit || 'contain' }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'figure[data-image-block]' },
+      { tag: 'div[data-image-block]' },
+      {
+        tag: 'img[data-image-block]',
+        getAttrs: (element: any) => ({
+          src: element.getAttribute('src') || '',
+          alt: element.getAttribute('alt') || 'Image placeholder',
+          imageType: element.getAttribute('data-image-type') || 'image',
+        }),
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }: any) {
+    const attrs = HTMLAttributes || {};
+    const {
+      imageType,
+      src,
+      alt,
+      caption,
+      placeholderText,
+      clubLogoAssetId,
+      logoAssetId,
+      assetId,
+      placement,
+      width,
+      height,
+      fit,
+      class: _className,
+      ...rest
+    } = attrs;
+    const normalizedType = imageType || 'image';
+    const selectedAssetId = clubLogoAssetId || logoAssetId || assetId || '';
+    const rootAttrs = mergeAttributes(rest, {
+      'data-image-block': 'true',
+      'data-image-type': normalizedType,
+      'data-image-src': src || '',
+      'data-image-alt': alt || 'Image placeholder',
+      'data-caption': caption || '',
+      'data-placeholder-text': placeholderText || 'Select an image to place here',
+      ...(clubLogoAssetId ? { 'data-club-logo-id': clubLogoAssetId } : {}),
+      ...(logoAssetId ? { 'data-logo-asset-id': logoAssetId } : {}),
+      ...(assetId ? { 'data-asset-id': assetId } : {}),
+      'data-placement': placement || 'center',
+      'data-width': width || 'auto',
+      'data-height': height || 180,
+      'data-fit': fit || 'contain',
+      class: `image-block image-block--${normalizedType} image-block--${placement || 'center'}${selectedAssetId ? ' image-block--resolved' : ' image-block--placeholder'}`,
+    });
+
+    if (src) {
+      return [
+        'figure',
+        rootAttrs,
+        [
+          'img',
+          {
+            src,
+            alt: alt || 'Template image',
+            class: 'image-block__img',
+            style: `max-height: ${height || 180}px; width: ${width || 'auto'}; object-fit: ${fit || 'contain'};`,
+          },
+        ],
+        ...(caption ? [['figcaption', { class: 'image-block__caption' }, caption]] : []),
+      ];
+    }
+
+    return [
+      'figure',
+      rootAttrs,
+      [
+        'div',
+        { class: 'image-block__placeholder', 'data-image-placeholder': 'true' },
+        ['span', { class: 'image-block__placeholder-icon', 'aria-hidden': 'true' }, normalizedType === 'club-logo' || normalizedType === 'logo' ? '◎' : '▧'],
+        ['strong', {}, normalizedType === 'club-logo' || normalizedType === 'logo' ? 'Club logo placeholder' : 'Image placeholder'],
+        ['span', { class: 'image-block__placeholder-copy' }, placeholderText || 'Select an image to place here'],
+      ],
+      ...(caption ? [['figcaption', { class: 'image-block__caption' }, caption]] : []),
+    ];
+  },
+});
+
+export interface ImageBlockAttributes {
+  imageType: 'image' | 'club-logo' | 'logo' | string;
+  src: string;
+  alt: string;
+  caption: string;
+  placeholderText: string;
+  clubLogoAssetId: string | null;
+  logoAssetId: string | null;
+  assetId: string | null;
+  placement: 'left' | 'center' | 'right' | string;
+  width: string | number;
+  height: number;
+  fit: 'contain' | 'cover' | string;
+}
+
+export function createImageBlockNode(attributes: Partial<ImageBlockAttributes> = {}) {
+  const selectedAssetId = attributes.clubLogoAssetId || attributes.logoAssetId || attributes.assetId || null;
+  const imageType = attributes.imageType || 'image';
+  return {
+    type: 'imageBlock',
+    attrs: {
+      imageType,
+      src: attributes.src || '',
+      alt: attributes.alt || (imageType === 'club-logo' || imageType === 'logo' ? 'Club logo' : 'Template image'),
+      caption: attributes.caption || '',
+      placeholderText:
+        attributes.placeholderText ||
+        (imageType === 'club-logo' || imageType === 'logo' ? 'Choose a club logo from the asset library' : 'Select an image to place here'),
+      clubLogoAssetId: attributes.clubLogoAssetId || (imageType === 'club-logo' || imageType === 'logo' ? selectedAssetId : null),
+      logoAssetId: attributes.logoAssetId || (imageType === 'club-logo' || imageType === 'logo' ? selectedAssetId : null),
+      assetId: attributes.assetId || selectedAssetId,
+      placement: attributes.placement || 'center',
+      width: attributes.width || 'auto',
+      height: attributes.height || 180,
+      fit: attributes.fit || 'contain',
+    },
+  };
+}
 
 export const CustomTable = Table.extend({
   addAttributes() {
@@ -366,12 +579,28 @@ export function createSignatureGridNode(
   };
 }
 
-export function safeInsertBlock(editor: any, nodeJSON: any) {
-  if (!editor) return;
+export function safeInsertBlock(editor: any, nodeJSON: any, position?: number) {
+  if (!editor) return false;
+
+  // A drop supplies an explicit document position.  Try that position first
+  // so a palette block is inserted where the pointer was released rather than
+  // wherever the editor happened to retain focus.
+  if (typeof position === 'number' && Number.isFinite(position)) {
+    try {
+      if (editor.can().insertContentAt(position, nodeJSON)) {
+        editor.chain().focus().insertContentAt(position, nodeJSON).run();
+        return true;
+      }
+    } catch {
+      // A position inside a table cell (or another inline-only context) may
+      // reject a block.  Fall through to the context-aware block insertion.
+    }
+  }
+
   try {
     if (editor.can().insertContent(nodeJSON)) {
       editor.chain().focus().insertContent(nodeJSON).run();
-      return;
+      return true;
     }
   } catch {
     // continue to fallback
@@ -382,28 +611,36 @@ export function safeInsertBlock(editor: any, nodeJSON: any) {
     const depth = Math.min($to.depth, 1);
     const afterPos = depth > 0 ? $to.after(depth) : editor.state.doc.content.size;
     editor.chain().focus().insertContentAt(afterPos, nodeJSON).run();
+    return true;
   } catch {
     try {
       editor.chain().focus().insertContentAt(editor.state.doc.content.size, nodeJSON).run();
+      return true;
     } catch (err) {
       console.error('Failed to insert block:', err);
     }
   }
+  return false;
 }
 
-export function insertInfoTable(editor: any, rows?: any[]) {
+export function insertInfoTable(editor: any, rows?: any[], position?: number) {
   const node = createInfoTableNode(rows);
-  safeInsertBlock(editor, node);
+  safeInsertBlock(editor, node, position);
 }
 
-export function insertRepeatingTable(editor: any, cols?: any[], listVar?: string, itemAlias?: string) {
+export function insertRepeatingTable(editor: any, cols?: any[], listVar?: string, itemAlias?: string, position?: number) {
   const node = createRepeatingTableNode(cols, listVar, itemAlias);
-  safeInsertBlock(editor, node);
+  safeInsertBlock(editor, node, position);
 }
 
-export function insertSignatureGrid(editor: any, count = 2, signatures?: any[]) {
+export function insertSignatureGrid(editor: any, count = 2, signatures?: any[], position?: number) {
   const node = createSignatureGridNode(count, signatures);
-  safeInsertBlock(editor, node);
+  safeInsertBlock(editor, node, position);
+}
+
+export function insertImageBlock(editor: any, attributes: Partial<ImageBlockAttributes> = {}, position?: number) {
+  const node = createImageBlockNode(attributes);
+  safeInsertBlock(editor, node, position);
 }
 
 export function insertFieldChip(
@@ -414,24 +651,33 @@ export function insertFieldChip(
   ask = '',
   importance = 'optional',
   required = false,
-  sensitive = false
+  sensitive = false,
+  position?: number
 ) {
-  editor
-    .chain()
-    .focus()
-    .insertContent({
-      type: 'fieldChip',
-      attrs: {
-        fieldName,
-        label: label || fieldName,
-        fieldType,
-        ask: ask || `Please provide ${label || fieldName}`,
-        importance,
-        required: importance === 'essential' || required,
-        sensitive,
-      },
-    })
-    .run();
+  const content = {
+    type: 'fieldChip',
+    attrs: {
+      fieldName,
+      label: label || fieldName,
+      fieldType,
+      ask: ask || `Please provide ${label || fieldName}`,
+      importance,
+      required: importance === 'essential' || required,
+      sensitive,
+    },
+  };
+  if (typeof position === 'number' && Number.isFinite(position)) {
+    try {
+      if (editor.can().insertContentAt(position, content)) {
+        editor.chain().focus().insertContentAt(position, content).run();
+        return;
+      }
+    } catch {
+      // Use the current selection below when the requested position is no
+      // longer valid after another editor transaction.
+    }
+  }
+  editor.chain().focus().insertContent(content).run();
 }
 
 /**
@@ -442,8 +688,38 @@ export function migrateTipTapContent(content: any): any {
   if (!content || !content.content || !Array.isArray(content.content)) {
     return content;
   }
+  const migrateNode = (node: any): any => {
+    if (!node || typeof node !== 'object') return node;
+    let migrated = node;
+    // Older integrations used the built-in image node or a small `logo` atom.
+    // Normalize both to the editor's stable imageBlock schema before TipTap
+    // attempts to parse the document.
+    if (node.type === 'image' || node.type === 'logo' || node.type === 'clubLogo') {
+      const attrs = node.attrs || {};
+      const imageType = node.type === 'image' ? 'image' : 'club-logo';
+      migrated = createImageBlockNode({
+        imageType,
+        src: attrs.src || attrs.url || attrs.logoUrl || '',
+        alt: attrs.alt || (imageType === 'club-logo' ? 'Club logo' : 'Template image'),
+        caption: attrs.title || attrs.caption || '',
+        clubLogoAssetId: attrs.clubLogoAssetId || attrs.clubLogoId || attrs.logoAssetId || attrs.assetId || null,
+        logoAssetId: attrs.logoAssetId || attrs.logoId || attrs.assetId || null,
+        assetId: attrs.assetId || null,
+        placement: attrs.placement || attrs.align || 'center',
+        width: attrs.width || 'auto',
+        height: attrs.height || 180,
+        fit: attrs.fit || 'contain',
+      });
+    }
+    if (migrated.content && Array.isArray(migrated.content)) {
+      migrated = { ...migrated, content: migrated.content.map(migrateNode) };
+    }
+    return migrated;
+  };
+
   const newContent: any[] = [];
-  for (const block of content.content) {
+  for (const rawBlock of content.content) {
+    const block = migrateNode(rawBlock);
     if (block.type === 'infoTable') {
       const rows = block.attrs?.rows || [];
       newContent.push(createInfoTableNode(rows));

@@ -45,9 +45,18 @@ class Base(DeclarativeBase):
 
 
 def get_db() -> Generator[Session, None, None]:
-    """Dependency for obtaining a database session."""
+    """Yield one request transaction and commit only after a successful handler.
+
+    Keeping the transaction boundary at the request layer prevents repository
+    and audit helpers from partially committing a request.  Exceptions roll
+    back all pending work before the session is closed.
+    """
     db = SessionLocal()
     try:
         yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

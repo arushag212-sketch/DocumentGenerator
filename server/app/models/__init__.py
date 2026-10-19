@@ -312,6 +312,12 @@ class DocumentVersion(TimestampMixin, Base):
     __tablename__ = "document_versions"
 
     document_id: Mapped[str] = mapped_column(String(36), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Keep the exact immutable template revision used for this generation. A
+    # document may outlive the template's current version, so falling back to
+    # Template.current_version_id would silently change historical output.
+    template_version_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("template_versions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
     record_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     overrides: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
@@ -324,6 +330,16 @@ class DocumentVersion(TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("document_id", "version_no", name="uq_doc_version"),
     )
+
+
+class RateLimitBucket(Base):
+    """Database-backed fixed-window counter shared by all application workers."""
+
+    __tablename__ = "rate_limit_buckets"
+
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    window_started: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class Job(TimestampMixin, Base):

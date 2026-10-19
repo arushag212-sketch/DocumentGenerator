@@ -198,10 +198,15 @@ class EventRecommender:
             reason = ""
 
             if not tmpl.is_system:
-                # Custom published club templates: ONLY recommend if explicit trigger word appears in user text
-                # AND never recommend unprompted custom templates when user intent is simple or when a system template matches.
+                # Custom published club templates are eligible when their
+                # declared stage matches, or when an explicit trigger appears
+                # for a non-simple intent.
                 matched_trigger = next((tr for tr in triggers if tr in text.lower()), None)
-                if matched_trigger and not (wants_venue_simple or wants_meeting_simple or wants_prize_simple or wants_bills_simple or wants_sanction_simple):
+                stage_match = t_stage == detected_stage
+                if stage_match:
+                    recommended = True
+                    reason = f"Matches detected event stage '{detected_stage}'."
+                elif matched_trigger and not (wants_venue_simple or wants_meeting_simple or wants_prize_simple or wants_bills_simple or wants_sanction_simple):
                     recommended = True
                     reason = f"Matches '{matched_trigger}' trigger in template schema."
                 else:

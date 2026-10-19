@@ -17,7 +17,7 @@ import pymupdf
 import yaml
 from docxtpl import DocxTemplate
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -56,6 +56,13 @@ from docgen.sources import DatabaseTemplateSource, build_club_config_from_db
 from server.app.core.audit import log_audit
 from server.app.core.database import get_db
 from server.app.core.storage import storage
+from server.app.core.storage import LocalDiskStorage, get_storage, require_local_storage
+from server.app.core.tenancy import (
+    asset_is_visible_to_club,
+    get_asset_for_club,
+    letterhead_is_visible_to_club,
+    validate_letterhead_asset_refs,
+)
 from server.app.core.doc_retention import prune_document_versions
 from server.app.core.permissions import (
     ClubContext,
@@ -399,6 +406,10 @@ def get_template_thumbnail(
     db: Session = Depends(get_db),
 ):
     """Serve thumbnail image rendered from dummy sample data via LibreOffice & PyMuPDF."""
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     tmpl = db.query(Template).filter(
         ((Template.id == template_id) | (Template.slug == template_id)),
         ((Template.club_id.is_(None)) | (Template.club_id == ctx.club.id)),
@@ -416,7 +427,7 @@ def get_template_thumbnail(
         placeholder = get_neutral_placeholder()
         return FileResponse(placeholder, media_type="image/png")
 
-    thumbnails_dir = Path("storage/thumbnails")
+    thumbnails_dir = local_storage.base_dir / "thumbnails"
     thumbnails_dir.mkdir(parents=True, exist_ok=True)
     thumb_path = thumbnails_dir / f"{ver.id}.webp"
     if not thumb_path.exists():
@@ -467,6 +478,10 @@ def fork_template(
     editable only by club admins and editors. System templates stay read-only.
     Duplicate forks of the same template get unique names automatically.
     """
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     orig = db.query(Template).filter(
         ((Template.id == template_id) | (Template.slug == template_id)),
         ((Template.club_id.is_(None)) | (Template.club_id == ctx.club.id)),
@@ -483,16 +498,18 @@ def fork_template(
 
     new_tmpl_id = str(uuid.uuid4())
     src_docx = None
-    if orig_ver and orig_ver.docx_storage_key and Path(orig_ver.docx_storage_key).exists():
-        src_docx = Path(orig_ver.docx_storage_key)
-    elif (Path("templates") / orig.slug / "template.docx").exists():
+    if orig_ver and orig_ver.docx_storage_key:
+        candidate = local_storage.local_path(orig_ver.docx_storage_key)
+        if candidate.exists():
+            src_docx = candidate
+    if src_docx is None and (Path("templates") / orig.slug / "template.docx").exists():
         src_docx = Path("templates") / orig.slug / "template.docx"
 
     if src_docx and src_docx.exists():
         rel_key, _ = storage.save_content_addressed("templates", src_docx.read_bytes(), "docx")
-        dest_docx = Path("storage") / rel_key
+        dest_docx = local_storage.local_path(rel_key)
     else:
-        storage_templates_dir = Path("storage/templates")
+        storage_templates_dir = local_storage.base_dir / "templates"
         storage_templates_dir.mkdir(parents=True, exist_ok=True)
         dest_docx = storage_templates_dir / f"{new_tmpl_id}_v1.docx"
         dest_docx.touch()
@@ -789,6 +806,10 @@ def create_blank_template(
     db: Session = Depends(get_db),
 ):
     """Create a new blank template draft for the club."""
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Template name cannot be empty")
@@ -857,7 +878,7 @@ def create_blank_template(
         club_slug=ctx.club.slug,
     )
     rel_key, _ = storage.save_content_addressed("templates", docx_bytes, "docx")
-    dest_docx = Path("storage") / rel_key
+    dest_docx = local_storage.local_path(rel_key)
 
     tmpl = Template(
         id=new_id,
@@ -1170,6 +1191,10 @@ def save_template_draft(
     if payload.editor_json is not None:
         target_ver.editor_json = payload.editor_json
     if payload.letterhead_id is not None:
+        selected_lh = db.query(Letterhead).filter(Letterhead.id == payload.letterhead_id).first()
+        if not selected_lh:
+            raise HTTPException(status_code=404, detail="Letterhead not found")
+        validate_letterhead_asset_refs(db, ctx.club.id, letterhead=selected_lh)
         target_ver.letterhead_id = payload.letterhead_id
 
     fields_to_return = payload.fields or []
@@ -1241,6 +1266,10 @@ def compile_template(
     db: Session = Depends(get_db),
 ):
     """Compile TipTap JSON into template.docx and schema.yaml with strict validation."""
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     tmpl = db.query(Template).filter(
         (Template.id == template_id) | (Template.slug == template_id)
     ).first()
@@ -1302,16 +1331,22 @@ def compile_template(
     letterhead_id = payload.letterhead_id or ver.letterhead_id
     if letterhead_id:
         lh = db.query(Letterhead).filter(Letterhead.id == letterhead_id).first()
-        if lh:
-            letterhead_cfg = {
-                "title_text": lh.title_text,
-                "subtitle_text": lh.subtitle_text,
-            }
-            target_asset_id = lh.right_logo_asset_id or lh.left_logo_asset_id
-            if target_asset_id:
-                asset_rec = db.query(Asset).filter(Asset.id == target_asset_id).first()
-                if asset_rec and Path(asset_rec.storage_key).exists():
-                    letterhead_cfg["club_logo_path"] = asset_rec.storage_key
+        if not lh:
+            raise HTTPException(status_code=404, detail="Letterhead not found")
+        validate_letterhead_asset_refs(db, ctx.club.id, letterhead=lh)
+        letterhead_cfg = {
+            "title_text": lh.title_text,
+            "subtitle_text": lh.subtitle_text,
+        }
+        target_asset_id = lh.right_logo_asset_id or lh.left_logo_asset_id
+        if target_asset_id:
+            asset_rec = get_asset_for_club(db, target_asset_id, ctx.club.id)
+            if asset_rec:
+                active_storage = get_storage()
+                if isinstance(active_storage, LocalDiskStorage):
+                    asset_path = active_storage.local_path(asset_rec.storage_key)
+                    if asset_path.exists():
+                        letterhead_cfg["club_logo_path"] = str(asset_path)
 
     existing_series = None
     if ver.schema_yaml:
@@ -1345,7 +1380,7 @@ def compile_template(
     )
 
     rel_key, _ = storage.save_content_addressed("templates", docx_bytes, "docx")
-    docx_dest = Path("storage") / rel_key
+    docx_dest = local_storage.local_path(rel_key)
 
     ver.docx_storage_key = str(docx_dest)
     ver.schema_yaml = schema_yaml
@@ -1356,7 +1391,7 @@ def compile_template(
     tmpl.category = category
     tmpl.description = description
 
-    thumbnails_dir = Path("storage/thumbnails")
+    thumbnails_dir = local_storage.base_dir / "thumbnails"
     thumbnails_dir.mkdir(parents=True, exist_ok=True)
     thumb_path = thumbnails_dir / f"{ver.id}.webp"
     thumb_path_png = thumbnails_dir / f"{ver.id}.png"
@@ -1420,16 +1455,22 @@ def preview_template(
     letterhead_id = payload.letterhead_id or (ver.letterhead_id if ver else None)
     if letterhead_id:
         lh = db.query(Letterhead).filter(Letterhead.id == letterhead_id).first()
-        if lh:
-            letterhead_cfg = {
-                "title_text": lh.title_text,
-                "subtitle_text": lh.subtitle_text,
-            }
-            target_asset_id = lh.right_logo_asset_id or lh.left_logo_asset_id
-            if target_asset_id:
-                asset_rec = db.query(Asset).filter(Asset.id == target_asset_id).first()
-                if asset_rec and Path(asset_rec.storage_key).exists():
-                    letterhead_cfg["club_logo_path"] = asset_rec.storage_key
+        if not lh:
+            raise HTTPException(status_code=404, detail="Letterhead not found")
+        validate_letterhead_asset_refs(db, ctx.club.id, letterhead=lh)
+        letterhead_cfg = {
+            "title_text": lh.title_text,
+            "subtitle_text": lh.subtitle_text,
+        }
+        target_asset_id = lh.right_logo_asset_id or lh.left_logo_asset_id
+        if target_asset_id:
+            asset_rec = get_asset_for_club(db, target_asset_id, ctx.club.id)
+            if asset_rec:
+                active_storage = get_storage()
+                if isinstance(active_storage, LocalDiskStorage):
+                    asset_path = active_storage.local_path(asset_rec.storage_key)
+                    if asset_path.exists():
+                        letterhead_cfg["club_logo_path"] = str(asset_path)
 
     docx_bytes, schema_yaml, report = TemplateCompiler.compile(
         editor_json=editor_json,
@@ -1489,6 +1530,10 @@ def publish_template(
     db: Session = Depends(get_db),
 ):
     """Publish a draft template into an immutable published version."""
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     tmpl = db.query(Template).filter(
         (Template.id == template_id) | (Template.slug == template_id)
     ).first()
@@ -1568,7 +1613,7 @@ def publish_template(
                 },
             )
         rel_key, _ = storage.save_content_addressed("templates", docx_bytes, "docx")
-        docx_dest = Path("storage") / rel_key
+        docx_dest = local_storage.local_path(rel_key)
         ver.docx_storage_key = str(docx_dest)
         ver.schema_yaml = schema_yaml
         ver.validation_report = report
@@ -1695,11 +1740,18 @@ def list_letterheads(
     )
 
     for lh in letterheads:
+        if not letterhead_is_visible_to_club(lh, ctx.club.id):
+            continue
+        try:
+            validate_letterhead_asset_refs(db, ctx.club.id, letterhead=lh)
+        except HTTPException:
+            # Do not expose a malformed cross-club reference in the picker.
+            continue
         # Determine club logo url: right_logo_asset_id or club's logo asset or fallback
         target_asset_id = lh.right_logo_asset_id
         club_asset = None
         if target_asset_id:
-            club_asset = db.query(Asset).filter(Asset.id == target_asset_id).first()
+            club_asset = get_asset_for_club(db, target_asset_id, ctx.club.id)
         elif club_custom_logo:
             club_asset = club_custom_logo
 
@@ -1715,7 +1767,7 @@ def list_letterheads(
         svnit_asset_id = lh.institute_logo_asset_id or lh.left_logo_asset_id
         svnit_logo_url = "/assets/permission_page1_img1.png"
         if svnit_asset_id:
-            svnit_asset = db.query(Asset).filter(Asset.id == svnit_asset_id).first()
+            svnit_asset = get_asset_for_club(db, svnit_asset_id, ctx.club.id)
             if svnit_asset:
                 if svnit_asset.filename == "permission_page1_img1.png":
                     svnit_logo_url = f"/assets/{svnit_asset.filename}"
@@ -1740,17 +1792,28 @@ def list_letterheads(
 @router.get("/assets/{asset_id}/content")
 def get_asset_content(
     asset_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
     db: Session = Depends(get_db),
 ):
-    """Serve asset file content by ID."""
-    asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    """Serve a system asset or an asset owned by the active club."""
+    asset = get_asset_for_club(db, asset_id, ctx.club.id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    f_path = Path(asset.storage_key)
-    if not f_path.exists():
-        raise HTTPException(status_code=404, detail="Asset file not found on disk")
-    from fastapi.responses import FileResponse
-    return FileResponse(str(f_path), media_type=asset.mime)
+    try:
+        active_storage = get_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    if isinstance(active_storage, LocalDiskStorage):
+        f_path = active_storage.local_path(asset.storage_key)
+        if not f_path.is_file():
+            raise HTTPException(status_code=404, detail="Asset file not found on storage")
+        return FileResponse(str(f_path), media_type=asset.mime)
+    try:
+        return Response(content=active_storage.load(asset.storage_key), media_type=asset.mime)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Asset file not found on storage")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
 
 
@@ -1928,6 +1991,10 @@ def generate_document(
     """Generate DOCX & PDF using official Docgen engine and LibreOffice."""
     club_id = ctx.club.id
     tmpl_slug = payload.template_id
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
     # 1. Verify template exists & load schema
     tmpl = db.query(Template).filter(
@@ -2002,8 +2069,8 @@ def generate_document(
         v_obj = db.query(Venue).filter(Venue.club_id == club_id, Venue.name == data.get("venue")).first()
         if not v_obj:
             v_obj = db.query(Venue).filter(Venue.name == data.get("venue")).first()
-        if v_obj and v_obj.default_addressee:
-            submitted_to_raw = v_obj.default_addressee
+        if v_obj and getattr(v_obj, "addressee_default", None):
+            submitted_to_raw = v_obj.addressee_default
 
     def user_field(val: Any, key: str) -> TrackedField:
         if val is None or str(val).strip() == "":
@@ -2336,7 +2403,7 @@ def generate_document(
         db.flush()
 
     # 4. Render via Docgen Engine
-    out_dir = Path("storage/documents") / doc_record.id / "v1"
+    out_dir = local_storage.base_dir / "documents" / doc_record.id / "v1"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     db_config = build_club_config_from_db(db, ctx.club.slug)
@@ -2393,6 +2460,7 @@ def generate_document(
     ver_record = DocumentVersion(
         id=str(uuid.uuid4()),
         document_id=doc_record.id,
+        template_version_id=tmpl_version.id,
         version_no=1,
         record_snapshot=json.loads(json.dumps(event.flat_dict(), default=str)),
         overrides={},
@@ -2490,6 +2558,10 @@ def list_documents(
     db: Session = Depends(get_db),
 ):
     """List documents for the active club with search, filtering, sorting, and pagination."""
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
     ev_repo = ScopedRepository(db, Event, club_id=ctx.club.id)
 
@@ -2559,7 +2631,7 @@ def list_documents(
         v_no = latest_ver.version_no if latest_ver else 1
 
         # Check page preview count
-        preview_dir = Path("storage/previews") / d.id / f"v{v_no}"
+        preview_dir = local_storage.base_dir / "previews" / d.id / f"v{v_no}"
         page_count = 1
         if preview_dir.exists():
             pngs = list(preview_dir.glob("page_*.png"))
@@ -2607,6 +2679,11 @@ def download_batch_zip(
     import zipfile
     from server.app.core.storage import BATCH_TTL_HOURS
 
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
     audit_repo = ScopedRepository(db, AuditLog, club_id=ctx.club.id)
     audit_entries = audit_repo.all(AuditLog.action == "documents_batch_generated")
     matching_log = next(
@@ -2619,13 +2696,15 @@ def download_batch_zip(
             detail="Batch archive not found or access denied for this club.",
         )
 
-    zip_filename = matching_log.meta.get("zip_filename") or f"batch_{batch_id[:8]}_documents.zip"
-    cache_dir = Path("storage/cache/batches") / batch_id
+    zip_filename = Path(
+        matching_log.meta.get("zip_filename") or f"batch_{batch_id[:8]}_documents.zip"
+    ).name
+    cache_dir = local_storage.base_dir / "cache" / "batches" / batch_id
     cache_dir.mkdir(parents=True, exist_ok=True)
     zip_path = cache_dir / zip_filename
 
     # Also check legacy location if present
-    legacy_zip = Path("storage/batches") / batch_id / zip_filename
+    legacy_zip = local_storage.base_dir / "batches" / batch_id / zip_filename
 
     ttl_seconds = BATCH_TTL_HOURS * 3600
     if zip_path.exists() and (time.time() - zip_path.stat().st_mtime) <= ttl_seconds:
@@ -2646,8 +2725,11 @@ def download_batch_zip(
     # Build ZIP on demand from generated documents without duplicate copies
     meta_docs = matching_log.meta.get("documents", [])
     files_to_zip = []
+    doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
     for d_info in meta_docs:
         d_id = d_info.get("id")
+        if not d_id or not doc_repo.get(d_id):
+            continue
         clean_ref = (d_info.get("ref_no") or "doc").replace("/", "_")
         clean_title = (d_info.get("title") or "document").replace(" ", "_").replace("/", "_")
         base_name = f"{clean_ref}_{clean_title}"
@@ -2700,11 +2782,16 @@ def get_document_details(
         raise HTTPException(status_code=404, detail="Document has no generated versions")
 
     latest_ver = versions[0]
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     page_count = 1
-    if latest_ver.pdf_key and Path(latest_ver.pdf_key).exists():
+    latest_pdf = local_storage.local_path(latest_ver.pdf_key) if latest_ver.pdf_key else None
+    if latest_pdf and latest_pdf.exists():
         try:
             import pymupdf
-            pdf_doc = pymupdf.open(str(latest_ver.pdf_key))
+            pdf_doc = pymupdf.open(str(latest_pdf))
             page_count = len(pdf_doc)
             pdf_doc.close()
         except Exception:
@@ -2735,8 +2822,8 @@ def get_document_details(
             DocumentVersionOut(
                 id=v.id,
                 version_no=v.version_no,
-                docx_available=bool(v.docx_key and Path(v.docx_key).exists()),
-                pdf_available=bool(v.pdf_key and Path(v.pdf_key).exists()),
+                docx_available=bool(v.docx_key and local_storage.local_path(v.docx_key).exists()),
+                pdf_available=bool(v.pdf_key and local_storage.local_path(v.pdf_key).exists()),
                 created_at=v.created_at,
                 created_by="Author",
             )
@@ -2761,7 +2848,20 @@ def get_document_page_preview(
     from server.app.core.storage import PREVIEW_TTL_DAYS
     from server.app.core.doc_retention import regenerate_document_version
 
-    cache_dir = Path("storage/cache/previews")
+    # Resolve the document before touching any cache path or version row.  The
+    # previous implementation authorized the club but queried only by a
+    # caller-supplied document id, allowing a member of one club to preview a
+    # known document id from another club.
+    doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
+    doc_record = doc_repo.get(doc_id)
+    if not doc_record:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    cache_dir = local_storage.base_dir / "cache" / "previews"
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_file = cache_dir / f"{doc_id}_v{v}_p{page_no}.jpg"
 
@@ -2773,7 +2873,7 @@ def get_document_page_preview(
             cache_file.unlink(missing_ok=True)
 
     query = db.query(DocumentVersion).filter(
-        DocumentVersion.document_id == doc_id,
+        DocumentVersion.document_id == doc_record.id,
         DocumentVersion.version_no == v,
     )
     version = query.first()
@@ -2781,12 +2881,14 @@ def get_document_page_preview(
         raise HTTPException(status_code=404, detail="Document version not found")
 
     pdf_path = None
-    if version.pdf_key and Path(version.pdf_key).exists():
-        pdf_path = Path(version.pdf_key)
-    else:
+    if version.pdf_key:
+        candidate = local_storage.local_path(version.pdf_key)
+        if candidate.exists():
+            pdf_path = candidate
+    if pdf_path is None:
         # Check if we can regenerate on demand for an older version
         try:
-            _, pdf_path = regenerate_document_version(db, doc_id, v)
+            _, pdf_path = regenerate_document_version(db, doc_id, v, club_id=ctx.club.id)
         except Exception:
             pdf_path = None
 
@@ -2819,7 +2921,9 @@ def recreate_document_version_endpoint(
     """Regenerate physical DOCX and PDF files for an older pruned version on demand."""
     from server.app.core.doc_retention import regenerate_document_version
     try:
-        docx_p, pdf_p = regenerate_document_version(db, doc_id, version_no)
+        docx_p, pdf_p = regenerate_document_version(
+            db, doc_id, version_no, club_id=ctx.club.id
+        )
         return {
             "message": f"Version {version_no} re-created successfully.",
             "docx_path": str(docx_p),
@@ -2857,14 +2961,19 @@ def download_document_file(
     if not version:
         raise HTTPException(status_code=404, detail="Version not found")
 
+    try:
+        local_storage = require_local_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
     is_latest = (latest_v and version.id == latest_v.id)
 
     if format == "pdf":
-        file_path = Path(version.pdf_key) if version.pdf_key else None
+        file_path = local_storage.local_path(version.pdf_key) if version.pdf_key else None
         media_type = "application/pdf"
         filename = f"{doc_record.ref_no or 'document'}.pdf".replace("/", "_")
     else:
-        file_path = Path(version.docx_key) if version.docx_key else None
+        file_path = local_storage.local_path(version.docx_key) if version.docx_key else None
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         filename = f"{doc_record.ref_no or 'document'}.docx".replace("/", "_")
 
@@ -2874,7 +2983,9 @@ def download_document_file(
             raise HTTPException(status_code=404, detail=f"File not available on storage ({format.upper()})")
         else:
             # Older pruned version: regenerate on demand from immutable template version + snapshot
-            docx_p, pdf_p = regenerate_document_version(db, doc_id, version.version_no)
+            docx_p, pdf_p = regenerate_document_version(
+                db, doc_id, version.version_no, club_id=ctx.club.id
+            )
             file_path = pdf_p if format == "pdf" else docx_p
 
     disp = "inline" if disposition == "inline" and format == "pdf" else "attachment"
@@ -2918,4 +3029,3 @@ def get_document_preview_page1(
 ):
     """Serve high-resolution rasterized PNG page preview of rendered document."""
     return get_document_page_preview(doc_id=doc_id, page_no=1, v=v, ctx=ctx, db=db)
-

@@ -382,6 +382,41 @@ def check_ai() -> list[CheckResult]:
         ]
 
 
+def check_optional_services() -> list[tuple[str, str, str]]:
+    """Report optional services and test skips with explicit reasons."""
+    items = []
+    # 1. PostgreSQL live integration
+    db_url = os.environ.get("DATABASE_URL", "")
+    if not db_url.startswith("postgres"):
+        items.append((
+            "Live PostgreSQL / Supabase Connection",
+            "SKIPPED",
+            "Local dev uses SQLite (data/clubdocs.db). Live PostgreSQL tests are skipped.",
+        ))
+    else:
+        items.append((
+            "Live PostgreSQL / Supabase Connection",
+            "ACTIVE",
+            "PostgreSQL DATABASE_URL is configured.",
+        ))
+
+    # 2. Live Gemini AI Online Test Suite
+    run_live_ai = os.environ.get("RUN_LIVE_AI_TESTS", "0").lower() in ("1", "true")
+    if not run_live_ai:
+        items.append((
+            "Live Gemini Online Test Suite",
+            "SKIPPED",
+            "RUN_LIVE_AI_TESTS is disabled to avoid quota exhaustion. Automated tests use deterministic mocks.",
+        ))
+    else:
+        items.append((
+            "Live Gemini Online Test Suite",
+            "ACTIVE",
+            "RUN_LIVE_AI_TESTS is enabled.",
+        ))
+    return items
+
+
 def main() -> int:
     print(f"\n{BOLD}{BLUE}========================================================================{RESET}")
     print(f"{BOLD}{BLUE}        SVNIT ClubDocs System Health & Readiness Doctor                 {RESET}")
@@ -411,6 +446,13 @@ def main() -> int:
                 for line in c.fix_instruction.splitlines():
                     print(f"         {line}")
             print()
+
+    optional = check_optional_services()
+    print(f"{BOLD}Optional Services & Test Skips:{RESET}")
+    for name, status, reason in optional:
+        tag = f"{YELLOW}[{status}]{RESET}" if status == "SKIPPED" else f"{GREEN}[{status}]{RESET}"
+        print(f"  {tag} {BOLD}{name}{RESET}: {reason}")
+    print()
 
     print(f"{BOLD}Summary:{RESET} Total checks: {len(checks)} | Passed: {len(checks) - failed_count} | Failed: {failed_count}")
     if failed_count == 0:

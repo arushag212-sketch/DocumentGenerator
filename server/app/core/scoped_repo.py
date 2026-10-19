@@ -76,16 +76,24 @@ class ScopedRepository(Generic[T]):
         )
         return self.db.scalar(stmt) or 0
 
-    def create(self, **kwargs: Any) -> T:
+    def create(self, *, commit: bool = False, **kwargs: Any) -> T:
         """Create a new entity, guaranteeing club_id is set to this repository's club_id."""
         kwargs["club_id"] = self.club_id
         entity = self.model_cls(**kwargs)
         self.db.add(entity)
-        self.db.commit()
+        # Repositories participate in the caller's transaction by default.  A
+        # commit here can persist half of a request before a later validation or
+        # render step fails (and makes audit rows impossible to roll back with
+        # the operation they describe).  Callers that explicitly need an early
+        # commit can opt in, but normal request code should commit once at the
+        # end of the unit of work.
+        self.db.flush()
+        if commit:
+            self.db.commit()
         self.db.refresh(entity)
         return entity
 
-    def update(self, entity_id: str, **kwargs: Any) -> Optional[T]:
+    def update(self, entity_id: str, *, commit: bool = False, **kwargs: Any) -> Optional[T]:
         """Update an entity only if it belongs to this club_id."""
         entity = self.get(entity_id)
         if not entity:
@@ -95,17 +103,21 @@ class ScopedRepository(Generic[T]):
         for key, value in kwargs.items():
             if hasattr(entity, key):
                 setattr(entity, key, value)
-        self.db.commit()
+        self.db.flush()
+        if commit:
+            self.db.commit()
         self.db.refresh(entity)
         return entity
 
-    def delete(self, entity_id: str) -> bool:
+    def delete(self, entity_id: str, *, commit: bool = False) -> bool:
         """Delete an entity only if it belongs to this club_id."""
         entity = self.get(entity_id)
         if not entity:
             return False
         self.db.delete(entity)
-        self.db.commit()
+        self.db.flush()
+        if commit:
+            self.db.commit()
         return True
 
 

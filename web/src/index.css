@@ -136,3 +136,107 @@ body {
   background-color: #f8fafc;
 }
 
+/* Editor image/logo blocks */
+.ProseMirror figure.image-block {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-height: 3.75rem;
+  margin: 1rem 0;
+  padding: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.625rem;
+  box-sizing: border-box;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.ProseMirror figure.image-block--left {
+  align-items: flex-start;
+}
+
+.ProseMirror figure.image-block--right {
+  align-items: flex-end;
+}
+
+.ProseMirror figure.image-block--placeholder {
+  border: 1px dashed #7dd3fc;
+  background: linear-gradient(135deg, #f0f9ff, #f8fafc);
+}
+
+.ProseMirror figure.image-block--placeholder:hover,
+.ProseMirror figure.image-block.ProseMirror-selectednode {
+  border-color: #2563eb;
+  background-color: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35);
+}
+
+.ProseMirror .image-block__img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.35rem;
+}
+
+.ProseMirror .image-block__placeholder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem 0.5rem;
+  width: min(100%, 31rem);
+  min-height: 3rem;
+  padding: 0.7rem 1rem;
+  color: #075985;
+  text-align: center;
+}
+
+.ProseMirror .image-block__placeholder-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid #7dd3fc;
+  border-radius: 0.4rem;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.ProseMirror .image-block__placeholder-copy {
+  flex-basis: 100%;
+  color: #64748b;
+  font-size: 0.68rem;
+  line-height: 1.3;
+}
+
+.ProseMirror .image-block__caption {
+  max-width: 100%;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-style: italic;
+  text-align: center;
+}
+
+.template-editor-drop-indicator {
+  position: absolute;
+  z-index: 15;
+  height: 3px;
+  pointer-events: none;
+  border-radius: 9999px;
+  background: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(199, 210, 254, 0.7);
+}
+
+.template-editor-assistant {
+  min-height: 14rem;
+}
+
+.template-editor-image-controls input:focus,
+.template-editor-image-controls select:focus {
+  box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.45);
+}

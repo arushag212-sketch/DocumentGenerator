@@ -11,14 +11,15 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import uuid
 from pathlib import Path
+from typing import Optional
 
 import yaml
 from server.app.core import database as db_core
 from server.app.core.database import Base
 from server.app.core.security import get_password_hash
+from server.app.core.storage import LocalDiskStorage, get_storage
 from server.app.models import (
     Asset,
     Club,
@@ -45,6 +46,8 @@ def compute_sha256(file_path: Path) -> str:
 def seed(clean: bool = False, demo_users: Optional[bool] = None):
     is_production = os.environ.get("ENVIRONMENT", "").strip().lower() == "production"
     if is_production:
+        if clean:
+            raise RuntimeError("Refusing destructive seed reset when ENVIRONMENT=production")
         if demo_users is True:
             raise RuntimeError("Refusing to create demo users, demo passwords or platform admin account when ENVIRONMENT=production")
         demo_users = False
@@ -53,14 +56,35 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
             demo_users = True
 
     if clean:
-        Base.metadata.drop_all(bind=db_core.engine)
-    Base.metadata.create_all(bind=db_core.engine)
+        # Explicit local reset remains available for development, but is never
+        # inferred by a bare startup invocation.
+        import sqlalchemy as sa
+        with db_core.engine.connect() as conn:
+            conn.execute(sa.text("PRAGMA foreign_keys = OFF;"))
+            inspector = sa.inspect(conn)
+            for tbl in inspector.get_table_names():
+                conn.execute(sa.text(f"DROP TABLE IF EXISTS {tbl}"))
+            conn.execute(sa.text("PRAGMA foreign_keys = ON;"))
+            conn.commit()
+        from server.scripts.migrate import run_migrations
+        run_migrations()
+    elif os.environ.get("SEED_BOOTSTRAP_SCHEMA", "false").lower() in ("1", "true", "yes"):
+        from server.scripts.migrate import run_migrations
+        run_migrations()
     db = db_core.SessionLocal()
 
-    storage_assets_dir = Path("storage/assets")
-    storage_templates_dir = Path("storage/templates")
-    storage_assets_dir.mkdir(parents=True, exist_ok=True)
-    storage_templates_dir.mkdir(parents=True, exist_ok=True)
+    project_root = Path(__file__).resolve().parents[2]
+    active_storage = get_storage()
+    storage_assets_dir = (
+        active_storage.base_dir / "assets" if isinstance(active_storage, LocalDiskStorage) else None
+    )
+    storage_templates_dir = (
+        active_storage.base_dir / "templates" if isinstance(active_storage, LocalDiskStorage) else None
+    )
+    if storage_assets_dir is not None:
+        storage_assets_dir.mkdir(parents=True, exist_ok=True)
+        assert storage_templates_dir is not None
+        storage_templates_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Starting database seed (production={is_production}, demo_users={demo_users})...")
 
@@ -78,15 +102,23 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
 
     asset_records = {}
     for rel_path, mime, key_alias in source_assets:
-        src = Path(rel_path)
+        src = project_root / rel_path
         if not src.exists():
             continue
-        dest = storage_assets_dir / src.name
-        shutil.copy2(src, dest)
-        file_hash = compute_sha256(dest)
-        file_size = dest.stat().st_size
+        source_bytes = src.read_bytes()
+        file_hash = hashlib.sha256(source_bytes).hexdigest()
+        file_size = len(source_bytes)
+        storage_key = active_storage.save(f"assets/{src.name}", source_bytes)
+        if isinstance(active_storage, LocalDiskStorage):
+            storage_key = str(active_storage.local_path(storage_key))
 
-        asset = db.query(Asset).filter(Asset.filename == src.name).first()
+        # A club-owned upload must never be silently reclassified as a system
+        # asset just because it has the same filename as a bundled asset.
+        asset = db.query(Asset).filter(
+            Asset.filename == src.name,
+            Asset.is_system.is_(True),
+            Asset.club_id.is_(None),
+        ).first()
         if not asset:
             asset = Asset(
                 club_id=None,  # System asset
@@ -95,11 +127,19 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
                 mime=mime,
                 sha256=file_hash,
                 size=file_size,
-                storage_key=str(dest),
+                storage_key=storage_key,
                 uploaded_by=None,
                 is_system=True,
             )
             db.add(asset)
+            db.flush()
+        else:
+            asset.kind = "logo" if "img" in src.name else "letterhead"
+            asset.mime = mime
+            asset.sha256 = file_hash
+            asset.size = file_size
+            asset.storage_key = storage_key
+            asset.is_system = True
             db.flush()
         asset_records[key_alias] = asset
     print(f"-> Seeded {len(asset_records)} system assets")
@@ -109,7 +149,9 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
     acm_logo_id = asset_records.get("acm_logo").id if asset_records.get("acm_logo") else None
 
     # SVNIT Bilingual Letterhead
-    lh_svnit = db.query(Letterhead).filter(Letterhead.name == "SVNIT Bilingual Letterhead").first()
+    lh_svnit = db.query(Letterhead).filter(
+        Letterhead.name == "SVNIT Bilingual Letterhead", Letterhead.club_id.is_(None)
+    ).first()
     if not lh_svnit:
         lh_svnit = Letterhead(
             club_id=None,
@@ -127,7 +169,9 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
         db.flush()
 
     # ACM Letterhead
-    lh_acm = db.query(Letterhead).filter(Letterhead.name == "ACM Standard Letterhead").first()
+    lh_acm = db.query(Letterhead).filter(
+        Letterhead.name == "ACM Standard Letterhead", Letterhead.club_id.is_(None)
+    ).first()
     if not lh_acm:
         lh_acm = Letterhead(
             club_id=None,
@@ -156,7 +200,7 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
     ]
 
     for slug, name, desc, stage in system_template_slugs:
-        src_dir = Path("templates") / slug
+        src_dir = project_root / "templates" / slug
         schema_path = src_dir / "schema.yaml"
         docx_path = src_dir / "template.docx"
 
@@ -166,10 +210,18 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
         with open(schema_path, "r", encoding="utf-8") as f:
             schema_yaml_str = f.read()
 
-        dest_docx = storage_templates_dir / f"{slug}_v1.docx"
-        shutil.copy2(docx_path, dest_docx)
+        template_key = active_storage.save(f"templates/{slug}_v1.docx", docx_path.read_bytes())
+        dest_docx = (
+            str(active_storage.local_path(template_key))
+            if isinstance(active_storage, LocalDiskStorage)
+            else template_key
+        )
 
-        tmpl = db.query(Template).filter(Template.slug == slug).first()
+        tmpl = db.query(Template).filter(
+            Template.slug == slug,
+            Template.is_system.is_(True),
+            Template.club_id.is_(None),
+        ).first()
         if not tmpl:
             tmpl = Template(
                 club_id=None,
@@ -193,7 +245,7 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
                 template_id=tmpl.id,
                 version_no=1,
                 schema_yaml=schema_yaml_str,
-                docx_storage_key=str(dest_docx),
+                docx_storage_key=dest_docx,
                 created_by=None,
                 change_note="Initial system import from templates/",
             )
@@ -203,8 +255,17 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
             db.flush()
     print(f"-> Seeded {len(system_template_slugs)} system templates and versions")
 
+    # Production startup may install/update immutable system resources, but it
+    # must never create the demo club, demo people, sample credentials, or
+    # dummy clubs.  Existing production data is intentionally left untouched.
+    if is_production:
+        db.commit()
+        db.close()
+        print("Production seed completed: system resources only; demo data skipped.")
+        return
+
     # 5. Demo Club "ACM"
-    with open("config/club_config.yaml", "r", encoding="utf-8") as f:
+    with open(project_root / "config/club_config.yaml", "r", encoding="utf-8") as f:
         cfg_data = yaml.safe_load(f)
 
     club = db.query(Club).filter(Club.slug == "acm").first()
@@ -538,9 +599,16 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
 
 if __name__ == "__main__":
     import sys
-    is_clean = "--clean" in sys.argv or "--reset" in sys.argv or len(sys.argv) == 1
+    # Bare `python -m server.scripts.seed` is an idempotent seed.  Never infer
+    # a destructive reset from the absence of CLI arguments (docker startup
+    # invokes the module without arguments).
+    is_clean = "--clean" in sys.argv or "--reset" in sys.argv
     is_prod = os.environ.get("ENVIRONMENT", "").strip().lower() == "production"
     has_demo_flag = "--demo-users" in sys.argv
+    no_demo_flag = "--no-demo-users" in sys.argv
     if is_prod and has_demo_flag:
         sys.exit("Error: Refusing to create demo users, demo passwords or platform admin account when ENVIRONMENT=production")
-    seed(clean=is_clean, demo_users=False if is_prod else True)
+    if has_demo_flag and no_demo_flag:
+        sys.exit("Error: --demo-users and --no-demo-users cannot be used together")
+    requested_demo_users = False if is_prod or no_demo_flag else True
+    seed(clean=is_clean, demo_users=requested_demo_users)

@@ -48,6 +48,7 @@ from docgen.sources import DatabaseTemplateSource, build_club_config_from_db
 from server.app.core.audit import log_audit
 from server.app.core.numbering_service import reserve_number_for_document
 from server.app.core.doc_retention import prune_document_versions
+from server.app.core.storage import require_local_storage
 from server.app.models import (
     Club,
     Document,
@@ -80,6 +81,12 @@ class BatchGenerator:
         event_title: Optional[str] = None,
         db: Session = None,
     ) -> dict[str, Any]:
+        try:
+            local_storage = require_local_storage()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+
+        storage_root = local_storage.base_dir
         club = db.query(Club).filter(Club.id == club_id).first()
         if not club:
             raise HTTPException(status_code=404, detail=f"Club '{club_id}' not found.")
@@ -196,6 +203,11 @@ class BatchGenerator:
                 .order_by(TemplateVersion.version_no.desc())
                 .first()
             )
+            if not tmpl_ver:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"code": "TEMPLATE_VERSION_NOT_FOUND", "message": f"Template '{tmpl_id}' has no version."},
+                )
 
             schema_dict: dict[str, Any] = {}
             if tmpl_ver and tmpl_ver.schema_yaml:
@@ -388,7 +400,7 @@ class BatchGenerator:
             event_data["submitted_to"] = "Dean (Student Welfare), SVNIT Surat"
 
         batch_id = str(uuid.uuid4())
-        batch_dir = Path("storage/cache/batches") / batch_id
+        batch_dir = storage_root / "cache" / "batches" / batch_id
         batch_dir.mkdir(parents=True, exist_ok=True)
 
         generated_docs: list[dict[str, Any]] = []
@@ -580,7 +592,7 @@ class BatchGenerator:
                     db.flush()
 
                 # Render via Docgen Renderer
-                out_dir = Path("storage/documents") / doc_record.id / "v1"
+                out_dir = storage_root / "documents" / doc_record.id / "v1"
                 out_dir.mkdir(parents=True, exist_ok=True)
 
                 event_rec = EventRecord.from_flat_dict(task_ctx)
@@ -609,6 +621,7 @@ class BatchGenerator:
                 ver_record = DocumentVersion(
                     id=str(uuid.uuid4()),
                     document_id=doc_record.id,
+                    template_version_id=tmpl_ver.id,
                     version_no=1,
                     record_snapshot=json.loads(json.dumps({**event_rec.flat_dict(), **task_ctx}, default=str)),
                     overrides={},

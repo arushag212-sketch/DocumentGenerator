@@ -26,6 +26,8 @@ def rasterize_pdf_first_page(pdf_path: Path, dpi: int = 150) -> Image.Image:
 
 def create_side_by_side(sample_pdf: Path, rendered_pdf: Path, output_png: Path):
     """Combine first page of sample PDF and rendered PDF side-by-side."""
+    if not sample_pdf.exists() or not rendered_pdf.exists():
+        return
     output_png.parent.mkdir(parents=True, exist_ok=True)
     img_sample = rasterize_pdf_first_page(sample_pdf)
     img_rendered = rasterize_pdf_first_page(rendered_pdf)

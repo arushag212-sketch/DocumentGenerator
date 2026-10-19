@@ -63,14 +63,47 @@ class LocalDiskStorage(Storage):
     """Local filesystem storage writing to a root directory (default 'storage/')."""
 
     def __init__(self, base_dir: Optional[Path | str] = None):
-        self.base_dir = Path(base_dir or "storage").resolve()
+        self.base_dir = Path(base_dir or os.environ.get("STORAGE_LOCAL_ROOT", "storage")).resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def normalize_key(self, path: str) -> str:
+        """Return a storage-relative key and accept keys from older releases.
+
+        Older database rows stored ``storage/foo`` (and occasionally an
+        absolute path), while the storage abstraction returns ``foo``.  Keep
+        reads backward-compatible but write only canonical relative keys.
+        """
+
+        raw = str(path or "")
+        candidate = Path(raw)
+        if candidate.is_absolute():
+            try:
+                return candidate.resolve().relative_to(self.base_dir).as_posix()
+            except ValueError:
+                # Let _resolve_safe_path reject absolute paths outside the
+                # configured root instead of silently accepting them.
+                return raw
+        clean = candidate.as_posix().lstrip("/\\")
+        base_name = self.base_dir.name
+        if clean == base_name:
+            return ""
+        if clean.startswith(f"{base_name}/"):
+            clean = clean[len(base_name) + 1 :]
+        # The default database used the literal ``storage/`` prefix.
+        if clean.startswith("storage/"):
+            clean = clean[len("storage/") :]
+        return clean
+
+    def local_path(self, path: str) -> Path:
+        """Resolve a key to a local path for response/renderer integrations."""
+
+        return self._resolve_safe_path(path)
 
     def _resolve_safe_path(self, path: str) -> Path:
         """Ensure no directory traversal escaping base_dir."""
-        clean = Path(path).as_posix().lstrip("/\\")
+        clean = self.normalize_key(path)
         resolved = (self.base_dir / clean).resolve()
-        if not str(resolved).startswith(str(self.base_dir)):
+        if resolved != self.base_dir and self.base_dir not in resolved.parents:
             raise ValueError(f"Security violation: path traversal detected '{path}'")
         return resolved
 
@@ -140,7 +173,7 @@ class LocalDiskStorage(Storage):
         return freed_bytes
 
     def public_url(self, path: str) -> str:
-        clean = Path(path).as_posix().lstrip("/\\")
+        clean = self.normalize_key(path)
         return f"/storage/{clean}"
 
 
@@ -181,22 +214,32 @@ class S3Storage(Storage):
                 logger.warning("boto3 client initialization error: %s", e)
                 self.s3_client = None
 
+    @staticmethod
+    def _clean_key(path: str) -> str:
+        """Normalize legacy local-style keys and reject traversal keys."""
+        clean = Path(str(path or "")).as_posix().lstrip("/\\")
+        if clean.startswith("storage/"):
+            clean = clean[len("storage/") :]
+        if not clean or any(part in ("", ".", "..") for part in clean.split("/")):
+            raise ValueError(f"Invalid storage key '{path}'")
+        return clean
+
     def save(self, path: str, data: bytes) -> str:
-        clean_key = Path(path).as_posix().lstrip("/\\")
+        clean_key = self._clean_key(path)
         if self.s3_client is None:
             raise RuntimeError("S3 client is not available. Please verify boto3 and S3 credentials.")
         self.s3_client.put_object(Bucket=self.bucket, Key=clean_key, Body=data)
         return clean_key
 
     def load(self, path: str) -> bytes:
-        clean_key = Path(path).as_posix().lstrip("/\\")
+        clean_key = self._clean_key(path)
         if self.s3_client is None:
             raise RuntimeError("S3 client is not available.")
         resp = self.s3_client.get_object(Bucket=self.bucket, Key=clean_key)
         return resp["Body"].read()
 
     def delete(self, path: str) -> bool:
-        clean_key = Path(path).as_posix().lstrip("/\\")
+        clean_key = self._clean_key(path)
         if self.s3_client is None:
             return False
         try:
@@ -207,7 +250,7 @@ class S3Storage(Storage):
             return False
 
     def exists(self, path: str) -> bool:
-        clean_key = Path(path).as_posix().lstrip("/\\")
+        clean_key = self._clean_key(path)
         if self.s3_client is None:
             return False
         try:
@@ -219,7 +262,7 @@ class S3Storage(Storage):
     def save_content_addressed(self, prefix: str, data: bytes, ext: str = "docx") -> Tuple[str, str]:
         sha = hashlib.sha256(data).hexdigest()
         clean_ext = ext.lstrip(".")
-        clean_prefix = Path(prefix).as_posix().lstrip("/\\")
+        clean_prefix = self._clean_key(prefix)
         clean_key = f"{clean_prefix}/sha256_{sha}.{clean_ext}"
         if not self.exists(clean_key):
             self.save(clean_key, data)
@@ -228,7 +271,7 @@ class S3Storage(Storage):
     def cleanup_expired(self, subfolder: str, max_age_seconds: float) -> int:
         if self.s3_client is None:
             return 0
-        clean_prefix = Path(subfolder).as_posix().lstrip("/\\")
+        clean_prefix = self._clean_key(subfolder)
         cutoff = time.time() - max_age_seconds
         freed = 0
         try:
@@ -244,7 +287,7 @@ class S3Storage(Storage):
         return freed
 
     def public_url(self, path: str) -> str:
-        clean_key = Path(path).as_posix().lstrip("/\\")
+        clean_key = self._clean_key(path)
         if self.public_base_url:
             return f"{self.public_base_url.rstrip('/')}/{clean_key}"
         if self.endpoint_url:
@@ -263,8 +306,12 @@ def get_storage() -> Storage:
     backend = os.environ.get("STORAGE_BACKEND", "local").lower()
     if backend in ("s3", "cloud"):
         _active_storage = S3Storage()
-    else:
+    elif backend in ("local", "filesystem", "disk"):
         _active_storage = LocalDiskStorage()
+    else:
+        raise RuntimeError(
+            f"Unsupported STORAGE_BACKEND={backend!r}; choose 'local' or 's3'."
+        )
 
     return _active_storage
 
@@ -280,3 +327,15 @@ class StorageProxy:
 
 
 storage = StorageProxy()
+
+
+def require_local_storage() -> LocalDiskStorage:
+    """Return the local backend or fail explicitly for local-only workflows."""
+
+    active = get_storage()
+    if not isinstance(active, LocalDiskStorage):
+        raise RuntimeError(
+            "This document-rendering operation requires STORAGE_BACKEND=local. "
+            "Configure a local storage root or use an S3-aware worker before enabling S3."
+        )
+    return active

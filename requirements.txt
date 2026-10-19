@@ -1,40 +1,39 @@
 # Official Dependencies for SVNIT ClubDocs (DocumentGenerator)
-# Python >= 3.11
+# Python >= 3.11 (Pinned exact versions for reproducible builds)
 
 # Core Web Server & APIs
-fastapi>=0.110.0
-uvicorn[standard]>=0.29.0
-python-multipart>=0.0.9
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+pydantic==2.14.1
+pydantic-core==2.50.1
 
 # Database & Migrations
-SQLAlchemy>=2.0.0
-alembic>=1.13.0
-psycopg2-binary>=2.9.9
-psycopg[binary]>=3.3.6
-
+SQLAlchemy==2.1.4
+alembic==1.20.0
+psycopg2-binary==2.9.13
+psycopg[binary]==3.3.6
 
 # Security, Hashing & Auth
-python-jose[cryptography]>=3.3.0
-passlib[argon2]>=1.7.4
-argon2-cffi>=23.1.0
-cryptography>=42.0.0
+python-jose[cryptography]==3.5.0
+passlib[argon2]==1.7.4
+argon2-cffi==25.1.0
+cryptography==50.0.2
 
 # Document Generation & Word/PDF processing
-docxtpl>=0.16.0
-python-docx>=1.1.0
-PyMuPDF>=1.24.0
-Pillow>=10.0.0
-num2words>=0.5.0
-dateparser>=1.2.0
-PyYAML>=6.0.0
+docxtpl==0.20.2
+python-docx==1.2.0
+PyMuPDF==1.28.2
+Pillow==11.3.0
+num2words==0.5.14
+dateparser==1.4.3
+PyYAML==6.0.3
 
 # Utilities & Networking
-httpx>=0.28.0
-anyio>=4.0.0
+httpx==0.28.1
+anyio==4.15.1
 
 # Testing & Browser Automation
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
-selenium>=4.20.0
+pytest==9.1.1
+pytest-timeout==2.4.0
+selenium==4.42.0

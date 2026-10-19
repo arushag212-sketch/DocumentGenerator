@@ -141,6 +141,18 @@ All tests execute strictly against an isolated database; `data/clubdocs.db` rema
 
 ---
 
+## 📦 How to Share Your Project
+
+To generate a clean, safe distribution zip that strictly excludes all secrets (`.env`), virtual environments (`.venv`), databases (`data/*.db*`), storage files, sample forms, and large dependencies (`node_modules`), run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/make_share_zip.ps1
+```
+
+This generates `clubdocs_share.zip` in the root directory (typically under 10 MB) safe for public transfer and code reviews.
+
+---
+
 ## 📚 Documentation Links
 
 - [AI Setup & Gemini Configuration Guide](docs/AI_SETUP.md)

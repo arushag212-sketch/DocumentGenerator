@@ -271,12 +271,15 @@ def update_event(
         merged.update(payload.record)
         ev.record = merged
 
-    db.commit()
-    db.refresh(ev)
-
     docs = doc_repo.all(Document.event_id == ev.id)
 
     if update_documents and docs:
+        from server.app.core.storage import require_local_storage
+        try:
+            local_storage = require_local_storage()
+        except RuntimeError as exc:
+            db.rollback()
+            raise HTTPException(status_code=503, detail=str(exc))
         db_config = build_club_config_from_db(db, ctx.club.slug)
         db_source = DatabaseTemplateSource(db)
 
@@ -284,6 +287,12 @@ def update_event(
             tmpl = db.query(Template).filter(Template.id == d.template_id).first()
             if not tmpl:
                 continue
+            tmpl_ver = (
+                db.query(TemplateVersion)
+                .filter(TemplateVersion.template_id == tmpl.id)
+                .order_by(TemplateVersion.version_no.desc())
+                .first()
+            )
 
             # Fetch latest version to increment
             latest_v = (
@@ -304,7 +313,7 @@ def update_event(
                 merged_snapshot["event_name"] = payload.title
 
             event_rec = EventRecord.from_flat_dict(merged_snapshot)
-            out_dir = Path("storage/documents") / d.id / f"v{new_v_no}"
+            out_dir = local_storage.base_dir / "documents" / d.id / f"v{new_v_no}"
             out_dir.mkdir(parents=True, exist_ok=True)
 
             renderer = Renderer(config=db_config, template_source=db_source, outputs_dir=out_dir)
@@ -321,6 +330,7 @@ def update_event(
                 new_ver = DocumentVersion(
                     id=str(uuid.uuid4()),
                     document_id=d.id,
+                    template_version_id=tmpl_ver.id if tmpl_ver else d.template_version_id,
                     version_no=new_v_no,
                     record_snapshot=merged_snapshot,
                     overrides={},
@@ -336,9 +346,12 @@ def update_event(
                 import traceback
                 print(f"[ERROR] Re-rendering document {d.id} failed: {e}")
                 traceback.print_exc()
+                db.rollback()
                 raise HTTPException(status_code=500, detail=f"Failed to re-render document {d.id}: {str(e)}")
 
-        db.commit()
+    # Event changes, cascaded versions, and their audit rows commit together.
+    db.commit()
+    db.refresh(ev)
 
     doc_summaries = []
     for d in docs:
@@ -437,4 +450,3 @@ def generate_event_batch(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-

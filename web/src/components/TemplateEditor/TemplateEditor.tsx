@@ -3,12 +3,14 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
 import Underline from '@tiptap/extension-underline';
+import { NodeSelection } from '@tiptap/pm/state';
 import {
   ArrowLeft, Save, Eye, CheckCircle2, AlertCircle, RefreshCw,
   Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon,
   AlignLeft, AlignCenter, AlignRight, AlignJustify, List, ListOrdered,
   Plus, Table as TableIcon, FileText, Check, X, Sparkles,
-  Rows, Columns, SplitSquareVertical, Tag
+  Rows, Columns, SplitSquareVertical, Tag, Image as ImageIcon, ImagePlus,
+  Bot, Trash2, GripVertical
 } from 'lucide-react';
 import { api } from '../../api/client';
 import {
@@ -18,10 +20,12 @@ import {
   CustomTableHeader,
   AiSuggestedBlock,
   FieldChip,
+  ImageBlock,
   PageBreak,
   insertInfoTable,
   insertRepeatingTable,
   insertSignatureGrid,
+  insertImageBlock,
   insertFieldChip,
   migrateTipTapContent,
 } from './extensions';
@@ -45,6 +49,27 @@ interface TemplateEditorProps {
   clubId: string;
   templateId: string;
   onBack: () => void;
+  /** Optional integration seam for a future assistant/chat panel. */
+  assistantSlot?: React.ReactNode | ((context: TemplateAssistantContext) => React.ReactNode);
+  /** Logo options can be supplied by an embedding page; the editor also loads club assets by default. */
+  clubLogoOptions?: ClubLogoOption[];
+}
+
+export interface ClubLogoOption {
+  id: string;
+  name: string;
+  url: string;
+  alt?: string;
+  kind?: string;
+}
+
+export interface TemplateAssistantContext {
+  clubId: string;
+  templateId: string;
+  editor: any;
+  template: any;
+  fields: TemplateField[];
+  insertField: (fieldKey: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,14 +119,80 @@ class EditorErrorBoundary extends React.Component<{ children: React.ReactNode },
   }
 }
 
+function findNodePosition(view: any, pos: number, nodeName: string): number | null {
+  const doc = view?.state?.doc;
+  if (!doc || typeof pos !== 'number') return null;
+
+  for (const candidatePos of [pos, pos - 1]) {
+    if (candidatePos >= 0) {
+      const candidate = doc.nodeAt(candidatePos);
+      if (candidate?.type?.name === nodeName) return candidatePos;
+    }
+  }
+
+  try {
+    const resolved = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)));
+    for (let depth = resolved.depth; depth > 0; depth -= 1) {
+      if (resolved.node(depth).type.name === nodeName) return resolved.before(depth);
+    }
+  } catch {
+    // A stale click position can occur while a transaction is being applied.
+  }
+  return null;
+}
+
+/** Resolve the pointer to a ProseMirror position, keeping block drops outside table cells. */
+function getDropPosition(editor: any, event: React.DragEvent<HTMLElement>): number | null {
+  if (!editor?.view) return null;
+  const coords = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+  if (!coords || typeof coords.pos !== 'number') return null;
+
+  try {
+    const resolved = editor.state.doc.resolve(coords.pos);
+    const topIndex = resolved.index(0);
+    const topNode = editor.state.doc.child(topIndex);
+    const blockNodeNames = new Set(['table', 'imageBlock', 'pageBreak']);
+    let ancestorIsBlock = false;
+    for (let depth = resolved.depth; depth > 0; depth -= 1) {
+      if (blockNodeNames.has(resolved.node(depth).type.name)) {
+        ancestorIsBlock = true;
+        break;
+      }
+    }
+
+    if (ancestorIsBlock && topNode) {
+      let topStart = 0;
+      for (let index = 0; index < topIndex; index += 1) {
+        topStart += editor.state.doc.child(index).nodeSize;
+      }
+      const dom = editor.view.nodeDOM(topStart) as HTMLElement | null;
+      const rect = dom?.getBoundingClientRect?.();
+      if (rect) {
+        return event.clientY < rect.top + rect.height / 2 ? topStart : topStart + topNode.nodeSize;
+      }
+      return topStart + topNode.nodeSize;
+    }
+  } catch {
+    // Fall back to TipTap's resolved coordinate when the document changed.
+  }
+  return coords.pos;
+}
+
 // ---------------------------------------------------------------------------
 // Main Template Editor Component
 // ---------------------------------------------------------------------------
 
-export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, templateId, onBack }) => {
+export const TemplateEditor: React.FC<TemplateEditorProps> = ({
+  clubId,
+  templateId,
+  onBack,
+  assistantSlot,
+  clubLogoOptions: providedClubLogoOptions,
+}) => {
   const [template, setTemplate] = useState<any>(null);
   const [fields, setFields] = useState<TemplateField[]>([]);
   const [letterheads, setLetterheads] = useState<any[]>([]);
+  const [clubLogoOptions, setClubLogoOptions] = useState<ClubLogoOption[]>(providedClubLogoOptions || []);
   const [selectedLetterheadId, setSelectedLetterheadId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -129,6 +220,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
   const [chipPopover, setChipPopover] = useState<{
     top: number;
     left: number;
+    position: number;
     fieldName: string;
     label: string;
     fieldType: string;
@@ -142,9 +234,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
   const [unreviewedModal, setUnreviewedModal] = useState<any[] | null>(null);
   const [reviewingAi, setReviewingAi] = useState(false);
   const [dragOverCanvas, setDragOverCanvas] = useState(false);
+  const [dropIndicator, setDropIndicator] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [selectedImageBlock, setSelectedImageBlock] = useState<{
+    position: number;
+    attrs: Record<string, any>;
+  } | null>(null);
 
   const autosaveTimerRef = useRef<any>(null);
   const contentLoadedRef = useRef<boolean>(false);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
 
   // TipTap Editor instance
   const editor = useEditor({
@@ -164,26 +262,44 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
       CustomTableHeader,
       AiSuggestedBlock,
       FieldChip,
+      ImageBlock,
       PageBreak,
     ],
     editorProps: {
       handleClick: (view, pos, event) => {
-        const target = (event.target as HTMLElement).closest('.field-chip');
-        if (target) {
-          const rect = target.getBoundingClientRect();
-          const node = view.state.doc.nodeAt(pos) || (pos > 0 ? view.state.doc.nodeAt(pos - 1) : null);
-          const attrs = node?.type.name === 'fieldChip' ? node.attrs : null;
-          const fieldName = attrs?.fieldName || target.getAttribute('data-field-name') || '';
-          const label = attrs?.label || target.getAttribute('data-label') || fieldName;
-          const fieldType = attrs?.fieldType || target.getAttribute('data-field-type') || 'text';
-          const ask = attrs?.ask || target.getAttribute('data-ask') || `Please provide ${label}`;
-          const importance = (attrs?.importance || target.getAttribute('data-importance') || 'optional') as 'essential' | 'optional';
-          const required = importance === 'essential' || attrs?.required || target.getAttribute('data-required') === 'true';
-          const sensitive = attrs?.sensitive || target.getAttribute('data-sensitive') === 'true';
+        const target = event.target as HTMLElement;
+        const imageTarget = target.closest('.image-block');
+        const imagePosition = imageTarget ? findNodePosition(view, pos, 'imageBlock') : null;
+        if (imagePosition !== null) {
+          const imageNode = view.state.doc.nodeAt(imagePosition);
+          if (imageNode) {
+            view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, imagePosition)));
+            setSelectedImageBlock({ position: imagePosition, attrs: { ...imageNode.attrs } });
+            setChipPopover(null);
+            setBubblePos(null);
+            return true;
+          }
+        }
 
+        const fieldTarget = target.closest('.field-chip');
+        const fieldPosition = fieldTarget ? findNodePosition(view, pos, 'fieldChip') : null;
+        if (fieldPosition !== null) {
+          const rect = (fieldTarget || target).getBoundingClientRect();
+          const node = view.state.doc.nodeAt(fieldPosition);
+          const attrs = node?.type.name === 'fieldChip' ? node.attrs : {};
+          const fieldName = attrs.fieldName || fieldTarget?.getAttribute('data-field-name') || '';
+          const label = attrs.label || fieldTarget?.getAttribute('data-label') || fieldName;
+          const fieldType = attrs.fieldType || fieldTarget?.getAttribute('data-field-type') || 'text';
+          const ask = attrs.ask || fieldTarget?.getAttribute('data-ask') || `Please provide ${label}`;
+          const importance = (attrs.importance || fieldTarget?.getAttribute('data-importance') || 'optional') as 'essential' | 'optional';
+          const required = importance === 'essential' || attrs.required || fieldTarget?.getAttribute('data-required') === 'true';
+          const sensitive = attrs.sensitive || fieldTarget?.getAttribute('data-sensitive') === 'true';
+
+          view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, fieldPosition)));
           setChipPopover({
             top: Math.min(rect.bottom + 8, window.innerHeight - 320),
             left: Math.min(Math.max(rect.left, 20), window.innerWidth - 340),
+            position: fieldPosition,
             fieldName,
             label,
             fieldType,
@@ -192,9 +308,19 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
             required,
             sensitive,
           });
+          setSelectedImageBlock(null);
           return true;
         } else {
           setChipPopover(null);
+          setSelectedImageBlock(null);
+        }
+        return false;
+      },
+      handleKeyDown: (_view, event) => {
+        if (event.key === 'Escape') {
+          setChipPopover(null);
+          setSelectedImageBlock(null);
+          setShowSlashMenu(false);
         }
         return false;
       },
@@ -202,6 +328,19 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
     content: { type: 'doc', content: [] },
     onSelectionUpdate: ({ editor: currentEditor }) => {
       const { selection } = currentEditor.state;
+      if (selection instanceof NodeSelection && selection.node?.type.name === 'imageBlock') {
+        setSelectedImageBlock({ position: selection.from, attrs: { ...selection.node.attrs } });
+        setChipPopover(null);
+        setBubblePos(null);
+        return;
+      }
+      if (selection instanceof NodeSelection && selection.node?.type.name === 'fieldChip') {
+        setBubblePos(null);
+        return;
+      }
+      if (selection instanceof NodeSelection && selection.node?.type.name !== 'fieldChip') {
+        setSelectedImageBlock(null);
+      }
       if (!selection || selection.empty) {
         setBubblePos(null);
         return;
@@ -210,11 +349,14 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
         const coords = currentEditor.view.coordsAtPos(selection.from);
         setBubblePos({
           top: Math.max(coords.top - 44, 10),
-          left: Math.max(coords.left, 20),
+          left: Math.min(Math.max(coords.left, 20), Math.max(20, window.innerWidth - 240)),
         });
       } catch {
         setBubblePos(null);
       }
+    },
+    onBlur: () => {
+      setBubblePos(null);
     },
     onUpdate: ({ editor: currentEditor, transaction }: any) => {
       setSaveStatus('unsaved');
@@ -253,6 +395,43 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
       }
     },
   });
+
+  // Logo assets are intentionally loaded through the existing club-scoped
+  // asset endpoint. Embedders can provide a curated list when they already
+  // have one; an unavailable asset simply leaves a descriptive placeholder.
+  useEffect(() => {
+    let isMounted = true;
+    if (providedClubLogoOptions) {
+      setClubLogoOptions(providedClubLogoOptions);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    api.clubs
+      .getAssets(clubId)
+      .then((assets: any[]) => {
+        if (!isMounted) return;
+        const logoAssets = (assets || [])
+          .filter((asset) => asset?.kind === 'logo' || String(asset?.mime || '').startsWith('image/'))
+          .map((asset) => ({
+            id: String(asset.id),
+            name: asset.filename || 'Club logo',
+            url: asset.url || `/api/v1/assets/${asset.id}/content`,
+            alt: asset.filename || 'Club logo',
+            kind: asset.kind,
+          }));
+        setClubLogoOptions(logoAssets);
+      })
+      .catch(() => {
+        // Asset permissions should not prevent the editor from loading.
+        if (isMounted) setClubLogoOptions([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [clubId, providedClubLogoOptions]);
 
   // Load draft data & letterheads
   useEffect(() => {
@@ -476,14 +655,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
   const handleToggleChipRequired = (newReq: boolean) => {
     if (!chipPopover || !editor) return;
     const newImp = newReq ? 'essential' : 'optional';
+    const tr = editor.state.tr;
     editor.state.doc.descendants((node, pos) => {
       if (node.type.name === 'fieldChip' && node.attrs.fieldName === chipPopover.fieldName) {
-        editor.chain().setNodeSelection(pos).updateAttributes('fieldChip', {
+        tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
           importance: newImp,
           required: newReq,
-        }).run();
+        });
       }
     });
+    editor.view.dispatch(tr);
     setFields((prev) =>
       prev.map((f) =>
         f.key === chipPopover.fieldName
@@ -498,13 +680,16 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
 
   const handleToggleChipSensitive = (newSens: boolean) => {
     if (!chipPopover || !editor) return;
+    const tr = editor.state.tr;
     editor.state.doc.descendants((node, pos) => {
       if (node.type.name === 'fieldChip' && node.attrs.fieldName === chipPopover.fieldName) {
-        editor.chain().setNodeSelection(pos).updateAttributes('fieldChip', {
+        tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
           sensitive: newSens,
-        }).run();
+        });
       }
     });
+    editor.view.dispatch(tr);
     setFields((prev) =>
       prev.map((f) =>
         f.key === chipPopover.fieldName
@@ -515,6 +700,85 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
     setChipPopover((prev) => (prev ? { ...prev, sensitive: newSens } : null));
     setSaveStatus('unsaved');
     triggerAutosave();
+  };
+
+  const handleUpdateChip = (updates: Partial<{ label: string; fieldType: string; ask: string }>) => {
+    if (!chipPopover || !editor) return;
+    const next = { ...chipPopover, ...updates };
+    const tr = editor.state.tr;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'fieldChip' && node.attrs.fieldName === chipPopover.fieldName) {
+        tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
+          ...(updates.label !== undefined ? { label: updates.label } : {}),
+          ...(updates.fieldType !== undefined ? { fieldType: updates.fieldType } : {}),
+          ...(updates.ask !== undefined ? { ask: updates.ask } : {}),
+        });
+      }
+    });
+    editor.view.dispatch(tr);
+    setFields((prev) =>
+      prev.map((field) =>
+        field.key === chipPopover.fieldName
+          ? {
+              ...field,
+              ...(updates.label !== undefined ? { label: updates.label } : {}),
+              ...(updates.fieldType !== undefined ? { type: updates.fieldType } : {}),
+              ...(updates.ask !== undefined ? { ask: updates.ask } : {}),
+            }
+          : field
+      )
+    );
+    setChipPopover(next);
+    setSaveStatus('unsaved');
+    triggerAutosave();
+  };
+
+  const handleDeleteChip = () => {
+    if (!chipPopover || !editor) return;
+    editor.chain().focus().setNodeSelection(chipPopover.position).deleteSelection().run();
+    setChipPopover(null);
+    setSaveStatus('unsaved');
+    triggerAutosave();
+  };
+
+  const updateImageBlock = (updates: Record<string, any>) => {
+    if (!selectedImageBlock || !editor) return;
+    const nextAttrs = { ...selectedImageBlock.attrs, ...updates };
+    editor
+      .chain()
+      .setNodeSelection(selectedImageBlock.position)
+      .updateAttributes('imageBlock', updates)
+      .run();
+    setSelectedImageBlock({ ...selectedImageBlock, attrs: nextAttrs });
+    setSaveStatus('unsaved');
+    triggerAutosave();
+  };
+
+  const selectClubLogo = (assetId: string) => {
+    if (!selectedImageBlock) return;
+    const asset = clubLogoOptions.find((option) => option.id === assetId);
+    if (!assetId || !asset) {
+      updateImageBlock({
+        imageType: 'club-logo',
+        src: '',
+        clubLogoAssetId: null,
+        logoAssetId: null,
+        assetId: null,
+        alt: 'Club logo',
+        placeholderText: 'Choose a club logo from the asset library',
+      });
+      return;
+    }
+    updateImageBlock({
+      imageType: 'club-logo',
+      src: asset.url,
+      clubLogoAssetId: asset.id,
+      logoAssetId: asset.id,
+      assetId: asset.id,
+      alt: asset.alt || asset.name,
+      placeholderText: `Selected logo: ${asset.name}`,
+    });
   };
 
   // Slash command options
@@ -579,6 +843,24 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
         editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).insertContent({ type: 'pageBreak' }).run();
       },
     },
+    {
+      title: 'Club Logo',
+      description: 'Place a selectable club-logo block',
+      icon: <ImageIcon className="w-4 h-4 text-emerald-600" />,
+      action: () => {
+        editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).run();
+        insertImageBlock(editor, { imageType: 'club-logo' });
+      },
+    },
+    {
+      title: 'Image Placeholder',
+      description: 'Reserve space for a document image',
+      icon: <ImagePlus className="w-4 h-4 text-sky-600" />,
+      action: () => {
+        editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).run();
+        insertImageBlock(editor, { imageType: 'image' });
+      },
+    },
   ];
 
   const blockPalette = [
@@ -586,15 +868,65 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
     { id: 'repeatingTable', label: 'Repeating table', description: 'Items, amounts and totals', icon: <Rows className="w-4 h-4 text-blue-600" /> },
     { id: 'signatureGrid', label: 'Signature grid', description: 'Signer blocks and lines', icon: <Columns className="w-4 h-4 text-emerald-600" /> },
     { id: 'pageBreak', label: 'Page break', description: 'Start a new page', icon: <SplitSquareVertical className="w-4 h-4 text-rose-500" /> },
+    { id: 'clubLogo', label: 'Club logo', description: 'Choose a logo from club assets', icon: <ImageIcon className="w-4 h-4 text-emerald-600" /> },
+    { id: 'imageBlock', label: 'Image placeholder', description: 'Reserve a clear image position', icon: <ImagePlus className="w-4 h-4 text-sky-600" /> },
   ];
 
-  const insertDraggedBlock = (blockId: string) => {
-    if (blockId === 'infoTable') insertInfoTable(editor);
-    if (blockId === 'repeatingTable') insertRepeatingTable(editor);
-    if (blockId === 'signatureGrid') insertSignatureGrid(editor, 2);
-    if (blockId === 'pageBreak') editor?.chain().focus().insertContent({ type: 'pageBreak' }).run();
+  const insertDraggedBlock = (blockId: string, position?: number | null) => {
+    const dropPosition = typeof position === 'number' ? position : undefined;
+    if (dropPosition !== undefined && editor) {
+      // Keep the editor's fallback selection aligned with the pointer too;
+      // this matters when a block cannot be inserted directly inside a table
+      // cell and safeInsertBlock has to choose the nearest valid block slot.
+      try {
+        editor.commands.setTextSelection(dropPosition);
+      } catch {
+        // The helper will resolve a safe position if the document changed.
+      }
+    }
+    if (blockId === 'infoTable') insertInfoTable(editor, undefined, dropPosition);
+    if (blockId === 'repeatingTable') insertRepeatingTable(editor, undefined, undefined, undefined, dropPosition);
+    if (blockId === 'signatureGrid') insertSignatureGrid(editor, 2, undefined, dropPosition);
+    if (blockId === 'clubLogo') insertImageBlock(editor, { imageType: 'club-logo' }, dropPosition);
+    if (blockId === 'imageBlock') insertImageBlock(editor, { imageType: 'image' }, dropPosition);
+    if (blockId === 'pageBreak') {
+      const content = { type: 'pageBreak' };
+      if (dropPosition !== undefined && editor?.can().insertContentAt(dropPosition, content)) {
+        editor.chain().focus().insertContentAt(dropPosition, content).run();
+      } else {
+        editor?.chain().focus().insertContent(content).run();
+      }
+    }
     setDragOverCanvas(false);
+    setDropIndicator(null);
   };
+
+  const insertFieldForAssistant = (fieldKey: string) => {
+    const field = fields.find((candidate) => candidate.key === fieldKey);
+    if (!field) return;
+    insertFieldChip(
+      editor,
+      field.key,
+      field.label,
+      field.type,
+      field.ask,
+      field.importance || (field.required ? 'essential' : 'optional'),
+      field.required,
+      field.sensitive
+    );
+  };
+
+  const assistantContent =
+    typeof assistantSlot === 'function'
+      ? assistantSlot({
+          clubId,
+          templateId,
+          editor,
+          template,
+          fields,
+          insertField: insertFieldForAssistant,
+        })
+      : assistantSlot;
 
   if (loading) {
     return (
@@ -852,6 +1184,42 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
               </button>
               <div className="w-[1px] h-3 bg-blue-300 mx-1" />
               <button
+                onClick={() => editor.chain().focus().mergeCells().run()}
+                disabled={!editor.can().mergeCells()}
+                className="px-1.5 py-0.5 hover:bg-blue-100 rounded disabled:cursor-not-allowed disabled:opacity-40"
+                title="Merge selected cells"
+              >
+                Merge
+              </button>
+              <button
+                onClick={() => editor.chain().focus().splitCell().run()}
+                disabled={!editor.can().splitCell()}
+                className="px-1.5 py-0.5 hover:bg-blue-100 rounded disabled:cursor-not-allowed disabled:opacity-40"
+                title="Split selected cell"
+              >
+                Split
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleHeaderRow().run()}
+                className="px-1.5 py-0.5 hover:bg-blue-100 rounded"
+                title="Toggle header row"
+              >
+                Header
+              </button>
+              <button
+                onClick={() => {
+                  const { $from } = editor.state.selection;
+                  let tableDepth = $from.depth;
+                  while (tableDepth > 0 && $from.node(tableDepth).type.name !== 'table') tableDepth -= 1;
+                  if (tableDepth > 0) editor.chain().focus().setNodeSelection($from.before(tableDepth)).run();
+                }}
+                className="px-1.5 py-0.5 hover:bg-blue-100 rounded"
+                title="Select whole table"
+              >
+                Select
+              </button>
+              <div className="w-[1px] h-3 bg-blue-300 mx-1" />
+              <button
                 onClick={() => editor.chain().focus().deleteTable().run()}
                 className="px-1.5 py-0.5 hover:bg-red-200 bg-red-100 text-red-800 font-semibold rounded"
                 title="Delete Table"
@@ -866,26 +1234,63 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
         <div className="flex-1 flex justify-center items-start gap-6 p-6 overflow-y-auto">
           {/* A4 Desk Page */}
           <div
+            ref={canvasRef}
             className={`bg-white shadow-2xl rounded-xs min-h-[1050px] max-w-[800px] w-full p-12 border relative transition-colors ${dragOverCanvas ? 'border-indigo-500 ring-4 ring-indigo-100' : 'border-slate-300/70'}`}
             onDragOver={(event) => {
               if (event.dataTransfer.types.includes('application/x-clubdocs-block')) {
                 event.preventDefault();
                 event.dataTransfer.dropEffect = 'copy';
                 setDragOverCanvas(true);
+                const position = getDropPosition(editor, event);
+                if (position !== null && editor) {
+                  try {
+                    const coords = editor.view.coordsAtPos(position);
+                    const rect = canvasRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      setDropIndicator({
+                        top: Math.max(8, coords.top - rect.top),
+                        left: 20,
+                        width: Math.max(80, rect.width - 40),
+                      });
+                    }
+                  } catch {
+                    setDropIndicator(null);
+                  }
+                }
               }
             }}
-            onDragLeave={() => setDragOverCanvas(false)}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                setDragOverCanvas(false);
+                setDropIndicator(null);
+              }
+            }}
+            onDragEnd={() => {
+              setDragOverCanvas(false);
+              setDropIndicator(null);
+            }}
             onDrop={(event) => {
               const blockId = event.dataTransfer.getData('application/x-clubdocs-block');
               if (!blockId) return;
               event.preventDefault();
-              insertDraggedBlock(blockId);
+              insertDraggedBlock(blockId, getDropPosition(editor, event));
             }}
           >
             {dragOverCanvas && (
               <div className="absolute inset-x-12 top-4 z-10 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-center text-xs font-semibold text-indigo-800 shadow-sm">
-                Drop to insert this document block at the cursor
+                Drop to insert this document block at the pointer position
               </div>
+            )}
+            {dropIndicator && (
+              <div
+                className="template-editor-drop-indicator"
+                style={{
+                  top: `${dropIndicator.top}px`,
+                  left: `${dropIndicator.left}px`,
+                  width: `${dropIndicator.width}px`,
+                }}
+                aria-hidden="true"
+              />
             )}
             {/* SVNIT Official Header Simulation */}
             <div className="border-b-2 border-slate-800 pb-4 mb-6 flex items-center justify-between">
@@ -996,7 +1401,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
                 <div className="space-y-2.5 text-slate-700">
                   <div>
                     <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
-                      Field Name
+                      Field Key
                     </span>
                     <span className="font-mono text-slate-800 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">
                       {chipPopover.fieldName}
@@ -1005,16 +1410,46 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
 
                   <div>
                     <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
-                      Type
+                      Display label
                     </span>
-                    <span className="font-medium text-slate-800 capitalize">{chipPopover.fieldType}</span>
+                    <input
+                      value={chipPopover.label}
+                      onChange={(event) => handleUpdateChip({ label: event.target.value })}
+                      className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:outline-indigo-500"
+                      aria-label="Field display label"
+                    />
+                  </div>
+
+                  <div>
+                    <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
+                      Field type
+                    </span>
+                    <select
+                      value={chipPopover.fieldType}
+                      onChange={(event) => handleUpdateChip({ fieldType: event.target.value })}
+                      className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:outline-indigo-500"
+                      aria-label="Field type"
+                    >
+                      <option value="text">Text</option>
+                      <option value="longtext">Long text</option>
+                      <option value="date">Date</option>
+                      <option value="money">Money</option>
+                      <option value="int">Integer</option>
+                      <option value="enum">Dropdown</option>
+                    </select>
                   </div>
 
                   <div>
                     <span className="font-semibold text-slate-500 uppercase text-[10px] tracking-wider block">
                       Ask / Prompt
                     </span>
-                    <span className="text-slate-600">{chipPopover.ask || `Please enter ${chipPopover.label}`}</span>
+                    <input
+                      value={chipPopover.ask || ''}
+                      onChange={(event) => handleUpdateChip({ ask: event.target.value })}
+                      placeholder={`Please enter ${chipPopover.label}`}
+                      className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:outline-indigo-500"
+                      aria-label="Field prompt"
+                    />
                   </div>
 
                   <div className="pt-2 border-t border-slate-100 space-y-3">
@@ -1060,6 +1495,18 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
                       />
                     </div>
                   </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                    <span className="text-[10px] leading-tight text-slate-500">Changes apply to every chip using this field key.</span>
+                    <button
+                      type="button"
+                      onClick={handleDeleteChip}
+                      className="inline-flex shrink-0 items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Remove chip
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1081,11 +1528,18 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
                     onDragStart={(event) => {
                       event.dataTransfer.setData('application/x-clubdocs-block', block.id);
                       event.dataTransfer.effectAllowed = 'copy';
+                      setDragOverCanvas(false);
+                      setDropIndicator(null);
                     }}
                     onClick={() => insertDraggedBlock(block.id)}
+                    onDragEnd={() => {
+                      setDragOverCanvas(false);
+                      setDropIndicator(null);
+                    }}
                     className="flex min-h-16 flex-col items-start gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-left transition hover:border-indigo-300 hover:bg-indigo-50 active:cursor-grabbing"
                     title={`${block.description}. Click or drag to insert.`}
                   >
+                    <GripVertical className="w-3 h-3 self-end text-slate-300" aria-hidden="true" />
                     {block.icon}
                     <span className="text-[11px] font-semibold text-slate-800">{block.label}</span>
                   </button>
@@ -1093,6 +1547,126 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
               </div>
               <p className="mt-2 text-[10px] leading-relaxed text-slate-400">Click a block to insert it, or drag it onto the page for a faster layout workflow.</p>
             </div>
+
+            {selectedImageBlock && (
+              <div className="template-editor-image-controls rounded-lg border border-sky-200 bg-sky-50/70 p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-sky-700" />
+                    <h3 className="font-bold text-sm text-sky-950">Image block</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      editor?.chain().focus().setNodeSelection(selectedImageBlock.position).deleteSelection().run();
+                      setSelectedImageBlock(null);
+                      setSaveStatus('unsaved');
+                      triggerAutosave();
+                    }}
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-100"
+                    title="Remove selected image block"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Remove
+                  </button>
+                </div>
+
+                <label className="block text-[10px] font-semibold uppercase tracking-wide text-sky-800 mb-1">Block type</label>
+                <select
+                  value={selectedImageBlock.attrs.imageType || 'image'}
+                  onChange={(event) => {
+                    const imageType = event.target.value;
+                    updateImageBlock({
+                      imageType,
+                      ...(imageType === 'club-logo'
+                        ? { placeholderText: 'Choose a club logo from the asset library', alt: 'Club logo' }
+                        : { placeholderText: 'Select an image to place here' }),
+                    });
+                  }}
+                  className="w-full mb-2 rounded border border-sky-200 bg-white px-2 py-1.5 text-xs text-slate-800 focus:outline-sky-500"
+                >
+                  <option value="club-logo">Club logo</option>
+                  <option value="image">Image</option>
+                </select>
+
+                {(selectedImageBlock.attrs.imageType === 'club-logo' || selectedImageBlock.attrs.imageType === 'logo') && (
+                  <>
+                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-sky-800 mb-1">Club logo asset</label>
+                    <select
+                      value={selectedImageBlock.attrs.clubLogoAssetId || selectedImageBlock.attrs.logoAssetId || selectedImageBlock.attrs.assetId || ''}
+                      onChange={(event) => selectClubLogo(event.target.value)}
+                      className="w-full mb-2 rounded border border-sky-200 bg-white px-2 py-1.5 text-xs text-slate-800 focus:outline-sky-500"
+                    >
+                      <option value="">Choose a logo…</option>
+                      {clubLogoOptions.map((option) => (
+                        <option key={option.id} value={option.id}>{option.name}</option>
+                      ))}
+                    </select>
+                    {clubLogoOptions.length === 0 && (
+                      <p className="mb-2 rounded border border-dashed border-sky-300 bg-white/70 p-2 text-[10px] leading-relaxed text-sky-800">
+                        No club logo assets are available yet. Upload one in Club Settings, or provide clubLogoOptions when embedding this editor.
+                      </p>
+                    )}
+                  </>
+                )}
+
+                {selectedImageBlock.attrs.imageType !== 'club-logo' && selectedImageBlock.attrs.imageType !== 'logo' && (
+                  <>
+                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-sky-800 mb-1">Image URL</label>
+                    <input
+                      value={selectedImageBlock.attrs.src || ''}
+                      onChange={(event) => updateImageBlock({ src: event.target.value })}
+                      placeholder="https://… (optional)"
+                      className="w-full mb-2 rounded border border-sky-200 bg-white px-2 py-1.5 text-xs text-slate-800 focus:outline-sky-500"
+                    />
+                  </>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+                    Placement
+                    <select
+                      value={selectedImageBlock.attrs.placement || 'center'}
+                      onChange={(event) => updateImageBlock({ placement: event.target.value })}
+                      className="mt-1 w-full rounded border border-sky-200 bg-white px-2 py-1.5 text-xs font-normal text-slate-800 focus:outline-sky-500"
+                    >
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                    </select>
+                  </label>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+                    Height (px)
+                    <input
+                      type="number"
+                      min={32}
+                      max={800}
+                      value={selectedImageBlock.attrs.height || 180}
+                      onChange={(event) => updateImageBlock({ height: Math.max(32, Math.min(800, Number(event.target.value) || 180)) })}
+                      className="mt-1 w-full rounded border border-sky-200 bg-white px-2 py-1.5 text-xs font-normal text-slate-800 focus:outline-sky-500"
+                    />
+                  </label>
+                </div>
+
+                <label className="block mt-2 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+                  Alt text
+                  <input
+                    value={selectedImageBlock.attrs.alt || ''}
+                    onChange={(event) => updateImageBlock({ alt: event.target.value })}
+                    className="mt-1 w-full rounded border border-sky-200 bg-white px-2 py-1.5 text-xs font-normal text-slate-800 focus:outline-sky-500"
+                  />
+                </label>
+                <label className="block mt-2 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+                  Caption (optional)
+                  <input
+                    value={selectedImageBlock.attrs.caption || ''}
+                    onChange={(event) => updateImageBlock({ caption: event.target.value })}
+                    className="mt-1 w-full rounded border border-sky-200 bg-white px-2 py-1.5 text-xs font-normal text-slate-800 focus:outline-sky-500"
+                  />
+                </label>
+              </div>
+            )}
+
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-1.5">
@@ -1189,6 +1763,29 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ clubId, template
                   </option>
                 ))}
               </select>
+            </div>
+          </aside>
+
+          {/* Isolated assistant integration slot. A host can provide a real
+              chat panel without making the editor depend on that component. */}
+          <aside className="template-editor-assistant w-80 shrink-0 self-start sticky top-[110px] overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-indigo-100 bg-indigo-50 px-4 py-3">
+              <Bot className="w-4 h-4 text-indigo-700" />
+              <div>
+                <h3 className="text-sm font-bold text-indigo-950">Assistant</h3>
+                <p className="text-[10px] text-indigo-700">Draft guidance and document help</p>
+              </div>
+            </div>
+            <div className="min-h-[180px] p-3">
+              {assistantContent || (
+                <div className="flex min-h-[150px] flex-col items-center justify-center rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-6 text-center">
+                  <Bot className="mb-2 h-7 w-7 text-indigo-300" />
+                  <p className="text-xs font-semibold text-indigo-900">Assistant slot ready</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                    Connect a chat panel through the <code className="rounded bg-white px-1">assistantSlot</code> prop.
+                  </p>
+                </div>
+              )}
             </div>
           </aside>
         </div>

@@ -6,7 +6,7 @@ Measures:
    - outputs
    - data temp databases
    - docs/screenshots
-   - tests/visual
+   - visual test artifacts
 2. Top 20 largest files
 3. Duplicate files by SHA256
 4. Orphan files in storage/ (not referenced in DB)
@@ -144,7 +144,7 @@ def generate_report(check_limits: bool = False) -> str:
         ("outputs", Path("outputs")),
         ("data temp databases", Path("data")),
         ("docs/screenshots", Path("docs/screenshots")),
-        ("tests/visual", Path("tests/visual")),
+        ("tests_visual", Path("tests") / "visual"),
     ]
 
     lines.append("## 1. Tracked Folder Breakdown\n")

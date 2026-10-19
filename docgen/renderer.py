@@ -663,7 +663,7 @@ class Renderer:
                 if val is None or str(val).strip() in ("", "None", "null"):
                     raise ValueError(
                         f"Rendering validation failed for template '{schema.id}': "
-                        f"Required essential field '{f_schema.key}' is missing or None. "
+                        f"Required field '{f_schema.key}' is missing or None. "
                         f"Official templates cannot render empty or 'None' values. "
                         f"(Field prompt: {f_schema.ask})"
                     )
