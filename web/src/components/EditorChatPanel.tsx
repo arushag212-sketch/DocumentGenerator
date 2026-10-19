@@ -1,6 +1,16 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { AlertCircle, Check, LoaderCircle, RotateCcw, Send, Sparkles, X } from 'lucide-react';
-import { actionPreview, requestEditorAssistant } from './editorAssistant';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  LoaderCircle,
+  Mic,
+  MicOff,
+  RotateCcw,
+  Send,
+  Sparkles,
+  X,
+} from 'lucide-react';
+import { requestEditorAssistant } from './editorAssistant';
+import { EditorActionItem } from './EditorActionItem';
 import type {
   EditorAssistantAction,
   EditorAssistantDocumentContext,
@@ -30,6 +40,7 @@ export type EditorChatPanelProps = {
   documentContext?: EditorAssistantDocumentContext;
   selectedText?: string;
   onApply: (action: EditorAssistantAction) => void;
+  onUndo?: () => void;
   requestAssistant?: EditorAssistantFetcher;
   onClose?: () => void;
   className?: string;
@@ -37,36 +48,32 @@ export type EditorChatPanelProps = {
   placeholder?: string;
 };
 
-const STARTER_PROMPTS = [
-  'Set the title to Event Permission Letter',
-  'Add a required event date field',
-  'Insert a signature block',
-  'Rewrite the selected text professionally',
+const QUICK_ACTION_CHIPS = [
+  'Make it formal',
+  'Fix spelling',
+  'Add signature box',
+  'Make a table',
+  'Make it look professional',
+  'Translate to Hindi',
+  'Translate to Gujarati',
 ];
 
 function messageId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/**
- * Reusable right-side assistant panel for document editors.
- *
- * It never mutates an editor directly.  Every model/local suggestion is
- * surfaced as a typed action and handed to `onApply`, allowing the host editor
- * to decide whether to update state, insert TipTap content, resolve a logo, or
- * save a draft.
- */
 export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
   clubId,
   templateId,
   documentContext,
   selectedText,
   onApply,
+  onUndo,
   requestAssistant,
   onClose,
   className = '',
   disabled = false,
-  placeholder = 'Tell me what to change in this document…',
+  placeholder = 'Describe a change or ask a question…',
 }) => {
   const [messages, setMessages] = useState<EditorChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -74,12 +81,43 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [lastRequest, setLastRequest] = useState<EditorAssistantRequest | null>(null);
   const [appliedActions, setAppliedActions] = useState<Set<string>>(new Set());
+  const [rejectedActions, setRejectedActions] = useState<Set<string>>(new Set());
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   const fetchAssistant = useMemo<EditorAssistantFetcher>(
     () =>
-      requestAssistant || ((request: EditorAssistantRequest) => requestEditorAssistant(clubId, templateId, request)),
+      requestAssistant || ((req: EditorAssistantRequest) => requestEditorAssistant(clubId, templateId, req)),
     [clubId, requestAssistant, templateId]
   );
+
+  useEffect(() => {
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRec) {
+      const rec = new SpeechRec();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.onresult = (e: any) => {
+        const text = e.results[0][0].transcript;
+        if (text) setDraft((prev) => (prev ? `${prev} ${text}` : text));
+        setIsListening(false);
+      };
+      rec.onerror = () => setIsListening(false);
+      rec.onend = () => setIsListening(false);
+      recognitionRef.current = rec;
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) return;
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      recognitionRef.current.start();
+    }
+  };
 
   const submitRequest = useCallback(
     async (request: EditorAssistantRequest, addUserMessage = true) => {
@@ -95,16 +133,13 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
       setError(null);
       setLastRequest(normalizedRequest);
       if (addUserMessage) {
-        setMessages(previous => [
-          ...previous,
-          { id: messageId('user'), role: 'user', content: instruction },
-        ]);
+        setMessages((prev) => [...prev, { id: messageId('user'), role: 'user', content: instruction }]);
       }
       setLoading(true);
       try {
         const result = await fetchAssistant(normalizedRequest);
-        setMessages(previous => [
-          ...previous,
+        setMessages((prev) => [
+          ...prev,
           {
             id: messageId('assistant'),
             role: 'assistant',
@@ -115,9 +150,8 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
           },
         ]);
         setDraft('');
-      } catch (requestError) {
-        const message = requestError instanceof Error ? requestError.message : 'The assistant could not process that request.';
-        setError(message);
+      } catch (err: any) {
+        setError(err instanceof Error ? err.message : 'The assistant could not process that request.');
       } finally {
         setLoading(false);
       }
@@ -129,129 +163,108 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
     void submitRequest({ instruction: draft });
   }, [draft, submitRequest]);
 
-  const applyAction = useCallback(
-    (messageIdValue: string, actionIndex: number, action: EditorAssistantAction) => {
-      const actionId = `${messageIdValue}:${actionIndex}`;
-      if (appliedActions.has(actionId)) return;
-      onApply(action);
-      setAppliedActions(previous => {
-        const next = new Set(previous);
-        next.add(actionId);
-        return next;
-      });
-    },
-    [appliedActions, onApply]
-  );
+  const applyAction = (msgId: string, idx: number, action: EditorAssistantAction) => {
+    const actionId = `${msgId}:${idx}`;
+    if (appliedActions.has(actionId)) return;
+    onApply(action);
+    setAppliedActions((prev) => new Set(prev).add(actionId));
+  };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-      event.preventDefault();
-      sendMessage();
-    }
+  const rejectAction = (msgId: string, idx: number) => {
+    const actionId = `${msgId}:${idx}`;
+    setRejectedActions((prev) => new Set(prev).add(actionId));
   };
 
   return (
-    <aside
-      className={`flex h-full min-h-[520px] w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-xl ${className}`}
-      aria-label="Document assistant"
-    >
-      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
+    <aside className={`flex h-full w-full flex-col bg-white ${className}`} aria-label="AI Chat Copilot">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-100 text-indigo-700">
+            <Sparkles className="h-3.5 w-3.5" />
           </span>
           <div>
-            <h2 className="text-sm font-bold text-slate-900">Document assistant</h2>
-            <p className="text-[11px] text-slate-500">Describe a change in plain language</p>
+            <h2 className="text-xs font-bold text-slate-900">AI Chat Copilot</h2>
+            <p className="text-[10px] text-slate-500">Natural language template edits</p>
           </div>
         </div>
         {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"
-            aria-label="Close document assistant"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
+          <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-white hover:text-slate-700" title="Close">
+            <X className="h-4 w-4" />
           </button>
         )}
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-live="polite">
+      <div className="flex-1 space-y-3 overflow-y-auto p-3 text-xs" aria-live="polite">
         {messages.length === 0 && !loading && (
-          <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/60 p-4">
-            <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-indigo-950">
-              <Sparkles className="h-4 w-4 text-indigo-600" aria-hidden="true" />
-              Start with a simple instruction
+          <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 p-3">
+            <div className="mb-1 flex items-center gap-1.5 font-semibold text-indigo-950 text-xs">
+              <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+              What would you like to edit?
             </div>
-            <p className="mb-3 text-xs leading-relaxed text-indigo-900/70">
-              I’ll prepare reviewable edits for the title, fields, blocks, logo, or selected text.
+            <p className="mb-2 text-[11px] leading-relaxed text-indigo-900/70">
+              Ask to add fields, format tables, translate text, insert signatures, or apply styling.
             </p>
-            <div className="flex flex-wrap gap-2">
-              {STARTER_PROMPTS.map(prompt => (
+            <div className="flex flex-wrap gap-1.5">
+              {QUICK_ACTION_CHIPS.map((chip) => (
                 <button
-                  key={prompt}
-                  type="button"
+                  key={chip}
                   disabled={disabled}
-                  onClick={() => setDraft(prompt)}
-                  className="rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-left text-[11px] font-medium text-indigo-800 transition hover:border-indigo-400 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => submitRequest({ instruction: chip })}
+                  className="rounded-full border border-indigo-200 bg-white px-2 py-0.5 text-[10px] font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
                 >
-                  {prompt}
+                  {chip}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {messages.map(message => (
+        {messages.map((message) => (
           <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
-              className={`max-w-[92%] rounded-2xl px-3 py-2.5 text-sm shadow-sm ${
+              className={`max-w-[92%] rounded-xl px-3 py-2 text-xs shadow-sm ${
                 message.role === 'user'
                   ? 'rounded-br-sm bg-indigo-600 text-white'
                   : 'rounded-bl-sm border border-slate-200 bg-slate-50 text-slate-800'
               }`}
             >
               <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
-              {message.role === 'assistant' && message.source === 'local' && (
-                <span className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                  Local suggestions
-                </span>
-              )}
+
               {message.warnings && message.warnings.length > 0 && (
-                <div className="mt-2 space-y-1 text-[11px] text-amber-800">
-                  {message.warnings.map((warning, index) => (
-                    <p key={`${message.id}-warning-${index}`} className="flex gap-1.5">
-                      <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span>{warning}</span>
+                <div className="mt-1.5 space-y-1 text-[10px] text-amber-800 border-t border-amber-200/50 pt-1">
+                  {message.warnings.map((w, i) => (
+                    <p key={i} className="flex gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                      <span>{w}</span>
                     </p>
                   ))}
                 </div>
               )}
+
               {message.actions && message.actions.length > 0 && (
-                <div className="mt-3 space-y-2 border-t border-slate-200 pt-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Suggested edits</p>
-                  {message.actions.map((action, actionIndex) => {
-                    const actionId = `${message.id}:${actionIndex}`;
-                    const applied = appliedActions.has(actionId);
+                <div className="mt-2 space-y-1.5 border-t border-slate-200 pt-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                    <span>Proposed edits</span>
+                    <span className="rounded bg-indigo-50 px-1 py-0.2 text-[9px] text-indigo-700 font-semibold lowercase">
+                      AI-suggested
+                    </span>
+                  </div>
+
+                  {message.actions.map((action, idx) => {
+                    const actionId = `${message.id}:${idx}`;
                     return (
-                      <div key={actionId} className="rounded-lg border border-slate-200 bg-white p-2">
-                        <p className="text-xs font-semibold text-slate-800">{action.summary}</p>
-                        <p className="mt-0.5 line-clamp-3 text-[11px] text-slate-500">{actionPreview(action)}</p>
-                        <button
-                          type="button"
-                          disabled={applied || disabled}
-                          onClick={() => applyAction(message.id, actionIndex, action)}
-                          className={`mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${
-                            applied
-                              ? 'cursor-default bg-emerald-50 text-emerald-700'
-                              : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                          }`}
-                        >
-                          {applied ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
-                          {applied ? 'Applied' : 'Apply suggestion'}
-                        </button>
-                      </div>
+                      <EditorActionItem
+                        key={actionId}
+                        action={action}
+                        actionId={actionId}
+                        applied={appliedActions.has(actionId)}
+                        rejected={rejectedActions.has(actionId)}
+                        disabled={disabled}
+                        onApply={() => applyAction(message.id, idx, action)}
+                        onReject={() => rejectAction(message.id, idx)}
+                        onUndo={onUndo}
+                        onClarifySelect={(opt) => submitRequest({ instruction: opt })}
+                      />
                     );
                   })}
                 </div>
@@ -261,30 +274,25 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
         ))}
 
         {loading && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-500">
-              <LoaderCircle className="h-4 w-4 animate-spin text-indigo-600" aria-hidden="true" />
-              Preparing suggestions…
-            </div>
+          <div className="flex items-center gap-2 rounded-xl rounded-bl-sm border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+            Preparing suggestions…
           </div>
         )}
 
         {error && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800" role="alert">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800">
+            <div className="flex items-start gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5 text-rose-600 shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
-                <p className="font-semibold">The assistant couldn’t respond.</p>
-                <p className="mt-0.5 break-words text-rose-700/80">{error}</p>
+                <p className="font-semibold text-[11px]">Assistant request failed</p>
+                <p className="mt-0.5 text-[10px] text-rose-700">{error}</p>
                 {lastRequest && (
                   <button
-                    type="button"
                     onClick={() => void submitRequest(lastRequest, false)}
-                    disabled={loading || disabled}
-                    className="mt-2 inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 font-semibold text-rose-700 shadow-sm hover:bg-rose-100 disabled:opacity-50"
+                    className="mt-1.5 inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-rose-700 shadow-sm hover:bg-rose-100"
                   >
-                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                    Try again
+                    <RotateCcw className="h-2.5 w-2.5" /> Retry
                   </button>
                 )}
               </div>
@@ -293,35 +301,60 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
         )}
       </div>
 
-      <div className="border-t border-slate-200 bg-white p-3">
+      <div className="border-t border-slate-200 bg-white p-2.5">
         {selectedText && (
-          <p className="mb-2 truncate rounded-md bg-slate-50 px-2 py-1 text-[10px] text-slate-500" title={selectedText}>
-            Selected text: “{selectedText}”
-          </p>
+          <div className="mb-1.5 flex items-center justify-between rounded bg-slate-50 px-2 py-1 text-[10px] text-slate-600">
+            <span className="truncate max-w-[200px]">Selected: “{selectedText}”</span>
+            <button
+              onClick={() => setDraft(`Improve this selected text: "${selectedText.slice(0, 100)}"`)}
+              className="text-indigo-600 font-semibold hover:underline"
+            >
+              Ask about selection
+            </button>
+          </div>
         )}
-        <div className="rounded-xl border border-slate-300 bg-white shadow-sm focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100">
+
+        <div className="rounded-lg border border-slate-300 bg-white shadow-sm focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-200">
           <textarea
             value={draft}
-            onChange={event => setDraft(event.target.value)}
-            onKeyDown={handleKeyDown}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
             disabled={disabled || loading}
             placeholder={placeholder}
-            rows={3}
+            rows={2}
             maxLength={4000}
-            className="w-full resize-none rounded-xl border-0 bg-transparent px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="Assistant instruction"
+            className="w-full resize-none border-0 bg-transparent px-2.5 py-1.5 text-xs text-slate-800 outline-none placeholder:text-slate-400"
           />
-          <div className="flex items-center justify-between px-2 pb-2">
-            <span className="text-[10px] text-slate-400">Ctrl/⌘ + Enter to send</span>
-            <button
-              type="button"
-              onClick={sendMessage}
-              disabled={disabled || loading || !draft.trim()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-            >
-              {loading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Send className="h-3.5 w-3.5" aria-hidden="true" />}
-              Send
-            </button>
+          <div className="flex items-center justify-between px-2 pb-1.5">
+            <span className="text-[9px] text-slate-400">Ctrl/⌘+Enter</span>
+            <div className="flex items-center gap-1">
+              {recognitionRef.current && (
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  className={`p-1 rounded text-slate-500 hover:text-slate-800 transition ${
+                    isListening ? 'bg-rose-100 text-rose-600 animate-pulse' : 'hover:bg-slate-100'
+                  }`}
+                  title={isListening ? 'Listening… click to stop' : 'Voice input'}
+                >
+                  {isListening ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={sendMessage}
+                disabled={disabled || loading || !draft.trim()}
+                className="inline-flex items-center gap-1 rounded bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400"
+              >
+                {loading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                Send
+              </button>
+            </div>
           </div>
         </div>
       </div>

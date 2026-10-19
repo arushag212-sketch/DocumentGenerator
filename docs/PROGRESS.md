@@ -358,5 +358,34 @@ Screenshots archived to `docs/screenshots/baseline/`.
   - `npm run build` completed with 0 TypeScript errors (Vite build in 5.29s).
   - Real browser smoke test (`scripts/verify_part1_studio_selenium.py`) passed: verified 3-pane layout, typed into all block types (Paragraph, Heading 1, InfoTable, RepeatingTable, SignatureGrid, PageBreak), verified all 4 right-panel tabs, confirmed autosave indicator 'Saved', clean browser console with 0 errors, and saved evidence screenshot `docs/screenshots/part1_studio_editor.png`.
 
+---
+
+## Studio Part 2: AI Chat Copilot (Right-Hand Assistant)
+- **Status**: **DONE**
+- **Changes**:
+  - **Full Action Catalog & Server Validation (`server/app/core/editor_assistant.py`)**:
+    - Expanded `ActionType` to all 24 required actions: `set_title` / `set_document_title`, `set_description` / `set_document_description`, `insert_block`, `update_block`, `delete_block`, `move_block`, `duplicate_block`, `set_text_style`, `set_block_style`, `set_theme`, `set_page`, `add_field`, `rename_field`, `set_field_property`, `insert_chip`, `insert_clause`, `set_letterhead` / `update_logo`, `rewrite_text` / `rewrite_selected_text`, `translate_text`, `proofread_text`, `add_table_column`, `add_table_row`, `set_table_total`, `ask_clarifying_question`.
+    - Pydantic-validated strict JSON schema (`EDITOR_ASSISTANT_RESPONSE_SCHEMA`) with prompt-injection defense.
+    - Added `escape_jinja_delimiters` on all text payloads so user/AI text is treated purely as DATA; raw Jinja tags (`{{`, `}}`, `{%`, `%}`) render literally and cannot execute.
+    - Whitelist validation on colors (`is_safe_color`), fonts (`_ALLOWED_FONTS`), block types (`_ALLOWED_BLOCK_TYPES`), field types (`_ALLOWED_FIELD_TYPES`), themes (`_ALLOWED_THEMES`), and alignments (`_ALLOWED_ALIGNMENTS`).
+    - Enforced `validate_identifier` on all field keys (`^[a-z][a-z0-9_]{0,39}$`, non-reserved/dunder).
+    - Enriched local rule-based assistant (`build_local_assistant_response`) for no-key offline operation: handles "make heading blue and centered", "add signature box for treasurer", "turn into 4-column table", "translate to Hindi", and clarifying questions with options chips.
+  - **API Router & Security Layer (`server/app/api/v1/editor_assistant.py` & `server/app/api/v1/__init__.py`)**:
+    - Registered `editor_assistant_router` in `api_router`.
+    - Enforced rate limiting via database-backed bucket limiter (`editor_ai_user:{id}` 60/min, `editor_ai_club:{id}` 120/min).
+    - Enforced club permissions (`require_club_access(Role.EDITOR)`); viewers receive HTTP 403 Forbidden.
+    - Enforced cross-club asset protection: actions referencing assets owned by a foreign club are filtered out and rejected with explicit warnings.
+    - Persisted non-reversible prompt hashes (`assistant_prompt_hash`) in `ai_requests` without storing raw user instructions or secrets.
+  - **Client UI & Action Dispatcher (`web/src/components/`)**:
+    - `applyChatAction.ts` (185 lines): Dispatches all 24 action types into TipTap ProseMirror transactions; single undo transaction guarantee.
+    - `EditorChatPanel.tsx` (365 lines): Quick action chips, "Ask about the selection" context trigger, speech recognition voice input, typing indicator, reviewable previews with Apply / Reject, Undo trigger, and clarifying question options.
+    - `EditorActionItem.tsx` (98 lines): Subcomponent rendering action summaries, diff previews, AI-suggested badges, Apply/Reject controls, and Undo triggers.
+    - `RightTabsPanel.tsx`: Wires rich document context, selected text, and Undo callback to `EditorChatPanel`.
+    - Strict line count adherence: all frontend editor modules remain `< 400 lines`.
+- **Verification**:
+  - `npm run build`: 0 TypeScript errors (Vite built in 4.96s).
+  - Pytest unit suite `tests/test_editor_assistant.py`: **10 passed, 0 failed in 0.78s** (all 24 action types, hostile payloads, Jinja escaping, cross-club asset rejection, role permissions, and offline heuristics).
+  - Real browser smoke test (`scripts/verify_part2_copilot_selenium.py`): **PASSED** (logged in, created template, executed prompt "make the heading blue and add a signature box for the treasurer", verified AI preview with "AI-suggested" badge, applied actions, verified single-step Undo, triggered quick-action chip, verified live preview modal, 0 severe browser console errors, saved screenshot `docs/screenshots/part2_chat_copilot.png`).
+
 
 

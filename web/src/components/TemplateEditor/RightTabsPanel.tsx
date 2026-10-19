@@ -137,9 +137,21 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
               clubId={clubId}
               templateId={templateId}
               onApply={onApplyChatAction}
+              onUndo={() => editor?.commands?.undo()}
+              selectedText={
+                editor?.state?.selection && !editor.state.selection.empty
+                  ? editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')
+                  : undefined
+              }
               documentContext={{
                 title: editor?.state?.doc?.firstChild?.textContent || 'Document',
-                fields: fields.map((f) => ({ key: f.key, label: f.label })),
+                fields: fields.map((f) => ({ key: f.key, label: f.label, type: f.type, required: f.required })),
+                theme: designSettings.theme,
+                blocks: (editor?.getJSON()?.content || []).slice(0, 30).map((b: any) => ({
+                  type: b.type,
+                  blockId: b.attrs?.blockId,
+                  text: b.content?.[0]?.text?.slice(0, 80) || '',
+                })),
               }}
               className="h-full border-none shadow-none"
             />

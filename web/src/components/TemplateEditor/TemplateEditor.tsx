@@ -13,6 +13,7 @@ import { FindReplaceModal } from './FindReplaceModal';
 import { PreviewModal, ValidationModal, UnreviewedAiModal } from './TemplateEditorModals';
 import { DesignSettings } from './DesignPanel';
 import { TemplateField } from './FieldsPanel';
+import { applyChatAction } from './applyChatAction';
 
 export interface ClubLogoOption {
   id: string;
@@ -147,19 +148,16 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   // AI Chat Copilot action applicator
   const handleApplyChatAction = useCallback(
     (action: any) => {
-      if (!editor) return;
-      if (action.type === 'set_title') {
-        setTemplate((prev: any) => ({ ...prev, name: action.payload?.title || action.title }));
-        markUnsaved();
-      } else if (action.type === 'insert_block' && action.payload?.block) {
-        editor.chain().focus().insertContent(action.payload.block).run();
-        markUnsaved();
-      } else if (action.type === 'add_field' && action.payload?.field) {
-        setFields((prev) => [...prev, action.payload.field]);
-        markUnsaved();
-      }
+      applyChatAction({
+        action,
+        editor,
+        setTemplate,
+        setFields,
+        setDesignSettings,
+        markUnsaved,
+      });
     },
-    [editor, markUnsaved]
+    [editor, markUnsaved, setTemplate, setFields, setDesignSettings]
   );
 
   const handlePreview = async () => {
