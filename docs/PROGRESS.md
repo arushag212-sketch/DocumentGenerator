@@ -293,6 +293,7 @@ Screenshots archived to `docs/screenshots/baseline/`.
 - **Phase W8 (Part A: Storage Diet)**: **DONE** (Commit `f1ae759`)
 - **Phase W8 (Part B: Minimum Questions)**: **DONE**
 - **Studio Part 0 (Audit Findings & Hygiene)**: **DONE**
+- **Studio Part 1 (Editor Foundation)**: **DONE**
 
 ---
 
@@ -324,5 +325,38 @@ Screenshots archived to `docs/screenshots/baseline/`.
     - Updated `server/scripts/doctor.py` to clearly report skipped optional checks (Postgres and Gemini live tests).
 - **Verification**:
   - Full pytest suite: 196 passed, 9 skipped (Postgres & live AI) in 153s.
+
+---
+
+## Studio Part 1: Editor Foundation & Modularity
+- **Status**: **DONE**
+- **Changes**:
+  - **Modular Architecture (< 400 lines per file)**:
+    - Split `TemplateEditor.tsx` (formerly 2,001 lines) into focused, single-responsibility modules:
+      - `TemplateEditor.tsx` (355 lines): Top-level 3-pane orchestrator.
+      - `Canvas.tsx` (392 lines): Center workspace with A4 page wrapper, selection bubble menu, slash command popover, and live word/character/block count counters.
+      - `PalettePanel.tsx` (315 lines): Left collapsible blocks & official clauses palette with click/drag-and-drop support.
+      - `RightTabsPanel.tsx` (174 lines): Right-side tab switcher (`[AI Chat (default) | Fields | Design | Checks]`), responsive tablet bottom-sheet fallback.
+      - `FieldsPanel.tsx` (292 lines): Fields manager with Essential, Optional, and Sensitive tags, search filter, and "+ Add Field" modal.
+      - `DesignPanel.tsx` (199 lines): Curated themes, typography scale, page orientation/margins, watermark, and "Make it look professional" button.
+      - `ChecksPanel.tsx` (184 lines): Document quality checker verifying official wording gaps, missing essential fields, and paragraph formatting.
+      - `Toolbar.tsx` (220 lines): Top navigation, Undo/Redo history buttons, zoom controls (60%-150%), find & replace trigger, shortcuts trigger, and autosave indicator.
+      - `tableExtensions.ts` (227 lines): Native Table schemas and builders (`createInfoTableNode`, `createRepeatingTableNode`, `createSignatureGridNode`).
+      - `imageBlock.ts` (223 lines): Block-level image and club logo schema and builders.
+      - `blockId.ts` (93 lines): UniqueID extension providing stable `blockId` attributes (`b_*`) across block nodes with ProseMirror transaction auto-assignment and JSON migration.
+      - `useEditorAutosave.ts` (122 lines): Debounced 1s autosave hook with version-number conflict checking (`SaveStatus: 'saved' | 'saving' | 'unsaved' | 'conflict'`).
+      - `useTemplateEditor.ts` (173 lines): TipTap editor instance lifecycle, selection update tracking, and slash command detection.
+      - `EditorErrorBoundary.tsx` (61 lines): Self-contained React error boundary with one-click recovery.
+      - `ShortcutsModal.tsx` (87 lines): Keyboard shortcuts cheat sheet.
+      - `FindReplaceModal.tsx` (139 lines): Find and replace text replacement dialog.
+      - `TemplateEditorModals.tsx` (167 lines): Live preview, validation, and unreviewed AI modals.
+      - `A4Page.tsx` (65 lines): Standard A4 dimensions (794px x 1123px) container with zoom scaling and watermark support.
+  - **Single History & Unique IDs**:
+    - TipTap history manages manual edits, palette insertions, drag-and-drop, and AI actions in single discrete transactions.
+    - `ensureBlockIds` assigns unique IDs on initial load and migration.
+- **Verification**:
+  - `npm run build` completed with 0 TypeScript errors (Vite build in 5.29s).
+  - Real browser smoke test (`scripts/verify_part1_studio_selenium.py`) passed: verified 3-pane layout, typed into all block types (Paragraph, Heading 1, InfoTable, RepeatingTable, SignatureGrid, PageBreak), verified all 4 right-panel tabs, confirmed autosave indicator 'Saved', clean browser console with 0 errors, and saved evidence screenshot `docs/screenshots/part1_studio_editor.png`.
+
 
 

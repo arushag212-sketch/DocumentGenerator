@@ -1,8 +1,34 @@
 import { Node, Extension, mergeAttributes } from '@tiptap/core';
-import { Table } from '@tiptap/extension-table';
-import { TableRow } from '@tiptap/extension-table-row';
-import { TableCell } from '@tiptap/extension-table-cell';
-import { TableHeader } from '@tiptap/extension-table-header';
+import { BlockIdExtension, ensureBlockIds } from './blockId';
+import {
+  CustomTable,
+  CustomTableRow,
+  CustomTableCell,
+  CustomTableHeader,
+  createInfoTableNode,
+  createRepeatingTableNode,
+  createSignatureGridNode,
+} from './tableExtensions';
+import {
+  ImageBlock,
+  createImageBlockNode,
+  type ImageBlockAttributes,
+} from './imageBlock';
+
+export {
+  BlockIdExtension,
+  ensureBlockIds,
+  CustomTable,
+  CustomTableRow,
+  CustomTableCell,
+  CustomTableHeader,
+  createInfoTableNode,
+  createRepeatingTableNode,
+  createSignatureGridNode,
+  ImageBlock,
+  createImageBlockNode,
+  type ImageBlockAttributes,
+};
 
 export const AiSuggestedBlock = Extension.create({
   name: 'aiSuggestedBlock',
@@ -124,289 +150,6 @@ export const FieldChip = Node.create({
   },
 });
 
-/**
- * A block-level image placeholder.  Images deliberately live in the editor
- * JSON instead of being represented as a hard-coded React element so they can
- * be moved, selected, and saved alongside the rest of a template.  A
- * club-logo block keeps both the selected asset id and its resolved URL; this
- * means a template remains understandable even when an asset is unavailable
- * while it is being edited or previewed.
- */
-export const ImageBlock = Node.create({
-  name: 'imageBlock',
-  group: 'block',
-  atom: true,
-  isolating: true,
-  selectable: true,
-  draggable: true,
-
-  addAttributes() {
-    return {
-      imageType: {
-        default: 'image',
-        parseHTML: (element: any) => element.getAttribute('data-image-type') || 'image',
-        renderHTML: (attributes: any) => ({ 'data-image-type': attributes.imageType || 'image' }),
-      },
-      src: {
-        default: '',
-        parseHTML: (element: any) => {
-          const img = element.querySelector?.('img');
-          return element.getAttribute('data-image-src') || img?.getAttribute('src') || '';
-        },
-        renderHTML: (attributes: any) => (attributes.src ? { 'data-image-src': attributes.src } : {}),
-      },
-      alt: {
-        default: 'Image placeholder',
-        parseHTML: (element: any) => element.getAttribute('data-image-alt') || element.querySelector?.('img')?.getAttribute('alt') || 'Image placeholder',
-        renderHTML: (attributes: any) => ({ 'data-image-alt': attributes.alt || 'Image placeholder' }),
-      },
-      caption: {
-        default: '',
-        parseHTML: (element: any) => element.getAttribute('data-caption') || element.querySelector?.('figcaption')?.textContent || '',
-        renderHTML: (attributes: any) => (attributes.caption ? { 'data-caption': attributes.caption } : {}),
-      },
-      placeholderText: {
-        default: 'Select an image to place here',
-        parseHTML: (element: any) => element.getAttribute('data-placeholder-text') || 'Select an image to place here',
-        renderHTML: (attributes: any) => ({ 'data-placeholder-text': attributes.placeholderText || 'Select an image to place here' }),
-      },
-      clubLogoAssetId: {
-        default: null,
-        parseHTML: (element: any) => element.getAttribute('data-club-logo-id') || element.getAttribute('data-logo-asset-id') || null,
-        renderHTML: (attributes: any) => (attributes.clubLogoAssetId ? { 'data-club-logo-id': attributes.clubLogoAssetId } : {}),
-      },
-      // Keep the shorter aliases for templates created by integrations before
-      // the explicit clubLogoAssetId attribute was introduced.
-      logoAssetId: {
-        default: null,
-        parseHTML: (element: any) => element.getAttribute('data-logo-asset-id') || element.getAttribute('data-club-logo-id') || null,
-        renderHTML: (attributes: any) => (attributes.logoAssetId ? { 'data-logo-asset-id': attributes.logoAssetId } : {}),
-      },
-      assetId: {
-        default: null,
-        parseHTML: (element: any) => element.getAttribute('data-asset-id') || null,
-        renderHTML: (attributes: any) => (attributes.assetId ? { 'data-asset-id': attributes.assetId } : {}),
-      },
-      placement: {
-        default: 'center',
-        parseHTML: (element: any) => element.getAttribute('data-placement') || 'center',
-        renderHTML: (attributes: any) => ({ 'data-placement': attributes.placement || 'center' }),
-      },
-      width: {
-        default: 'auto',
-        parseHTML: (element: any) => element.getAttribute('data-width') || 'auto',
-        renderHTML: (attributes: any) => ({ 'data-width': attributes.width || 'auto' }),
-      },
-      height: {
-        default: 180,
-        parseHTML: (element: any) => Number(element.getAttribute('data-height')) || 180,
-        renderHTML: (attributes: any) => ({ 'data-height': attributes.height || 180 }),
-      },
-      fit: {
-        default: 'contain',
-        parseHTML: (element: any) => element.getAttribute('data-fit') || 'contain',
-        renderHTML: (attributes: any) => ({ 'data-fit': attributes.fit || 'contain' }),
-      },
-    };
-  },
-
-  parseHTML() {
-    return [
-      { tag: 'figure[data-image-block]' },
-      { tag: 'div[data-image-block]' },
-      {
-        tag: 'img[data-image-block]',
-        getAttrs: (element: any) => ({
-          src: element.getAttribute('src') || '',
-          alt: element.getAttribute('alt') || 'Image placeholder',
-          imageType: element.getAttribute('data-image-type') || 'image',
-        }),
-      },
-    ];
-  },
-
-  renderHTML({ HTMLAttributes }: any) {
-    const attrs = HTMLAttributes || {};
-    const {
-      imageType,
-      src,
-      alt,
-      caption,
-      placeholderText,
-      clubLogoAssetId,
-      logoAssetId,
-      assetId,
-      placement,
-      width,
-      height,
-      fit,
-      class: _className,
-      ...rest
-    } = attrs;
-    const normalizedType = imageType || 'image';
-    const selectedAssetId = clubLogoAssetId || logoAssetId || assetId || '';
-    const rootAttrs = mergeAttributes(rest, {
-      'data-image-block': 'true',
-      'data-image-type': normalizedType,
-      'data-image-src': src || '',
-      'data-image-alt': alt || 'Image placeholder',
-      'data-caption': caption || '',
-      'data-placeholder-text': placeholderText || 'Select an image to place here',
-      ...(clubLogoAssetId ? { 'data-club-logo-id': clubLogoAssetId } : {}),
-      ...(logoAssetId ? { 'data-logo-asset-id': logoAssetId } : {}),
-      ...(assetId ? { 'data-asset-id': assetId } : {}),
-      'data-placement': placement || 'center',
-      'data-width': width || 'auto',
-      'data-height': height || 180,
-      'data-fit': fit || 'contain',
-      class: `image-block image-block--${normalizedType} image-block--${placement || 'center'}${selectedAssetId ? ' image-block--resolved' : ' image-block--placeholder'}`,
-    });
-
-    if (src) {
-      return [
-        'figure',
-        rootAttrs,
-        [
-          'img',
-          {
-            src,
-            alt: alt || 'Template image',
-            class: 'image-block__img',
-            style: `max-height: ${height || 180}px; width: ${width || 'auto'}; object-fit: ${fit || 'contain'};`,
-          },
-        ],
-        ...(caption ? [['figcaption', { class: 'image-block__caption' }, caption]] : []),
-      ];
-    }
-
-    return [
-      'figure',
-      rootAttrs,
-      [
-        'div',
-        { class: 'image-block__placeholder', 'data-image-placeholder': 'true' },
-        ['span', { class: 'image-block__placeholder-icon', 'aria-hidden': 'true' }, normalizedType === 'club-logo' || normalizedType === 'logo' ? '◎' : '▧'],
-        ['strong', {}, normalizedType === 'club-logo' || normalizedType === 'logo' ? 'Club logo placeholder' : 'Image placeholder'],
-        ['span', { class: 'image-block__placeholder-copy' }, placeholderText || 'Select an image to place here'],
-      ],
-      ...(caption ? [['figcaption', { class: 'image-block__caption' }, caption]] : []),
-    ];
-  },
-});
-
-export interface ImageBlockAttributes {
-  imageType: 'image' | 'club-logo' | 'logo' | string;
-  src: string;
-  alt: string;
-  caption: string;
-  placeholderText: string;
-  clubLogoAssetId: string | null;
-  logoAssetId: string | null;
-  assetId: string | null;
-  placement: 'left' | 'center' | 'right' | string;
-  width: string | number;
-  height: number;
-  fit: 'contain' | 'cover' | string;
-}
-
-export function createImageBlockNode(attributes: Partial<ImageBlockAttributes> = {}) {
-  const selectedAssetId = attributes.clubLogoAssetId || attributes.logoAssetId || attributes.assetId || null;
-  const imageType = attributes.imageType || 'image';
-  return {
-    type: 'imageBlock',
-    attrs: {
-      imageType,
-      src: attributes.src || '',
-      alt: attributes.alt || (imageType === 'club-logo' || imageType === 'logo' ? 'Club logo' : 'Template image'),
-      caption: attributes.caption || '',
-      placeholderText:
-        attributes.placeholderText ||
-        (imageType === 'club-logo' || imageType === 'logo' ? 'Choose a club logo from the asset library' : 'Select an image to place here'),
-      clubLogoAssetId: attributes.clubLogoAssetId || (imageType === 'club-logo' || imageType === 'logo' ? selectedAssetId : null),
-      logoAssetId: attributes.logoAssetId || (imageType === 'club-logo' || imageType === 'logo' ? selectedAssetId : null),
-      assetId: attributes.assetId || selectedAssetId,
-      placement: attributes.placement || 'center',
-      width: attributes.width || 'auto',
-      height: attributes.height || 180,
-      fit: attributes.fit || 'contain',
-    },
-  };
-}
-
-export const CustomTable = Table.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      blockType: {
-        default: 'generic',
-        parseHTML: (element: any) => element.getAttribute('data-block-type') || 'generic',
-        renderHTML: (attributes: any) => {
-          const bt = attributes.blockType || 'generic';
-          const classMap: Record<string, string> = {
-            infoTable: 'cd-info-table',
-            repeatingTable: 'cd-repeating-table',
-            signatureGrid: 'cd-signature-grid',
-          };
-          const extra = classMap[bt] ? ` ${classMap[bt]}` : '';
-          return {
-            'data-block-type': bt,
-            class: `cd-table cd-${bt}${extra}`,
-          };
-        },
-      },
-      listVariable: {
-        default: null,
-        parseHTML: (element: any) => element.getAttribute('data-list-var'),
-        renderHTML: (attributes: any) => (attributes.listVariable ? { 'data-list-var': attributes.listVariable } : {}),
-      },
-      itemAlias: {
-        default: null,
-        parseHTML: (element: any) => element.getAttribute('data-item-alias'),
-        renderHTML: (attributes: any) => (attributes.itemAlias ? { 'data-item-alias': attributes.itemAlias } : {}),
-      },
-      hasTotal: {
-        default: false,
-        parseHTML: (element: any) => element.getAttribute('data-has-total') === 'true',
-        renderHTML: (attributes: any) => (attributes.hasTotal ? { 'data-has-total': 'true' } : {}),
-      },
-      totalLabel: {
-        default: 'Total',
-        parseHTML: (element: any) => element.getAttribute('data-total-label') || 'Total',
-        renderHTML: (attributes: any) => (attributes.totalLabel ? { 'data-total-label': attributes.totalLabel } : {}),
-      },
-      totalVarName: {
-        default: null,
-        parseHTML: (element: any) => element.getAttribute('data-total-var'),
-        renderHTML: (attributes: any) => (attributes.totalVarName ? { 'data-total-var': attributes.totalVarName } : {}),
-      },
-    };
-  },
-
-  renderHTML({ node, HTMLAttributes }): any {
-    const bt = node.attrs.blockType || 'generic';
-    const classMap: Record<string, string> = {
-      infoTable: 'cd-info-table',
-      repeatingTable: 'cd-repeating-table',
-      signatureGrid: 'cd-signature-grid',
-    };
-    const extra = classMap[bt] ? ` ${classMap[bt]}` : '';
-    const tableClass = `cd-table cd-${bt}${extra}`;
-
-    const parentRender = this.parent?.({ node, HTMLAttributes }) as any;
-    if (Array.isArray(parentRender) && parentRender.length >= 2) {
-      parentRender[1] = mergeAttributes(parentRender[1] || {}, {
-        class: tableClass,
-        'data-block-type': bt,
-      });
-      return parentRender;
-    }
-    return ['table', mergeAttributes(HTMLAttributes, { class: tableClass, 'data-block-type': bt }), 0];
-  },
-});
-
-export const CustomTableRow = TableRow;
-export const CustomTableCell = TableCell;
-export const CustomTableHeader = TableHeader;
 
 export const PageBreak = Node.create({
   name: 'pageBreak',
@@ -430,154 +173,6 @@ export const PageBreak = Node.create({
     ];
   },
 });
-
-// Helper Content Creators for Native Tables
-export function createInfoTableNode(
-  rows: Array<{ label: string; field?: string; value?: string }> = [
-    { label: 'Event Title', field: 'event_name' },
-    { label: 'Date', field: 'event_date' },
-    { label: 'Venue', field: 'venue' },
-  ]
-) {
-  return {
-    type: 'table',
-    attrs: { blockType: 'infoTable', class: 'cd-info-table' },
-    content: rows.map(r => ({
-      type: 'tableRow',
-      content: [
-        {
-          type: 'tableCell',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: r.label }] }],
-        },
-        {
-          type: 'tableCell',
-          content: [
-            {
-              type: 'paragraph',
-              content: r.field
-                ? [{ type: 'fieldChip', attrs: { fieldName: r.field, label: r.field, fieldType: 'text' } }]
-                : r.value
-                ? [{ type: 'text', text: r.value }]
-                : [],
-            },
-          ],
-        },
-      ],
-    })),
-  };
-}
-
-export function createRepeatingTableNode(
-  cols: Array<{ key: string; label: string }> = [
-    { key: 'description', label: 'Item Description' },
-    { key: 'amount', label: 'Amount (INR)' },
-  ],
-  listVar = 'budget_items',
-  itemAlias = 'item',
-  hasTotal = true,
-  totalLabel = 'Total Budget',
-  totalVarName = 'total_budget_amount'
-) {
-  const headerRow = {
-    type: 'tableRow',
-    content: cols.map(c => ({
-      type: 'tableHeader',
-      content: [{ type: 'paragraph', content: [{ type: 'text', text: c.label }] }],
-    })),
-  };
-
-  const dataRow = {
-    type: 'tableRow',
-    content: cols.map(c => ({
-      type: 'tableCell',
-      content: [
-        {
-          type: 'paragraph',
-          content: [
-            {
-              type: 'fieldChip',
-              attrs: { fieldName: `${listVar}.${c.key}`, label: `${itemAlias}.${c.key}`, fieldType: 'text' },
-            },
-          ],
-        },
-      ],
-    })),
-  };
-
-  const rows = [headerRow, dataRow];
-
-  if (hasTotal && cols.length > 0) {
-    const totalCells: any[] = [
-      {
-        type: 'tableCell',
-        content: [{ type: 'paragraph', content: [{ type: 'text', text: totalLabel }] }],
-      },
-    ];
-    for (let i = 0; i < cols.length - 2; i++) {
-      totalCells.push({
-        type: 'tableCell',
-        content: [{ type: 'paragraph' }],
-      });
-    }
-    if (cols.length > 1) {
-      totalCells.push({
-        type: 'tableCell',
-        content: [
-          {
-            type: 'paragraph',
-            content: [
-              {
-                type: 'fieldChip',
-                attrs: { fieldName: totalVarName, label: totalVarName, fieldType: 'money' },
-              },
-            ],
-          },
-        ],
-      });
-    }
-    rows.push({ type: 'tableRow', content: totalCells });
-  }
-
-  return {
-    type: 'table',
-    attrs: {
-      blockType: 'repeatingTable',
-      class: 'cd-repeating-table',
-      listVariable: listVar,
-      itemAlias: itemAlias,
-      hasTotal: hasTotal,
-      totalLabel: totalLabel,
-      totalVarName: totalVarName,
-    },
-    content: rows,
-  };
-}
-
-export function createSignatureGridNode(
-  count = 2,
-  signatures: Array<{ label: string; designation?: string }> = [
-    { label: 'Student Chairperson', designation: 'Club Executive Committee' },
-    { label: 'Faculty Advisor', designation: 'SVNIT Surat' },
-  ]
-) {
-  const signs = signatures.slice(0, count);
-  return {
-    type: 'table',
-    attrs: { blockType: 'signatureGrid', class: 'cd-signature-grid', columns: count },
-    content: [
-      {
-        type: 'tableRow',
-        content: signs.map(s => ({
-          type: 'tableCell',
-          content: [
-            { type: 'paragraph', content: [{ type: 'text', text: s.label }] },
-            { type: 'paragraph', content: [{ type: 'text', text: s.designation || '' }] },
-          ],
-        })),
-      },
-    ],
-  };
-}
 
 export function safeInsertBlock(editor: any, nodeJSON: any, position?: number) {
   if (!editor) return false;
@@ -739,5 +334,5 @@ export function migrateTipTapContent(content: any): any {
       newContent.push(block);
     }
   }
-  return { ...content, content: newContent };
+  return ensureBlockIds({ ...content, content: newContent });
 }
