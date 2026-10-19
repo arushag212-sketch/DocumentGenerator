@@ -34,6 +34,15 @@ def compute_short_year(academic_year: str) -> str:
     return ay[-2:] if len(ay) >= 2 else ay
 
 
+_EVENT_CODE_STOPWORDS = {"a", "an", "the", "for", "in", "on", "of", "&", "-"}
+
+
+def derive_event_code(title: Optional[str]) -> str:
+    """Initials of up to four significant words, e.g. 'Web Development Workshop' -> 'WDW'."""
+    words = [w for w in str(title or "").split() if w.lower() not in _EVENT_CODE_STOPWORDS]
+    return "".join(w[0].upper() for w in words[:4] if w[0].isalnum()) or "EVT"
+
+
 def format_reference_number(
     format_pattern: str,
     academic_year: str,

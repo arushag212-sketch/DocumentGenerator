@@ -46,6 +46,8 @@ from docgen.renderer import Renderer
 from docgen.schema import TemplateSchema, load_schema
 from docgen.sources import DatabaseTemplateSource, build_club_config_from_db
 from server.app.core.audit import log_audit
+from docgen.field_aliases import apply_field_aliases
+from docgen.numbering import derive_event_code
 from server.app.core.numbering_service import reserve_number_for_document
 from server.app.core.doc_retention import prune_document_versions
 from server.app.core.storage import require_local_storage
@@ -106,12 +108,6 @@ class BatchGenerator:
             b_val = event_data.get("estimated_budget") or event_data.get("budget") or event_data.get("budget_amount") or event_data.get("sanctioned_budget")
             b_list = coerce_to_budget_items(b_val)
             event_data["budget_items"] = [b.model_dump() for b in b_list]
-
-        # Align participants and expected_participants in event_data
-        if "participants" in event_data and ("expected_participants" not in event_data or not event_data.get("expected_participants")):
-            event_data["expected_participants"] = event_data["participants"]
-        elif "expected_participants" in event_data and ("participants" not in event_data or not event_data.get("participants")):
-            event_data["participants"] = event_data["expected_participants"]
 
         if "winners" in event_data and not isinstance(event_data["winners"], list):
             event_data["winners"] = []
@@ -236,6 +232,12 @@ class BatchGenerator:
                     pass
 
             templates_to_render.append((tmpl, tmpl_ver, schema_dict))
+
+        # Copy canonical facts onto the field names these templates use (no new facts)
+        apply_field_aliases(
+            event_data,
+            wanted={f.get("key") for _, _, sd in templates_to_render for f in (sd.get("fields") or []) if f.get("key")},
+        )
 
         # ---------------- 3. MISSING FIELD DETECTION (NO FABRICATION) ----------------
         # Required fields must be supplied by the user. Only document_date=today and
@@ -400,9 +402,7 @@ class BatchGenerator:
 
         # Ensure event_code is present
         if not event_data.get("event_code"):
-            words = [w for w in str(final_title).split() if w.lower() not in ("a", "an", "the", "for", "in", "on", "of", "&", "-")]
-            code = "".join(w[0].upper() for w in words[:4]) or "EVT"
-            event_data["event_code"] = code
+            event_data["event_code"] = derive_event_code(final_title)
 
         # Ensure category is present
         if not event_data.get("category"):
@@ -575,6 +575,9 @@ class BatchGenerator:
                             format_pattern=format_pattern,
                             expiry_minutes=1440,
                             status="used",
+                            # A template that declares its own numbering format owns that
+                            # series: start it at 001 on first use instead of failing.
+                            allow_create=bool(format_pattern),
                         )
                     except ValueError as e:
                         raise HTTPException(

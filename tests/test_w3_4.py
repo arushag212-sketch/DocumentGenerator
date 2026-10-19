@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import os
+
 import re
 import uuid
 from pathlib import Path
@@ -278,7 +280,7 @@ def test_w3_4_rendered_pdf_reference_format(client, auth_context, db_session):
     appr_doc_id = appr_doc_res.json()["id"]
 
     # Extract and assert Permission Letter PDF text
-    perm_pdf_files = list((Path("storage/documents") / perm_doc_id / "v1").glob("*.pdf"))
+    perm_pdf_files = list((Path(os.environ["STORAGE_LOCAL_ROOT"], "documents") / perm_doc_id / "v1").glob("*.pdf"))
     assert perm_pdf_files, f"No PDF found for permission letter {perm_doc_id}"
     perm_doc = pymupdf.open(str(perm_pdf_files[0]))
     perm_text = "".join(p.get_text() for p in perm_doc)
@@ -289,7 +291,7 @@ def test_w3_4_rendered_pdf_reference_format(client, auth_context, db_session):
     )
 
     # Extract and assert Approval Note PDF text
-    appr_pdf_files = list((Path("storage/documents") / appr_doc_id / "v1").glob("*.pdf"))
+    appr_pdf_files = list((Path(os.environ["STORAGE_LOCAL_ROOT"], "documents") / appr_doc_id / "v1").glob("*.pdf"))
     assert appr_pdf_files, f"No PDF found for approval note {appr_doc_id}"
     appr_doc = pymupdf.open(str(appr_pdf_files[0]))
     appr_text = "".join(p.get_text() for p in appr_doc)

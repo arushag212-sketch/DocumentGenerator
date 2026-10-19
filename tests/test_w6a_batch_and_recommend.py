@@ -21,6 +21,8 @@
 
 from __future__ import annotations
 
+import os
+
 import io
 import zipfile
 from pathlib import Path
@@ -740,8 +742,8 @@ def test_w6a_e_batch_render_failure_rolls_back_no_consumed_numbers(client, w6a_s
             raise RuntimeError("Simulated render engine disk failure on second winner!")
         from docgen.renderer import RenderResult
         return RenderResult(
-            docx_path=Path("storage/test_dummy.docx"),
-            pdf_path=Path("storage/test_dummy.pdf"),
+            docx_path=Path(os.environ["STORAGE_LOCAL_ROOT"], "test_dummy.docx"),
+            pdf_path=Path(os.environ["STORAGE_LOCAL_ROOT"], "test_dummy.pdf"),
             context_used={},
         )
 

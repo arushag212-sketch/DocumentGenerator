@@ -120,6 +120,86 @@ class TemplateSpec(BaseModel):
     blocks: list[TemplateBlockSpec]
 
 
+class _ModelFieldSpec(BaseModel):
+    key: str
+    type: str = "text"
+    required: bool = True
+    ask: str
+    defer_ok: bool = False
+    sensitive: bool = False
+    columns_json: Optional[str] = Field(
+        default=None, description='For type "table": the columns list serialized as a JSON string.'
+    )
+
+
+class _ModelBlockSpec(BaseModel):
+    type: str
+    block_json: str = Field(description="The complete block object (type, attrs, content) serialized as a JSON string.")
+
+
+class _ModelTemplateSpec(BaseModel):
+    name: str
+    category: str = "Official Event Documents"
+    stage: str = "custom"
+    description: str
+    fields: list[_ModelFieldSpec]
+    blocks: list[_ModelBlockSpec]
+
+
+# Schema sent to the model. Block bodies and table columns travel as JSON strings because
+# structured-output decoding returns `{}` for free-form objects (attrs, content items).
+TEMPLATE_SPEC_MODEL_SCHEMA = _ModelTemplateSpec.model_json_schema()
+
+MODEL_ENCODING_NOTE = """OUTPUT ENCODING (required by the response schema):
+- Each blocks[] item is {"type": "<block type>", "block_json": "<the complete block object from the rules above, serialized as a JSON string>"}.
+- A field of type "table" carries its columns as "columns_json": "<the columns list serialized as a JSON string>".
+Everything else is plain JSON as shown in the example."""
+
+_TABLE_ATTR_KEYS = ("title", "rows", "listVariable", "itemAlias", "columns", "hasTotal", "totalLabel", "totalField", "totalVarName", "signatures")
+
+
+def _decode_model_spec(raw: Any) -> Any:
+    """Expand `block_json` / `columns_json` strings from the model into TemplateSpec shape."""
+    if not isinstance(raw, dict):
+        return raw
+    out = dict(raw)
+    blocks = []
+    for block in raw.get("blocks") or []:
+        if isinstance(block, dict) and "block_json" in block:
+            encoded = block["block_json"]
+            try:
+                decoded = json.loads(encoded) if isinstance(encoded, str) else encoded
+            except (TypeError, ValueError):
+                decoded = None
+            if not isinstance(decoded, dict):
+                continue
+            decoded.setdefault("type", block.get("type"))
+            # Table blocks keep their settings in attrs; accept them at the top level too.
+            if decoded.get("type") in ("infoTable", "repeatingTable", "signatureGrid"):
+                attrs = dict(decoded.get("attrs") or {})
+                for k in _TABLE_ATTR_KEYS:
+                    if k in decoded and k not in attrs:
+                        attrs[k] = decoded.pop(k)
+                decoded["attrs"] = attrs
+            block = decoded
+        blocks.append(block)
+    out["blocks"] = blocks
+    fields = []
+    for field in raw.get("fields") or []:
+        if isinstance(field, dict) and "columns_json" in field:
+            field = dict(field)
+            encoded = field.pop("columns_json")
+            try:
+                cols = json.loads(encoded) if isinstance(encoded, str) and encoded.strip() else None
+            except (TypeError, ValueError):
+                cols = None
+            if isinstance(cols, list) and not field.get("columns"):
+                field["columns"] = cols
+        fields.append(field)
+    out["fields"] = fields
+    return out
+
+
 def strip_pii_from_text(text: str) -> str:
     """Redact personal financial & contact data (PAN, phone, bank account, IFSC, email) from input."""
     s = PAN_REGEX.sub("[REDACTED_PAN]", text)
@@ -607,9 +687,9 @@ def generate_draft_template(
         )
 
     # 4. Construct prompt and schema
-    schema = TemplateSpec.model_json_schema()
+    schema = TEMPLATE_SPEC_MODEL_SCHEMA
     full_prompt = (
-        f"{SYSTEM_PROMPT_TEMPLATE}\n\n"
+        f"{SYSTEM_PROMPT_TEMPLATE}\n{MODEL_ENCODING_NOTE}\n\n"
         f"USER TEMPLATE REQUEST:\n{cleaned_desc}\n\n"
         f"Generate the TemplateSpec JSON:"
     )
@@ -627,7 +707,9 @@ def generate_draft_template(
     spec: Optional[TemplateSpec] = None
 
     try:
-        spec = TemplateSpec.model_validate(raw_json)
+        spec = TemplateSpec.model_validate(_decode_model_spec(raw_json))
+        if not spec.blocks:
+            raise ValueError("blocks must contain at least one block with content")
     except Exception as first_err:
         retry_prompt = (
             f"{full_prompt}\n\n"
@@ -644,7 +726,7 @@ def generate_draft_template(
             )
 
         try:
-            spec = TemplateSpec.model_validate(retry_json)
+            spec = TemplateSpec.model_validate(_decode_model_spec(retry_json))
         except Exception as second_err:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

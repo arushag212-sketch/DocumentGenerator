@@ -142,17 +142,17 @@ export function applyChatAction({
 
   if (type === 'insert_clause') {
     const text = payload.text || 'Standard Club Undertaking Clause';
-    editor.chain().insertContent({ type: 'paragraph', content: [{ type: 'text', text }] }).run();
+    safeInsertBlock(editor, { type: 'paragraph', content: [{ type: 'text', text }] });
     markUnsaved();
     return;
   }
 
   if (type === 'set_letterhead' || type === 'update_logo') {
-    editor.chain().insertContent({
+    safeInsertBlock(editor, {
       type: 'paragraph',
       attrs: { textAlign: payload.align || 'left' },
       content: [{ type: 'text', text: `[Club Logo: ${payload.instruction || 'Official'}]` }],
-    }).run();
+    });
     markUnsaved();
     return;
   }

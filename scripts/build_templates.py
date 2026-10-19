@@ -540,7 +540,7 @@ def build_approval_note():
         ("Objectives", ": {{ objectives }}"),
         ("Target Audience", ": {{ target_audience }}"),
         ("Expected Number of Participants", ": {{ expected_participants }}"),
-        ("Name of Judges", ": {% if judges %}{% for judge in judges %}{{ judge }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}Dr. Alok Kumar{% endif %}"),
+        ("Name of Judges", ": {% if judges %}{% for judge in judges %}{{ judge }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}Nil{% endif %}"),
     ]
     for i, (label, value) in enumerate(about_rows):
         cell0 = about_table.cell(i, 0)

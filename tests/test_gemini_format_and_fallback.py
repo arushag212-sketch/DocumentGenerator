@@ -212,7 +212,7 @@ def test_gemini_404_triggers_fallback_to_next_model():
     mock_models_resp.status_code = 200
     mock_models_resp.json.return_value = {
         "models": [
-            {"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-3.6-flash", "supportedGenerationMethods": ["generateContent"]},
             {"name": "models/gemini-flash-latest", "supportedGenerationMethods": ["generateContent"]},
         ]
     }
@@ -228,7 +228,7 @@ def test_gemini_404_triggers_fallback_to_next_model():
             # First call was to deprecated model
             assert "gemini-deprecated-model" in mock_post.call_args_list[0][0][0]
             # Second call was to next candidate model
-            assert "gemini-2.5-flash" in mock_post.call_args_list[1][0][0]
+            assert "gemini-3.6-flash" in mock_post.call_args_list[1][0][0]
             assert result == {"title": "Recovered On Next Model"}
 
 
@@ -267,7 +267,7 @@ def test_gemini_model_discovery_1hr_cache():
     mock_resp.status_code = 200
     mock_resp.json.return_value = {
         "models": [
-            {"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"]},
+            {"name": "models/gemini-3.6-flash", "supportedGenerationMethods": ["generateContent"]},
         ]
     }
 
@@ -275,7 +275,7 @@ def test_gemini_model_discovery_1hr_cache():
         # First discovery call
         m1 = discover_gemini_models(api_key="test-key")
         assert mock_get.call_count == 1
-        assert "gemini-2.5-flash" in m1
+        assert "gemini-3.6-flash" in m1
 
         # Second call within 1 hour should hit cache
         m2 = discover_gemini_models(api_key="test-key")

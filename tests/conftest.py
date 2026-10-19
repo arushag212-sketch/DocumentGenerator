@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, event
+import shutil
 import tempfile
 from sqlalchemy.orm import sessionmaker
 
@@ -20,6 +21,14 @@ TEST_DB_PATH = Path(tempfile.gettempdir()) / "clubdocs_test_isolated.db"
 
 # Force DATABASE_URL to test DB before importing app/db modules
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH.as_posix()}"
+
+# Isolate file storage too. Storage GC runs against the test DB, so pointing it at the
+# real `storage/` folder would treat every dev template/document file as an orphan and
+# delete it.
+TEST_STORAGE_ROOT = Path(tempfile.gettempdir()) / "clubdocs_test_storage"
+shutil.rmtree(TEST_STORAGE_ROOT, ignore_errors=True)
+os.environ["STORAGE_LOCAL_ROOT"] = str(TEST_STORAGE_ROOT)
+os.environ["STORAGE_GC_ENABLED"] = "false"
 
 from server.app.core.database import Base, engine as app_engine, SessionLocal as app_SessionLocal
 import server.app.core.database as db_module

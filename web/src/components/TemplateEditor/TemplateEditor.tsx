@@ -16,6 +16,13 @@ import { DEFAULT_DESIGN_SETTINGS, THEMES } from './themes';
 import { TemplateField } from './FieldsPanel';
 import { applyChatAction } from './applyChatAction';
 
+// Replace the document and leave a collapsed cursor at the start. setContent can
+// leave the whole document selected, and any later insert or rewrite would then
+// replace every block.
+function loadEditorContent(editor: any, content: any) {
+  editor.chain().setContent(content).setTextSelection(1).run();
+}
+
 export interface ClubLogoOption {
   id: string;
   name: string;
@@ -128,7 +135,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         }
 
         if (editor && draftData.editor_json && !contentLoadedRef.current) {
-          editor.commands.setContent(migrateTipTapContent(draftData.editor_json));
+          loadEditorContent(editor, migrateTipTapContent(draftData.editor_json));
           contentLoadedRef.current = true;
         }
         if (clubId && (!providedClubLogoOptions || providedClubLogoOptions.length === 0)) {
@@ -164,7 +171,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   // Sync content once if editor initialized after template fetch
   useEffect(() => {
     if (editor && template?.editor_json && !contentLoadedRef.current) {
-      editor.commands.setContent(migrateTipTapContent(template.editor_json));
+      loadEditorContent(editor, migrateTipTapContent(template.editor_json));
       contentLoadedRef.current = true;
     }
   }, [editor, template]);
@@ -245,7 +252,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         editor_json: editor.getJSON(),
       });
       if (res?.editor_json) {
-        editor.commands.setContent(res.editor_json);
+        loadEditorContent(editor, res.editor_json);
         if (res.design_settings?.fontFamily) {
           setDesignSettings((prev) => ({
             ...prev,

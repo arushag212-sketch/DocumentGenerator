@@ -20,6 +20,8 @@ Checklist:
 
 from __future__ import annotations
 
+import os
+
 import io
 import json
 import subprocess
@@ -246,7 +248,7 @@ def test_w4b_compile_and_validate_docx():
     assert found_cant_split, "Table rows should have cantSplit attribute"
 
     # Check 3: LibreOffice headless conversion (verifies OpenXML validity without Word repair prompt)
-    temp_dir = Path("storage/test_outputs")
+    temp_dir = Path(os.environ["STORAGE_LOCAL_ROOT"], "test_outputs")
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_docx = temp_dir / "test_compiled.docx"
     temp_docx.write_bytes(docx_bytes)

@@ -163,8 +163,10 @@ def simplify_schema_for_gemini(raw_schema: dict[str, Any]) -> dict[str, Any]:
                 if k in ("$defs", "$schema", "title", "additionalProperties"):
                     continue
                 res[k] = inline_refs(v)
-            if res.get("type") == "object" and not res.get("properties"):
-                res["properties"] = {}
+            # Free-form objects (e.g. `dict[str, Any]` payloads) must stay open. An explicit
+            # empty `properties` would constrain the model to return `{}` for them.
+            if res.get("type") == "object" and "properties" in res and not res["properties"]:
+                del res["properties"]
             return res
         elif isinstance(node, list):
             return [inline_refs(item) for item in node]

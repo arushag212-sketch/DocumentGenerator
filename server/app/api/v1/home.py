@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from docgen.numbering import compute_short_year
+from docgen.numbering import compute_short_year, derive_event_code
+from server.app.core.numbering_service import get_suggested_ref_no_for_series
 from server.app.core.batch_generator import BatchGenerator
 from server.app.core.database import get_db
 from server.app.core.event_recommender import EventRecommender
@@ -135,32 +136,25 @@ def _clean_jargon(text: str) -> str:
     return cleaned
 
 
-def _get_suggested_ref_no(club: Club, series_key: str, db: Session) -> str:
-    """Calculate the next reference number string without incrementing."""
-    ay = club.academic_year_default or "2026-27"
-    short_ay = compute_short_year(ay)
-    code = club.short_name or club.slug.upper()
-
-    ns_repo = ScopedRepository(db, NumberingSeries, club_id=club.id)
-    ns = ns_repo.find_first(
-        NumberingSeries.key == series_key,
-        NumberingSeries.academic_year == ay,
-    )
-
-    if ns:
-        next_seq = ns.last_seq + 1
-        fmt = ns.format
-        ref_no = (
-            fmt.replace("{academic_year}", short_ay)
-            .replace("{short_year}", short_ay)
-            .replace("{year}", ay)
-            .replace("{series}", series_key)
-            .replace("{seq:03d}", f"{next_seq:03d}")
-            .replace("{seq}", str(next_seq))
+def _get_suggested_ref_no(
+    club: Club,
+    series_key: str,
+    db: Session,
+    event_code: Optional[str] = None,
+    format_pattern: Optional[str] = None,
+) -> str:
+    """Preview the next reference number exactly as generation will format it (no increment)."""
+    try:
+        ref_no = get_suggested_ref_no_for_series(
+            db=db,
+            club_id=club.id,
+            series_key=series_key,
+            event_code=event_code,
+            format_pattern=format_pattern,
         )
-    else:
-        ref_no = f"{code}/{short_ay}/{series_key}/001"
-
+    except ValueError:
+        ay = club.academic_year_default or "2026-27"
+        ref_no = f"{club.short_name or club.slug.upper()}/{compute_short_year(ay)}/{series_key}/001"
     return f"{ref_no} will be used"
 
 
@@ -208,9 +202,10 @@ def understand_user_need(
     recommended_docs: list[HomeRecommendedDoc] = []
     # Combine active recommended and other templates
     all_recs = rec.templates + rec.other_templates
+    event_code = derive_event_code(extracted.get("event_name")) if extracted.get("event_name") else None
     for t in all_recs:
         series_key = t.numbering_series or ("ROOM" if t.slug == "permission_letter" else "EVT")
-        suggested_ref = _get_suggested_ref_no(ctx.club, series_key, db)
+        suggested_ref = _get_suggested_ref_no(ctx.club, series_key, db, event_code, t.numbering_format)
         reason_text = _clean_jargon(t.reason)
         if t.slug == "permission_letter" and extracted.get("venue"):
             reason_text = f"Official permission required to book and use {extracted.get('venue')} on campus."

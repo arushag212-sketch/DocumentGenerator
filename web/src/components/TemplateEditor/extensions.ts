@@ -192,13 +192,18 @@ export function safeInsertBlock(editor: any, nodeJSON: any, position?: number) {
     }
   }
 
-  try {
-    if (editor.can().insertContent(nodeJSON)) {
-      editor.chain().focus().insertContent(nodeJSON).run();
-      return true;
+  // insertContent replaces a non-empty selection. Inserting a block must never
+  // delete existing content (e.g. when the whole document is selected), so only
+  // insert at the cursor when the selection is collapsed; otherwise insert after it.
+  if (editor.state.selection.empty) {
+    try {
+      if (editor.can().insertContent(nodeJSON)) {
+        editor.chain().focus().insertContent(nodeJSON).run();
+        return true;
+      }
+    } catch {
+      // continue to fallback
     }
-  } catch {
-    // continue to fallback
   }
 
   try {
@@ -272,7 +277,10 @@ export function insertFieldChip(
       // longer valid after another editor transaction.
     }
   }
-  editor.chain().focus().insertContent(content).run();
+  // Never replace selected text with a chip; drop it at the end of the selection.
+  const { selection } = editor.state;
+  const chain = editor.chain().focus();
+  (selection.empty ? chain : chain.setTextSelection(selection.to)).insertContent(content).run();
 }
 
 /**

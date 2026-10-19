@@ -4,7 +4,7 @@
     {
       "name": "api",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "uvicorn", "server.app.main:app", "--port", "8000", "--reload", "--reload-dir", "server", "--reload-dir", "docgen"],
+      "runtimeArgs": ["-m", "uvicorn", "server.app.main:app", "--port", "8000"],
       "port": 8000
     },
     {

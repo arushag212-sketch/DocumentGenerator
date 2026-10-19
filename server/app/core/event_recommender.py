@@ -12,6 +12,7 @@ Rules:
 from __future__ import annotations
 
 import re
+from docgen.field_aliases import apply_field_aliases
 from typing import Any, Optional
 import yaml
 from pydantic import BaseModel, Field
@@ -31,6 +32,7 @@ class TemplateRecommendationOut(BaseModel):
     recommended: bool
     reason: str
     numbering_series: Optional[str] = None
+    numbering_format: Optional[str] = None
     repeat_per: Optional[str] = None
     fields_count: int = 0
 
@@ -284,6 +286,7 @@ class EventRecommender:
                     recommended=recommended,
                     reason=reason,
                     numbering_series=series_key,
+                    numbering_format=(schema_dict.get("numbering") or {}).get("format"),
                     repeat_per=repeat_per,
                     fields_count=len(fields_list),
                 )
@@ -304,6 +307,10 @@ class EventRecommender:
             active_ids = {r.template_id for r in template_recs if r.recommended}
 
         grouped_fields_map: dict[str, GroupedMissingFieldOut] = {}
+        apply_field_aliases(
+            extracted,
+            wanted={f.get("key") for tid in active_ids for f in parsed_schemas.get(tid, {}).get("fields", []) if f.get("key")},
+        )
 
         for tmpl_id in active_ids:
             schema_dict = parsed_schemas.get(tmpl_id, {})

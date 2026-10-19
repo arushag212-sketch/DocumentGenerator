@@ -15,6 +15,8 @@ Verifies:
 
 from __future__ import annotations
 
+import os
+
 import io
 import time
 from pathlib import Path
@@ -45,13 +47,13 @@ def test_content_addressed_template_deduplication(tmp_path, monkeypatch):
     
     # Save first time
     rel1, sha1 = storage.save_content_addressed("templates", fake_docx, "docx")
-    path1 = Path("storage") / rel1
+    path1 = storage.base_dir / rel1
     assert path1.exists()
     assert path1.name.endswith(".docx")
     
     # Save second time with identical bytes
     rel2, sha2 = storage.save_content_addressed("templates", fake_docx, "docx")
-    path2 = Path("storage") / rel2
+    path2 = storage.base_dir / rel2
     
     # Both paths must point to the identical file
     assert path1.resolve() == path2.resolve()
@@ -120,7 +122,7 @@ def test_fork_thumbnail_copy_on_write(client, db_session):
     headers = {"Authorization": f"Bearer {token}"}
     
     # Count thumbnails before fork
-    thumb_dir = Path("storage/thumbnails")
+    thumb_dir = Path(os.environ["STORAGE_LOCAL_ROOT"], "thumbnails")
     thumb_dir.mkdir(parents=True, exist_ok=True)
     count_before = len(list(thumb_dir.glob("*.*")))
     
@@ -139,14 +141,13 @@ def test_fork_thumbnail_copy_on_write(client, db_session):
 
 def test_preview_ttl_expiration_and_regeneration(client, db_session):
     """Test that previews expire after TTL and are regenerated on demand."""
-    cache_dir = Path("storage/cache/previews")
+    cache_dir = Path(os.environ["STORAGE_LOCAL_ROOT"], "cache/previews")
     cache_dir.mkdir(parents=True, exist_ok=True)
     
     # Create a dummy preview file with old mtime (> 7 days ago)
     old_time = time.time() - (PREVIEW_TTL_DAYS + 1) * 86400
     dummy_preview = cache_dir / "test_doc_v1_p1.jpg"
     dummy_preview.write_bytes(b"\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xFF\xDB\x00C\x00")
-    import os
     os.utime(dummy_preview, (old_time, old_time))
     
     assert dummy_preview.exists()
@@ -210,7 +211,7 @@ def test_document_version_retention_and_regeneration(client, db_session):
     # Create 3 dummy older versions
     import uuid
     for i in range(2, 5):
-        dummy_file = Path("storage/documents") / doc.id / f"v{i}" / "doc.docx"
+        dummy_file = Path(os.environ["STORAGE_LOCAL_ROOT"], "documents") / doc.id / f"v{i}" / "doc.docx"
         dummy_file.parent.mkdir(parents=True, exist_ok=True)
         dummy_file.write_bytes(b"dummy")
         dv = DocumentVersion(
@@ -248,14 +249,13 @@ def test_document_version_retention_and_regeneration(client, db_session):
 
 def test_storage_gc_dry_run_vs_apply():
     """Test that GC dry-run only reports without deleting, while apply safely removes orphans."""
-    cache_dir = Path("storage/cache/previews")
+    cache_dir = Path(os.environ["STORAGE_LOCAL_ROOT"], "cache/previews")
     cache_dir.mkdir(parents=True, exist_ok=True)
     
     orphan_preview = cache_dir / "orphan_test_preview_12345.jpg"
     orphan_preview.write_bytes(b"temporary preview bytes")
     # Set to expired
     old_time = time.time() - (PREVIEW_TTL_DAYS + 2) * 86400
-    import os
     os.utime(orphan_preview, (old_time, old_time))
     
     # 1. Dry Run: File must NOT be deleted

@@ -319,16 +319,16 @@ def test_thumbnail_generation_no_cache_returns_200_and_differs_between_templates
 
     # Delete cached thumbnails to guarantee fresh on-demand rendering
     for ext in ("webp", "png"):
-        (Path("storage/thumbnails") / f"{perm_ver.id}.{ext}").unlink(missing_ok=True)
-        (Path("storage/thumbnails") / f"{appr_ver.id}.{ext}").unlink(missing_ok=True)
+        (Path(os.environ["STORAGE_LOCAL_ROOT"], "thumbnails") / f"{perm_ver.id}.{ext}").unlink(missing_ok=True)
+        (Path(os.environ["STORAGE_LOCAL_ROOT"], "thumbnails") / f"{appr_ver.id}.{ext}").unlink(missing_ok=True)
 
     # Request thumbnail for permission_letter
     res1 = client.get(f"/api/v1/clubs/{club_id}/documents/templates/{perm.id}/thumbnail", headers=headers)
     assert res1.status_code == 200, f"Expected 200, got {res1.status_code}: {res1.text}"
     assert res1.headers["content-type"] in ("image/png", "image/webp")
     assert (
-        (Path("storage/thumbnails") / f"{perm_ver.id}.webp").exists()
-        or (Path("storage/thumbnails") / f"{perm_ver.id}.png").exists()
+        (Path(os.environ["STORAGE_LOCAL_ROOT"], "thumbnails") / f"{perm_ver.id}.webp").exists()
+        or (Path(os.environ["STORAGE_LOCAL_ROOT"], "thumbnails") / f"{perm_ver.id}.png").exists()
     ), "Rendered thumbnail was not cached under template version ID"
 
     # Request thumbnail for approval_note
@@ -336,8 +336,8 @@ def test_thumbnail_generation_no_cache_returns_200_and_differs_between_templates
     assert res2.status_code == 200, f"Expected 200, got {res2.status_code}: {res2.text}"
     assert res2.headers["content-type"] in ("image/png", "image/webp")
     assert (
-        (Path("storage/thumbnails") / f"{appr_ver.id}.webp").exists()
-        or (Path("storage/thumbnails") / f"{appr_ver.id}.png").exists()
+        (Path(os.environ["STORAGE_LOCAL_ROOT"], "thumbnails") / f"{appr_ver.id}.webp").exists()
+        or (Path(os.environ["STORAGE_LOCAL_ROOT"], "thumbnails") / f"{appr_ver.id}.png").exists()
     ), "Rendered thumbnail was not cached under template version ID"
 
     # Assert bytes differ between distinct templates
