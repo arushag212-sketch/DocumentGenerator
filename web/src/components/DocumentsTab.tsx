@@ -564,11 +564,19 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
               </div>
             </div>
             <div className="flex-1 bg-slate-100 p-2 overflow-hidden flex items-center justify-center min-h-[500px]">
-              <iframe
-                src={`/api/v1/clubs/${clubId}/documents/${previewDoc.id}/pdf`}
-                className="w-full h-full border-0 rounded-lg shadow-inner bg-white min-h-[500px]"
-                title="Document Preview"
-              />
+              {previewDoc.pdf_url || previewDoc.id ? (
+                <iframe
+                  src={previewDoc.pdf_url || `/api/v1/clubs/${clubId}/documents/${previewDoc.id}/pdf`}
+                  className="w-full h-full border-0 rounded-lg shadow-inner bg-white min-h-[500px]"
+                  title="Document Preview"
+                />
+              ) : (
+                <div className="max-w-sm text-center bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+                  <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                  <h3 className="text-sm font-bold text-slate-800">Preview is not available</h3>
+                  <p className="text-xs text-slate-500 mt-1">This document has no rendered PDF yet. Download the editable file or refresh after generation completes.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

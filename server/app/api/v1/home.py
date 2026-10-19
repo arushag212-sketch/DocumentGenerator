@@ -89,6 +89,7 @@ class HomeGenerateRequest(BaseModel):
     selected_template_ids: list[str] = Field(..., min_length=1)
     event_data: dict[str, Any] = Field(default_factory=dict)
     ref_numbers_accepted: bool = Field(..., description="Must be true to confirm reference numbers")
+    event_id: Optional[str] = None
     event_title: Optional[str] = None
 
 
@@ -436,6 +437,7 @@ def generate_user_need(
         user_id=ctx.user.id,
         selected_template_ids=payload.selected_template_ids,
         event_data=payload.event_data,
+        event_id=payload.event_id,
         event_title=payload.event_title,
         db=db,
     )

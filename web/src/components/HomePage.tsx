@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sparkles, FileText, CheckSquare, Square, AlertCircle, ArrowRight, Calendar, Clock, MapPin, Users, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { api } from '../api/client';
 import { HomeUnderstoodData, HomeRecommendedDoc, HomeMissingQuestion, HomeGenerateResponse } from '../types';
@@ -70,14 +71,14 @@ export const STANDARD_DOC_TYPES = [
     defaultPrompt: 'Bill summary table for hackathon expenses including refreshment, prizes, and certificates.',
   },
   {
-    slug: 'prize_money_receipts',
+    slug: 'prize_money_receipt',
     name: 'Prize Receipts',
     desc: 'Student prize distribution',
     icon: '🏆',
     defaultPrompt: 'Prize money receipts for 1st, 2nd, and 3rd place winners of Annual Coding Hackathon.',
   },
   {
-    slug: 'minutes_of_meeting',
+    slug: 'mom',
     name: 'Minutes of Meeting',
     desc: 'Club meeting resolutions',
     icon: '⏱️',
@@ -100,6 +101,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   initialText = '',
   onDocumentsGenerated,
 }) => {
+  const navigate = useNavigate();
   const [inputText, setInputText] = useState(initialText);
   const [understanding, setUnderstanding] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -140,7 +142,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   useEffect(() => {
     if (clubId) {
       api.events.listActive(clubId)
-        .then((data) => setActiveEvents(data || []))
+        .then((data) => setActiveEvents((data || []).map((event) => ({ ...event, id: String(event.id) }))))
         .catch(() => {});
       api.clubs.getPeople(clubId)
         .then((data) => setClubPeople(data || []))
@@ -181,7 +183,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       setObjectives(rec.objectives || '');
       const prompt = `${title} at ${rec.venue || 'campus'} on ${rec.dates || rec.date_start || 'upcoming'}`;
       setInputText(prompt);
-      handleUnderstand(prompt);
+      handleUnderstand(prompt, [selectedTemplateIds[0]].filter(Boolean));
     }
   };
 
@@ -191,7 +193,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       const matched = STANDARD_DOC_TYPES.find((d) => d.slug === initialTemplateId);
       if (matched && !inputText) {
         setInputText(matched.defaultPrompt);
-        handleUnderstand(matched.defaultPrompt);
+        handleUnderstand(matched.defaultPrompt, [matched.slug]);
       }
     }
   }, [initialTemplateId]);
@@ -199,16 +201,17 @@ export const HomePage: React.FC<HomePageProps> = ({
   const handleSelectDocType = (docType: typeof STANDARD_DOC_TYPES[0]) => {
     setSelectedTemplateIds([docType.slug]);
     setInputText(docType.defaultPrompt);
-    handleUnderstand(docType.defaultPrompt);
+    handleUnderstand(docType.defaultPrompt, [docType.slug]);
   };
 
-  const handleUnderstand = async (textToUnderstand: string) => {
+  const handleUnderstand = async (textToUnderstand: string, selectedTemplateIdsOverride?: string[]) => {
     if (!textToUnderstand.trim() || textToUnderstand.trim().length < 2) return;
     setUnderstanding(true);
     setError(null);
     try {
       const res = await api.home.understand(clubId, {
         text: textToUnderstand,
+        selected_template_ids: selectedTemplateIdsOverride || selectedTemplateIds,
       });
 
       setUnderstood(res.understood);
@@ -219,7 +222,11 @@ export const HomePage: React.FC<HomePageProps> = ({
       const recIds = res.recommended_documents
         .filter((d) => d.recommended)
         .map((d) => d.slug || d.template_id);
-      setSelectedTemplateIds(recIds.length > 0 ? recIds : res.recommended_documents.slice(0, 1).map(d => d.slug || d.template_id));
+      const explicitIds = selectedTemplateIdsOverride || selectedTemplateIds;
+      setSelectedTemplateIds(Array.from(new Set([
+        ...explicitIds,
+        ...(recIds.length > 0 ? recIds : res.recommended_documents.slice(0, 1).map(d => d.slug || d.template_id)),
+      ])));
 
       setUnderstood(res.understood);
       setEventName(res.understood.event_name || '');
@@ -350,6 +357,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         selected_template_ids: selectedTemplateIds,
         event_data: eventData,
         ref_numbers_accepted: true,
+        event_id: selectedEventId || undefined,
         event_title: eventName || 'College Event',
       });
       onDocumentsGenerated(response);
@@ -536,6 +544,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => navigate('/templates')}
+              className="p-3 rounded-xl border border-dashed border-[#1b365d]/40 text-left transition-all flex flex-col justify-between bg-amber-50/40 hover:bg-amber-50 hover:border-[#1b365d]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✨</span>
+                <span className="text-xs font-bold text-slate-900 leading-tight">Create a Template</span>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1 line-clamp-1">Build a reusable document type</p>
+            </button>
           </div>
         </div>
 

@@ -287,7 +287,14 @@ class EventRecommender:
         # 4. Grouped Missing-Info calculation
         # Which templates are active? User-selected list if provided, else all recommended templates
         if selected_template_ids is not None:
-            active_ids = set(selected_template_ids)
+            # The web client uses stable slugs while the recommender schema map is
+            # keyed by database ids. Resolve both forms so selecting a document
+            # type also exposes that template's detail fields.
+            requested = set(selected_template_ids)
+            active_ids = {
+                tmpl.id for tmpl in tmpls
+                if tmpl.id in requested or tmpl.slug in requested
+            }
         else:
             active_ids = {r.template_id for r in template_recs if r.recommended}
 

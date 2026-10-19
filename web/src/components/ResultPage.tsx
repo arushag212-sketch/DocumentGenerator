@@ -303,7 +303,12 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                   </div>
                 )
               ) : (
-                <div className="text-xs text-slate-400">No document selected</div>
+                <div className="max-w-sm text-center bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+                  <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                  <h3 className="text-sm font-bold text-slate-800">No preview available yet</h3>
+                  <p className="text-xs text-slate-500 mt-1">No documents were returned for this request. Go back to edit the document selection and generate again.</p>
+                  <button type="button" onClick={onEditDetails} className="mt-4 px-3 py-1.5 text-xs font-semibold text-white bg-[#1b365d] rounded-lg">Edit details</button>
+                </div>
               )}
             </div>
           </div>

@@ -562,6 +562,7 @@ export const api = {
         selected_template_ids: string[];
         event_data: Record<string, any>;
         ref_numbers_accepted: boolean;
+        event_id?: string;
         event_title?: string;
       }
     ) =>
