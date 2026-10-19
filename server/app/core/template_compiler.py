@@ -1982,7 +1982,7 @@ def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, A
                 total_val = Decimal("0")
                 for it in items:
                     raw_val = it.get(field_name, 0)
-                    clean_val = str(raw_val).replace(",", "").replace("INR", "").strip()
+                    clean_val = str(raw_val).replace(",", "").replace("INR", "").replace("₹", "").strip()
                     try:
                         total_val += Decimal(clean_val)
                     except Exception:

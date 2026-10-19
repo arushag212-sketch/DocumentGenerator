@@ -91,6 +91,7 @@ class HomeGenerateRequest(BaseModel):
     ref_numbers_accepted: bool = Field(..., description="Must be true to confirm reference numbers")
     event_id: Optional[str] = None
     event_title: Optional[str] = None
+    allow_blanks: Optional[bool] = False
 
 
 class HomeGeneratedDoc(BaseModel):
@@ -320,8 +321,8 @@ def generate_user_need(
             detail="Editor access is required to generate documents.",
         )
 
-    # 2. Reference numbers must be explicitly accepted
-    if not payload.ref_numbers_accepted:
+    # 2. Reference numbers must be explicitly accepted (unless allow_blanks preview is requested)
+    if not payload.ref_numbers_accepted and not payload.allow_blanks:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -329,6 +330,12 @@ def generate_user_need(
                 "message": "Please accept the suggested reference numbers before generating.",
             },
         )
+
+    # Align participants and expected_participants in event_data
+    if "participants" in payload.event_data and ("expected_participants" not in payload.event_data or not payload.event_data.get("expected_participants")):
+        payload.event_data["expected_participants"] = payload.event_data["participants"]
+    elif "expected_participants" in payload.event_data and ("participants" not in payload.event_data or not payload.event_data.get("participants")):
+        payload.event_data["participants"] = payload.event_data["expected_participants"]
 
     # Sanitize list fields (judges, budget_items) if scalar string or number sent from form
     if "judges" in payload.event_data:
@@ -349,7 +356,8 @@ def generate_user_need(
         payload.event_data["event_name"] = payload.event_title
 
     # 3. Input widget validation (dates, times, integers, amounts)
-    validate_input_fields(payload.event_data)
+    if not payload.allow_blanks:
+        validate_input_fields(payload.event_data)
 
     has_picker_dates = bool(
         payload.event_data.get("date_start")
@@ -367,7 +375,7 @@ def generate_user_need(
         is_confirmed = bool(payload.event_data.get("dates_confirmed"))
         has_full_year = bool(re.search(r"\b20\d\d\b", dates_val))
         if not is_confirmed or not has_full_year or "assumed" in dates_val.lower():
-            if not is_confirmed:
+            if not is_confirmed and not payload.allow_blanks:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={
@@ -439,6 +447,7 @@ def generate_user_need(
         event_data=payload.event_data,
         event_id=payload.event_id,
         event_title=payload.event_title,
+        allow_blanks=bool(payload.allow_blanks),
         db=db,
     )
 

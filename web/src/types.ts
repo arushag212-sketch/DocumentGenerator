@@ -11,6 +11,9 @@ export interface Club {
   code?: string;
   short_name?: string;
   name: string;
+  slug?: string;
+  chapter_code?: string;
+  head_of_account?: string;
   department?: string;
   academic_year?: string;
   academic_year_default?: string;
@@ -18,6 +21,7 @@ export interface Club {
   room_counter?: number;
   mom_counter?: number;
   my_role?: string | null;
+  settings?: Record<string, any>;
 }
 
 export type RoleName = 'owner' | 'admin' | 'lead' | 'co_lead' | 'treasurer' | 'faculty_advisor' | 'editor' | 'viewer';
@@ -181,20 +185,28 @@ export interface Venue {
   id: string;
   club_id: string;
   name: string;
+  short_name?: string;
   location?: string;
   capacity?: number;
   addressee?: string;
+  addressee_default?: string;
   tech_assistant?: string;
+  tech_assistant_person_id?: string;
+  tech_assistant_name?: string;
   faculty_in_charge?: string;
+  faculty_incharge_person_id?: string;
+  faculty_incharge_name?: string;
   created_at: string;
 }
 
 export interface NumberingSeries {
   id: string;
   club_id: string;
+  key?: string;
   series_key: string;
   format: string;
   academic_year: string;
+  last_seq?: number;
   current_counter: number;
   description?: string;
 }
@@ -228,7 +240,9 @@ export interface ClubSearchResult {
   short_name?: string;
   slug: string;
   chapter_code?: string;
-  member_count: number;
+  members_count: number;
+  membership_status?: string | null;
+  membership_position?: string | null;
   admin_name?: string | null;
   membership_role?: string | null;
   join_request_status?: string | null;
@@ -242,7 +256,9 @@ export interface JoinRequest {
   user_name: string;
   user_email: string;
   position: string;
-  status: 'pending' | 'approved' | 'rejected';
+  requested_role: 'editor' | 'viewer';
+  message?: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   admin_name?: string | null;
   created_at: string;
   reviewed_at?: string | null;

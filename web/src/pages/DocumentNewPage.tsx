@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { HomePage } from '../components/HomePage';
 import { ResultPage } from '../components/ResultPage';
+import { RequireCreateAccess } from '../components/RequireCreateAccess';
 import { HomeGenerateResponse } from '../types';
 
 export const DocumentNewPage: React.FC = () => {
@@ -19,21 +20,22 @@ export const DocumentNewPage: React.FC = () => {
     );
   }
 
-  if (generateResult) {
-    return (
-      <ResultPage
-        clubId={activeClub.id}
-        result={generateResult}
-        onEditDetails={() => setGenerateResult(null)}
-      />
-    );
-  }
-
   return (
-    <HomePage
-      clubId={activeClub.id}
-      initialTemplateId={templateId}
-      onDocumentsGenerated={(res) => setGenerateResult(res)}
-    />
+    <RequireCreateAccess>
+      <div className={generateResult ? 'hidden' : 'block'}>
+        <HomePage
+          clubId={activeClub.id}
+          initialTemplateId={templateId}
+          onDocumentsGenerated={(res) => setGenerateResult(res)}
+        />
+      </div>
+      {generateResult && (
+        <ResultPage
+          clubId={activeClub.id}
+          result={generateResult}
+          onEditDetails={() => setGenerateResult(null)}
+        />
+      )}
+    </RequireCreateAccess>
   );
 };

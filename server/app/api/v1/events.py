@@ -398,6 +398,7 @@ class BatchGenerateRequest(BaseModel):
     event_data: dict[str, Any] = Field(default_factory=dict)
     event_id: Optional[str] = None
     event_title: Optional[str] = None
+    allow_blanks: Optional[bool] = False
 
 
 class BatchGenerateResponse(BaseModel):
@@ -442,6 +443,7 @@ def generate_event_batch(
             event_data=payload.event_data,
             event_id=payload.event_id,
             event_title=payload.event_title,
+            allow_blanks=bool(payload.allow_blanks),
             db=db,
         )
     except HTTPException:

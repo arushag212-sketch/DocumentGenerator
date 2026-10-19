@@ -27,13 +27,42 @@ interface AdminTabProps {
   onRefreshMembers?: () => void;
 }
 
-export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
-  const [subTab, setSubTab] = useState<'venues' | 'numbering' | 'letterheads' | 'storage'>('venues');
+export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefreshMembers }) => {
+  const [subTab, setSubTab] = useState<'general' | 'venues' | 'numbering' | 'letterheads' | 'storage'>('general');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [storageStats, setStorageStats] = useState<any>(null);
   const [cleaning, setCleaning] = useState(false);
+  const [logoVersion, setLogoVersion] = useState(Date.now());
+
+  // General Settings state
+  const [clubProfile, setClubProfile] = useState<{
+    name: string;
+    short_name: string;
+    slug: string;
+    chapter_code: string;
+    head_of_account: string;
+    department: string;
+    academic_year_default: string;
+    default_mode: string;
+    default_purchase_order: string;
+    default_advance: string;
+    default_lab_office: string;
+  }>({
+    name: '',
+    short_name: '',
+    slug: '',
+    chapter_code: '',
+    head_of_account: '',
+    department: 'Computer Science & Engineering',
+    academic_year_default: '2026-27',
+    default_mode: 'Offline',
+    default_purchase_order: 'NiL',
+    default_advance: 'NiL',
+    default_lab_office: 'Student Council',
+  });
+  const [savingGeneral, setSavingGeneral] = useState(false);
 
   // Venues state
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -63,7 +92,24 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
     setLoading(true);
     setError(null);
     try {
-      if (subTab === 'venues') {
+      if (subTab === 'general') {
+        const club = await api.clubs.get(clubId);
+        const settings = club.settings || {};
+        const defaults = settings.defaults || {};
+        setClubProfile({
+          name: club.name || '',
+          short_name: club.short_name || club.code || '',
+          slug: club.slug || '',
+          chapter_code: club.chapter_code || '',
+          head_of_account: club.head_of_account || '',
+          department: club.department || settings.department || 'Computer Science & Engineering',
+          academic_year_default: club.academic_year_default || club.academic_year || settings.academic_year || '2026-27',
+          default_mode: defaults.mode || 'Offline',
+          default_purchase_order: defaults.purchase_order || 'NiL',
+          default_advance: defaults.advance || 'NiL',
+          default_lab_office: defaults.lab_office || defaults.office_lab || 'Student Council',
+        });
+      } else if (subTab === 'venues') {
         const data = await api.clubs.getVenues(clubId);
         setVenues(data);
       } else if (subTab === 'numbering') {
@@ -87,6 +133,41 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
       setError(err.message || 'Failed to load configuration');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveGeneral = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    setError(null);
+    setSuccess(null);
+    setSavingGeneral(true);
+    try {
+      const payload = {
+        name: clubProfile.name.trim(),
+        short_name: clubProfile.short_name.trim(),
+        chapter_code: clubProfile.chapter_code.trim() || undefined,
+        head_of_account: clubProfile.head_of_account.trim() || undefined,
+        academic_year_default: clubProfile.academic_year_default.trim(),
+        department: clubProfile.department.trim(),
+        settings: {
+          department: clubProfile.department.trim(),
+          academic_year: clubProfile.academic_year_default.trim(),
+          defaults: {
+            mode: clubProfile.default_mode,
+            purchase_order: clubProfile.default_purchase_order.trim(),
+            advance: clubProfile.default_advance.trim(),
+            lab_office: clubProfile.default_lab_office.trim(),
+          },
+        },
+      };
+      await api.clubs.update(clubId, payload);
+      setSuccess('Club settings and standing defaults saved successfully.');
+      onRefreshMembers?.();
+    } catch (err: any) {
+      setError(err.message || 'Failed to save club settings');
+    } finally {
+      setSavingGeneral(false);
     }
   };
 
@@ -116,7 +197,15 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
   };
 
   const handleOpenEditVenue = (v: Venue) => {
-    setVenueForm({ id: v.id, name: v.name, location: v.location || '', capacity: v.capacity ?? '', addressee: v.addressee || '', tech_assistant: v.tech_assistant || '', faculty_in_charge: v.faculty_in_charge || '' });
+    setVenueForm({
+      id: v.id,
+      name: v.name,
+      location: v.location || v.short_name || '',
+      capacity: v.capacity ?? '',
+      addressee: v.addressee || v.addressee_default || '',
+      tech_assistant: v.tech_assistant || (v as any).tech_assistant_name || '',
+      faculty_in_charge: v.faculty_in_charge || (v as any).faculty_incharge_name || '',
+    });
   };
 
   const handleSaveVenue = async (e: React.FormEvent) => {
@@ -124,10 +213,12 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
     if (!venueForm) return;
     setError(null);
     try {
-      const payload: Partial<Venue> = {
+      const payload: any = {
         name: venueForm.name.trim(),
+        short_name: venueForm.location.trim() || undefined,
         location: venueForm.location.trim() || undefined,
         capacity: venueForm.capacity !== '' ? Number(venueForm.capacity) : undefined,
+        addressee_default: venueForm.addressee.trim() || undefined,
         addressee: venueForm.addressee.trim() || undefined,
         tech_assistant: venueForm.tech_assistant.trim() || undefined,
         faculty_in_charge: venueForm.faculty_in_charge.trim() || undefined,
@@ -163,12 +254,16 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
     if (!seriesForm) return;
     setError(null);
     try {
-      await api.clubs.updateNumberingSeries(clubId, seriesForm.series_key, {
+      const seriesKey = seriesForm.series_key || (seriesForm as any).key;
+      if (!seriesKey) {
+        throw new Error('Series key is missing');
+      }
+      await api.clubs.updateNumberingSeries(clubId, seriesKey, {
         format: seriesForm.format.trim(),
         academic_year: seriesForm.academic_year?.trim() || undefined,
         description: seriesForm.description?.trim() || undefined,
       });
-      setSuccess(`Series "${seriesForm.series_key}" updated.`);
+      setSuccess(`Series "${seriesKey}" updated.`);
       setSeriesForm(null);
       loadData();
     } catch (err: any) {
@@ -185,6 +280,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
     try {
       const res = await api.clubs.uploadLogo(clubId, file);
       setSuccess(`Logo uploaded and normalized (${res.filename}).`);
+      setLogoVersion(Date.now());
       loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to upload logo');
@@ -223,6 +319,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
       {/* Sub-tab Navigation */}
       <div className="flex border-b border-slate-200 bg-white rounded-t-xl px-4 pt-2 gap-2 overflow-x-auto no-scrollbar">
         {[
+          { id: 'general', label: 'General & Profile', icon: Building },
           { id: 'venues', label: 'Venues & Facilities', icon: MapPin },
           { id: 'letterheads', label: 'Letterheads & Logos', icon: FileSpreadsheet },
           { id: 'numbering', label: 'Numbering Series', icon: Hash },
@@ -266,6 +363,237 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
         </div>
       )}
 
+      {/* TAB 0: GENERAL & PROFILE */}
+      {subTab === 'general' && (
+        <form onSubmit={handleSaveGeneral} className="space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-4 sm:p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Building className="w-5 h-5 text-[#1b365d]" /> Club Profile & Institutional Settings
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Core club identification, chapter details, institutional head of account, and default academic year.
+                </p>
+              </div>
+
+              {isAdmin && (
+                <button
+                  type="submit"
+                  disabled={savingGeneral}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#1b365d] hover:bg-[#162a4a] disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors"
+                >
+                  {savingGeneral ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" /> Save Settings
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Club Identity Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+              <div className="lg:col-span-2">
+                <label className="block font-semibold text-slate-700 mb-1">Club Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  disabled={!isAdmin}
+                  value={clubProfile.name}
+                  onChange={(e) => setClubProfile({ ...clubProfile, name: e.target.value })}
+                  placeholder="e.g. Google Developer Student Clubs"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Short Name / Code *</label>
+                <input
+                  type="text"
+                  required
+                  disabled={!isAdmin}
+                  value={clubProfile.short_name}
+                  onChange={(e) => setClubProfile({ ...clubProfile, short_name: e.target.value })}
+                  placeholder="e.g. GDSC"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 font-bold disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Club URL Slug</label>
+                <input
+                  type="text"
+                  disabled
+                  value={clubProfile.slug}
+                  className="w-full border border-slate-200 bg-slate-100 rounded-lg p-2.5 font-mono text-slate-600"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">Unique system identifier for document numbering.</span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Chapter Code</label>
+                <input
+                  type="text"
+                  disabled={!isAdmin}
+                  value={clubProfile.chapter_code}
+                  onChange={(e) => setClubProfile({ ...clubProfile, chapter_code: e.target.value })}
+                  placeholder="e.g. SVNIT-GDSC"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Academic Department</label>
+                <input
+                  type="text"
+                  disabled={!isAdmin}
+                  value={clubProfile.department}
+                  onChange={(e) => setClubProfile({ ...clubProfile, department: e.target.value })}
+                  placeholder="e.g. Computer Science & Engineering"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Head of Account</label>
+                <input
+                  type="text"
+                  disabled={!isAdmin}
+                  value={clubProfile.head_of_account}
+                  onChange={(e) => setClubProfile({ ...clubProfile, head_of_account: e.target.value })}
+                  placeholder="e.g. Student Welfare Account"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">Account credited/debited on budget approvals.</span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Default Academic Year *</label>
+                <input
+                  type="text"
+                  required
+                  disabled={!isAdmin}
+                  value={clubProfile.academic_year_default}
+                  onChange={(e) => setClubProfile({ ...clubProfile, academic_year_default: e.target.value })}
+                  placeholder="e.g. 2026-27"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 font-bold disabled:bg-slate-50 disabled:text-slate-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">Applied to newly drafted letters and series counters.</span>
+              </div>
+            </div>
+
+            {/* Standing Defaults Section */}
+            <div className="pt-6 border-t border-slate-200 space-y-4">
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-[#1b365d]" /> Standing Form Defaults (Auto-fill)
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Pre-configured defaults automatically populate event forms and financial document templates.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Default Event Mode</label>
+                  <select
+                    disabled={!isAdmin}
+                    value={clubProfile.default_mode}
+                    onChange={(e) => setClubProfile({ ...clubProfile, default_mode: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 bg-white disabled:bg-slate-50 disabled:text-slate-500"
+                  >
+                    <option value="Offline">Offline (Campus)</option>
+                    <option value="Online">Online (Virtual)</option>
+                    <option value="Hybrid">Hybrid</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Purchase Order Default</label>
+                  <input
+                    type="text"
+                    disabled={!isAdmin}
+                    value={clubProfile.default_purchase_order}
+                    onChange={(e) => setClubProfile({ ...clubProfile, default_purchase_order: e.target.value })}
+                    placeholder="e.g. NiL"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500 font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Bill certificate PO standing value.</span>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Advance Amount Default</label>
+                  <input
+                    type="text"
+                    disabled={!isAdmin}
+                    value={clubProfile.default_advance}
+                    onChange={(e) => setClubProfile({ ...clubProfile, default_advance: e.target.value })}
+                    placeholder="e.g. NiL"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500 font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Bill certificate advance value.</span>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Office / Laboratory Default</label>
+                  <input
+                    type="text"
+                    disabled={!isAdmin}
+                    value={clubProfile.default_lab_office}
+                    onChange={(e) => setClubProfile({ ...clubProfile, default_lab_office: e.target.value })}
+                    placeholder="e.g. Student Council"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Default office or facility label.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Club Logo Quick Card */}
+            <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 bg-white border border-slate-200 rounded-xl p-1.5 flex items-center justify-center shadow-xs">
+                  <img
+                    src={`/api/v1/clubs/${clubId}/logo?v=${logoVersion}`}
+                    alt="Club Logo"
+                    className="max-h-full max-w-full object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                  <Building className="w-6 h-6 text-slate-300" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Active Club Logo</h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Automatically centered and composited on official letterheads and templates.
+                  </p>
+                </div>
+              </div>
+
+              {isAdmin && (
+                <label className="inline-flex items-center gap-1.5 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 text-xs font-semibold px-3 py-2 rounded-lg cursor-pointer transition-colors shadow-2xs">
+                  <Upload className="w-4 h-4 text-[#1b365d]" />
+                  <span>{uploadingLogo ? 'Uploading...' : 'Replace Logo'}</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={handleLogoUpload}
+                    disabled={uploadingLogo}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+        </form>
+      )}
+
       {/* TAB 1: VENUES */}
       {subTab === 'venues' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-4 sm:p-6 space-y-4">
@@ -307,12 +635,12 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
                         </span>
                       )}
                     </div>
-                    {v.location && <div className="text-xs text-slate-500 mt-0.5">{v.location}</div>}
+                    {(v.location || v.short_name) && <div className="text-xs text-slate-500 mt-0.5">{v.location || v.short_name}</div>}
 
                     <div className="mt-3 pt-3 border-t border-slate-200/80 space-y-1 text-xs text-slate-700">
                       <div>
                         <span className="text-slate-400 font-medium">Addressee:</span>{' '}
-                        <span className="font-semibold">{v.addressee || 'Associate Dean (SW)'}</span>
+                        <span className="font-semibold">{v.addressee || v.addressee_default || 'Associate Dean (SW)'}</span>
                       </div>
                       {v.tech_assistant && (
                         <div>
@@ -382,7 +710,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
                   <div>
                     <div className="flex items-center justify-between">
                       <span className="font-mono font-bold text-sm bg-blue-50 text-[#1b365d] px-2.5 py-1 rounded border border-blue-200">
-                        {s.series_key}
+                        {s.series_key || (s as any).key}
                       </span>
                       <span className="text-xs font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
                         AY: {s.academic_year}
@@ -400,7 +728,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
                       <div className="flex items-center justify-between pt-1">
                         <span className="text-slate-500 font-medium">Current Counter:</span>
                         <span className="font-mono font-bold text-slate-900 bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
-                          {s.current_counter}
+                          {s.current_counter ?? (s as any).last_seq ?? 0}
                         </span>
                       </div>
 
@@ -484,7 +812,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
 
                 <div className="h-16 w-16 flex items-center justify-center p-1 border border-slate-200 rounded bg-white">
                   <img
-                    src={`/api/v1/clubs/${clubId}/logo`}
+                    src={`/api/v1/clubs/${clubId}/logo?v=${logoVersion}`}
                     alt="Club Logo"
                     className="max-h-full max-w-full object-contain"
                     onError={(e) => {
@@ -657,7 +985,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions }) => {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
             <h3 className="font-bold text-base text-slate-900">
-              Edit Numbering Series: {seriesForm.series_key}
+              Edit Numbering Series: {seriesForm.series_key || (seriesForm as any).key}
             </h3>
             <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
               Format changes apply only to future documents; historical documents preserve allocated numbers.

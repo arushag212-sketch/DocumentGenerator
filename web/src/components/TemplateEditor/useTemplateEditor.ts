@@ -57,10 +57,24 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
         const target = event.target as HTMLElement;
         const imageTarget = target.closest('.image-block');
         if (imageTarget) {
-          const imageNode = view.state.doc.nodeAt(pos);
-          if (imageNode) {
-            view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
-            setSelectedImageBlock({ position: pos, attrs: { ...imageNode.attrs } });
+          let targetPos = pos;
+          try {
+            const domPos = view.posAtDOM(imageTarget, 0);
+            if (domPos !== null && domPos !== undefined) {
+              targetPos = domPos;
+            }
+          } catch {
+            // fallback
+          }
+          const imageNode = view.state.doc.nodeAt(targetPos) || view.state.doc.nodeAt(pos);
+          if (imageNode && (imageNode.type.name === 'imageBlock' || imageNode.type.name === 'image')) {
+            const validPos = view.state.doc.nodeAt(targetPos)?.type.name === imageNode.type.name ? targetPos : pos;
+            try {
+              view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, validPos)));
+            } catch {
+              // ignore
+            }
+            setSelectedImageBlock({ position: validPos, attrs: { ...imageNode.attrs } });
             setChipPopover(null);
             setBubblePos(null);
             return true;

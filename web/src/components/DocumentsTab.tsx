@@ -24,7 +24,7 @@ interface DocumentsTabProps {
 
 export const DocumentsTab: React.FC<DocumentsTabProps> = ({
   clubId,
-  onViewDocument: _onViewDocument,
+  onViewDocument,
   onNavigateToEvents,
 }) => {
   const [documents, setDocuments] = useState<any[]>([]);
@@ -35,6 +35,9 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<any | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'pdf' | 'image'>('pdf');
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,6 +117,38 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
     setSortOrder('desc');
     setPage(1);
   };
+
+  useEffect(() => {
+    if (!previewDoc) {
+      if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+      setPdfBlobUrl(null);
+      setPreviewMode('pdf');
+      return;
+    }
+    let active = true;
+    setLoadingPdf(true);
+    setPreviewMode('pdf');
+    const pdfUrl = `/api/v1/clubs/${clubId}/documents/${previewDoc.id}/pdf?disposition=inline`;
+    fetch(pdfUrl, { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (!active) return;
+        const objUrl = URL.createObjectURL(blob);
+        setPdfBlobUrl(objUrl);
+      })
+      .catch((err) => {
+        console.warn('PDF blob loading error, falling back to image preview:', err);
+        if (active) setPreviewMode('image');
+      })
+      .finally(() => {
+        if (active) setLoadingPdf(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [previewDoc?.id, clubId]);
 
   const handlePreview = async (docId: string) => {
     try {
@@ -528,15 +563,34 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
 
       {/* DOCUMENT PREVIEW MODAL */}
       {previewDoc && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-6 animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between bg-slate-50 gap-3">
               <div>
                 <h3 className="font-bold text-sm sm:text-base text-slate-900">{previewDoc.title}</h3>
                 <p className="text-xs text-slate-500 font-mono mt-0.5">
                   Ref: {previewDoc.ref_no || 'Unassigned'} • Version v{previewDoc.current_version_no}
                 </p>
               </div>
+
+              {/* View toggle */}
+              <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-lg text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setPreviewMode('pdf')}
+                  className={`px-2.5 py-1 rounded-md transition ${previewMode === 'pdf' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  PDF Document
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewMode('image')}
+                  className={`px-2.5 py-1 rounded-md transition ${previewMode === 'image' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Page View
+                </button>
+              </div>
+
               <div className="flex items-center gap-2">
                 <a
                   href={`/api/v1/clubs/${clubId}/documents/${previewDoc.id}/pdf`}
@@ -556,6 +610,16 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
                 </a>
                 <button
                   type="button"
+                  onClick={() => {
+                    setPreviewDoc(null);
+                    if (onViewDocument) onViewDocument(previewDoc);
+                  }}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
                   onClick={() => setPreviewDoc(null)}
                   className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/60 transition-colors"
                 >
@@ -563,18 +627,38 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
                 </button>
               </div>
             </div>
-            <div className="flex-1 bg-slate-100 p-2 overflow-hidden flex items-center justify-center min-h-[500px]">
-              {previewDoc.pdf_url || previewDoc.id ? (
+
+            <div className="flex-1 bg-slate-100 p-2 sm:p-4 overflow-auto flex items-center justify-center min-h-[500px]">
+              {loadingPdf && previewMode === 'pdf' ? (
+                <div className="text-center py-12">
+                  <div className="w-8 h-8 border-3 border-[#1b365d] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <p className="text-xs text-slate-500 font-medium">Loading PDF document...</p>
+                </div>
+              ) : previewMode === 'pdf' && pdfBlobUrl ? (
                 <iframe
-                  src={previewDoc.pdf_url || `/api/v1/clubs/${clubId}/documents/${previewDoc.id}/pdf`}
-                  className="w-full h-full border-0 rounded-lg shadow-inner bg-white min-h-[500px]"
+                  src={`${pdfBlobUrl}#toolbar=0`}
+                  className="w-full h-full border-0 rounded-xl shadow-md bg-white min-h-[550px]"
                   title="Document Preview"
                 />
               ) : (
-                <div className="max-w-sm text-center bg-white rounded-xl border border-slate-200 shadow-sm p-8">
-                  <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                  <h3 className="text-sm font-bold text-slate-800">Preview is not available</h3>
-                  <p className="text-xs text-slate-500 mt-1">This document has no rendered PDF yet. Download the editable file or refresh after generation completes.</p>
+                <div className="flex flex-col items-center justify-center max-w-full">
+                  <img
+                    src={`/api/v1/clubs/${clubId}/documents/${previewDoc.id}/preview`}
+                    alt="Document page preview"
+                    className="max-h-[75vh] w-auto max-w-full object-contain rounded-xl shadow-lg border border-slate-300 bg-white"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                  <div className="mt-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode('pdf')}
+                      className="text-xs text-[#1b365d] hover:underline font-semibold"
+                    >
+                      Switch back to interactive PDF viewer
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

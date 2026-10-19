@@ -2,6 +2,13 @@ import type { Editor } from '@tiptap/core';
 import type { EditorAssistantAction } from '../editorAssistant';
 import type { TemplateField } from './FieldsPanel';
 import type { DesignSettings } from './DesignPanel';
+import {
+  createSignatureGridNode,
+  createInfoTableNode,
+  createRepeatingTableNode,
+} from './tableExtensions';
+import { createImageBlockNode } from './imageBlock';
+import { safeInsertBlock, insertFieldChip } from './extensions';
 
 export interface ApplyChatActionParams {
   action: EditorAssistantAction;
@@ -87,8 +94,32 @@ export function applyChatAction({
   // Editor block mutations in a single transaction
   editor.chain().focus();
 
-  if (type === 'insert_block' && payload.block) {
-    editor.chain().insertContent(payload.block).run();
+  if (
+    (type === 'insert_block' || (type as string) === 'insert_signature_grid') &&
+    (payload.block || (payload as any).type)
+  ) {
+    const raw = (payload.block || payload) as any;
+    let blockToInsert = raw;
+    if (raw.type === 'signatureGrid') {
+      const signs = raw.attrs?.signatures || raw.signatures || [];
+      const count = raw.attrs?.columns || raw.columns || (signs.length > 0 ? signs.length : 2);
+      blockToInsert = createSignatureGridNode(count, signs);
+    } else if (raw.type === 'infoTable') {
+      const rows = raw.attrs?.rows || raw.rows;
+      blockToInsert = createInfoTableNode(rows);
+    } else if (raw.type === 'repeatingTable') {
+      const cols = raw.attrs?.columns || raw.columns || [];
+      const listVar = raw.attrs?.listVariable || raw.listVariable || 'items';
+      const itemAlias = raw.attrs?.itemAlias || raw.itemAlias || 'item';
+      const hasTotal = raw.attrs?.hasTotal ?? raw.hasTotal ?? true;
+      const totalLabel = raw.attrs?.totalLabel || raw.totalLabel || 'Total';
+      const totalVar = raw.attrs?.totalVarName || raw.totalVarName || `total_${listVar}_amount`;
+      blockToInsert = createRepeatingTableNode(cols, listVar, itemAlias, hasTotal, totalLabel, totalVar);
+    } else if (raw.type === 'image' || raw.type === 'logo' || raw.type === 'clubLogo') {
+      blockToInsert = createImageBlockNode(raw.attrs || {});
+    }
+
+    safeInsertBlock(editor, blockToInsert);
     markUnsaved();
     return;
   }
@@ -96,7 +127,15 @@ export function applyChatAction({
   if (type === 'insert_chip' && (payload.field_key || (payload as any).field_name)) {
     const fn = (payload as any).field_name || payload.field_key;
     const lbl = (payload as any).label || fn;
-    editor.chain().insertContent({ type: 'fieldChip', attrs: { fieldName: fn, key: fn, label: lbl } }).run();
+    insertFieldChip(editor, fn, lbl);
+    markUnsaved();
+    return;
+  }
+
+  if (type === 'set_block_style') {
+    if (payload.alignment) {
+      editor.commands.setTextAlign(payload.alignment);
+    }
     markUnsaved();
     return;
   }

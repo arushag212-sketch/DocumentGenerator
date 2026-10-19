@@ -1,4 +1,6 @@
 import { Node, mergeAttributes } from '@tiptap/core';
+import { ReactNodeViewRenderer } from '@tiptap/react';
+import { ImageBlockView } from './ImageBlockView';
 
 export interface ImageBlockAttributes {
   imageType: 'image' | 'club-logo' | 'logo' | string;
@@ -23,6 +25,10 @@ export const ImageBlock = Node.create({
   isolating: true,
   selectable: true,
   draggable: true,
+
+  addNodeView() {
+    return ReactNodeViewRenderer(ImageBlockView);
+  },
 
   addAttributes() {
     return {

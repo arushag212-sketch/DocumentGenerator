@@ -140,7 +140,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                   assets.map((a: any) => ({
                     id: a.id,
                     name: a.filename || 'Logo',
-                    url: a.url || `/api/v1/clubs/${clubId}/assets/${a.id}`,
+                    url: a.url || `/api/v1/assets/${a.id}/content`,
                     kind: a.kind || 'logo',
                   }))
                 );

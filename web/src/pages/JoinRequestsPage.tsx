@@ -23,7 +23,7 @@ export const JoinRequestsPage: React.FC = () => {
       // Set default role mapping for new requests
       const initialRoles: Record<string, string> = {};
       (data || []).forEach((r) => {
-        initialRoles[r.id] = 'editor';
+        initialRoles[r.id] = r.requested_role || 'editor';
       });
       setSelectedRoles(initialRoles);
     } catch (err: any) {
@@ -39,7 +39,7 @@ export const JoinRequestsPage: React.FC = () => {
 
   const handleApprove = async (req: JoinRequest) => {
     if (!activeClub) return;
-    const assignedRole = selectedRoles[req.id] || 'editor';
+    const assignedRole = selectedRoles[req.id] || req.requested_role || 'editor';
     setProcessingId(req.id);
     setActionError(null);
     setActionSuccess(null);
@@ -148,12 +148,26 @@ export const JoinRequestsPage: React.FC = () => {
                     <p className="text-xs text-slate-500">{req.user_email}</p>
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-[#1b365d] border border-blue-200">
-                        Requested: {req.position}
+                        Position: {req.position}
+                      </span>
+                      <span
+                        className={`badge ${
+                          req.requested_role === 'viewer'
+                            ? 'bg-slate-100 text-slate-700 border-slate-200'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}
+                      >
+                        Wants {req.requested_role === 'viewer' ? 'read-only' : 'editor'} access
                       </span>
                       <span className="text-[11px] text-slate-400">
                         Submitted: {new Date(req.created_at).toLocaleDateString()}
                       </span>
                     </div>
+                    {req.message && (
+                      <p className="mt-2 text-xs text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 max-w-md italic">
+                        “{req.message}”
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -166,11 +180,12 @@ export const JoinRequestsPage: React.FC = () => {
                         [req.id]: e.target.value,
                       })
                     }
+                    aria-label={`Access to grant ${req.user_name || req.user_email}`}
                     className="text-xs px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b365d]"
                   >
-                    <option value="editor">Editor (Draft & View)</option>
-                    <option value="admin">Admin (Manage Club)</option>
-                    <option value="viewer">Viewer (Read Only)</option>
+                    <option value="editor">Editor — create documents &amp; templates</option>
+                    <option value="viewer">Viewer — read only</option>
+                    <option value="admin">Admin — also approve members</option>
                   </select>
 
                   <button
@@ -216,6 +231,8 @@ export const JoinRequestsPage: React.FC = () => {
                     className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
                       req.status === 'approved'
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : req.status === 'cancelled'
+                        ? 'bg-slate-100 text-slate-600 border border-slate-200'
                         : 'bg-red-50 text-red-700 border border-red-200'
                     }`}
                   >

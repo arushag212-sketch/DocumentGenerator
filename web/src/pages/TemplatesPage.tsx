@@ -1,22 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../api/client';
 import { TemplateGalleryTab } from '../components/TemplateGalleryTab';
-import { ClubPermissions } from '../types';
+import { useClubPermissions } from '../hooks/useClubPermissions';
 
 export const TemplatesPage: React.FC = () => {
   const navigate = useNavigate();
   const { activeClub } = useAuth();
-  const [permissions, setPermissions] = useState<ClubPermissions | null>(null);
-
-  useEffect(() => {
-    if (activeClub) {
-      api.clubs.getPermissions(activeClub.id)
-        .then((p) => setPermissions(p))
-        .catch(() => setPermissions(null));
-    }
-  }, [activeClub?.id]);
+  const { permissions } = useClubPermissions();
 
   if (!activeClub) {
     return (

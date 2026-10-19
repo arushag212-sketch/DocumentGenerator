@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { HomePage } from '../components/HomePage';
 import { ResultPage } from '../components/ResultPage';
+import { RequireCreateAccess } from '../components/RequireCreateAccess';
 import { HomeGenerateResponse } from '../types';
 import { Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -30,20 +31,21 @@ export const HomePageWrapper: React.FC = () => {
     );
   }
 
-  if (homeResult) {
-    return (
-      <ResultPage
-        clubId={activeClub.id}
-        result={homeResult}
-        onEditDetails={() => setHomeResult(null)}
-      />
-    );
-  }
-
   return (
-    <HomePage
-      clubId={activeClub.id}
-      onDocumentsGenerated={(res) => setHomeResult(res)}
-    />
+    <RequireCreateAccess>
+      <div className={homeResult ? 'hidden' : 'block'}>
+        <HomePage
+          clubId={activeClub.id}
+          onDocumentsGenerated={(res) => setHomeResult(res)}
+        />
+      </div>
+      {homeResult && (
+        <ResultPage
+          clubId={activeClub.id}
+          result={homeResult}
+          onEditDetails={() => setHomeResult(null)}
+        />
+      )}
+    </RequireCreateAccess>
   );
 };

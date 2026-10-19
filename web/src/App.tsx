@@ -14,33 +14,39 @@ import { OnboardingClubPage } from './pages/OnboardingClubPage';
 import { OnboardingPositionPage } from './pages/OnboardingPositionPage';
 import { JoinRequestsPage } from './pages/JoinRequestsPage';
 import { api } from './api/client';
-import { ClubPermissions, JoinRequest } from './types';
+import { ClubPermissions } from './types';
 
 // Guard component that enforces authentication, club membership, and position assignment
 const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading, clubs, activeClub } = useAuth();
   const location = useLocation();
   const [permissions, setPermissions] = useState<ClubPermissions | null>(null);
-  const [myJoinRequest, setMyJoinRequest] = useState<JoinRequest | null>(null);
-  const [checkingStatus, setCheckingStatus] = useState(false);
+  // Which club+role the current `permissions` were fetched for; until it matches,
+  // treat access as still loading so we never redirect on stale/empty state.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const clubKey = activeClub ? `${activeClub.id}:${activeClub.my_role ?? ''}` : null;
 
   useEffect(() => {
-    if (activeClub) {
-      setCheckingStatus(true);
-      Promise.all([
-        api.clubs.getPermissions(activeClub.id).catch(() => null),
-        api.clubs.getMyJoinRequest(activeClub.id).catch(() => null),
-      ])
-        .then(([perms, jr]) => {
-          setPermissions(perms);
-          setMyJoinRequest(jr);
-        })
-        .finally(() => setCheckingStatus(false));
-    } else {
+    if (!activeClub || !clubKey) {
       setPermissions(null);
-      setMyJoinRequest(null);
+      setLoadedKey(null);
+      return;
     }
-  }, [activeClub?.id]);
+    let cancelled = false;
+    api.clubs
+      .getPermissions(activeClub.id)
+      .catch(() => null)
+      .then((perms) => {
+        if (cancelled) return;
+        setPermissions(perms);
+        setLoadedKey(clubKey);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clubKey]);
+
+  const checkingStatus = Boolean(clubKey) && loadedKey !== clubKey;
 
   if (loading || checkingStatus) {
     return (
@@ -66,9 +72,10 @@ const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return <Navigate to="/onboarding/club" replace />;
   }
 
-  // 3. User is in club but pending approval without active role -> redirect to /onboarding/club (waiting screen)
-  const isPendingApproval = myJoinRequest?.status === 'pending' && !permissions?.role;
-  if (isPendingApproval && currentPath !== '/onboarding/club') {
+  // 3. No active role in the selected club (request pending, rejected or withdrawn) -> onboarding,
+  //    which shows the live request status or lets the user pick another club.
+  const hasActiveRole = Boolean(permissions?.role);
+  if (activeClub && !hasActiveRole && currentPath !== '/onboarding/club') {
     return <Navigate to="/onboarding/club" replace />;
   }
 
@@ -191,9 +198,15 @@ export const App: React.FC = () => {
         path="/templates/:id"
         element={
           <RequireAuth>
-            <AppLayout>
-              <TemplateEditorPage />
-            </AppLayout>
+            <TemplateEditorPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/editor/:id"
+        element={
+          <RequireAuth>
+            <TemplateEditorPage />
           </RequireAuth>
         }
       />

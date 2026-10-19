@@ -207,9 +207,10 @@ def validate_input_fields(data: dict[str, Any]) -> None:
             )
 
     # 3. Numeric fields
-    if "participants" in data and data["participants"] is not None:
+    part_key = "participants" if "participants" in data and data["participants"] is not None else ("expected_participants" if "expected_participants" in data and data["expected_participants"] is not None else None)
+    if part_key and data[part_key] is not None and str(data[part_key]).strip() != "":
         try:
-            p_val = int(data["participants"])
+            p_val = int(data[part_key])
             if p_val < 0:
                 raise ValueError()
         except (ValueError, TypeError):

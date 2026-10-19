@@ -322,40 +322,42 @@ export const HomePage: React.FC<HomePageProps> = ({
     (description && description.includes('[AI-drafted')) ||
     (objectives && objectives.includes('[AI-drafted'));
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (previewWithBlanks: boolean = false) => {
     if (selectedTemplateIds.length === 0) {
       setError('Please select at least one document to generate.');
       return;
     }
-    if (!refNumbersAccepted) {
+    if (!previewWithBlanks && !refNumbersAccepted) {
       setError('Please accept the suggested reference numbers before generating.');
       return;
     }
-    if (description && description.includes('[AI-drafted')) {
+    if (!previewWithBlanks && description && description.includes('[AI-drafted')) {
       setError("Field 'Description' contains unconfirmed AI draft. Please accept or edit before generating.");
       return;
     }
-    if (objectives && objectives.includes('[AI-drafted')) {
+    if (!previewWithBlanks && objectives && objectives.includes('[AI-drafted')) {
       setError("Field 'Objectives' contains unconfirmed AI draft. Please accept or edit before generating.");
       return;
     }
 
-    // Date range bounds checking (1 year in past to 2 years in future)
-    if (dateStart && (dateStart < minDate || dateStart > maxDate)) {
-      setError(`Start date must be between ${formatDateToIndian(minDate)} and ${formatDateToIndian(maxDate)}.`);
-      return;
-    }
-    if (dateEnd && (dateEnd < minDate || dateEnd > maxDate)) {
-      setError(`End date must be between ${formatDateToIndian(minDate)} and ${formatDateToIndian(maxDate)}.`);
-      return;
-    }
+    if (!previewWithBlanks) {
+      // Date range bounds checking (1 year in past to 2 years in future)
+      if (dateStart && (dateStart < minDate || dateStart > maxDate)) {
+        setError(`Start date must be between ${formatDateToIndian(minDate)} and ${formatDateToIndian(maxDate)}.`);
+        return;
+      }
+      if (dateEnd && (dateEnd < minDate || dateEnd > maxDate)) {
+        setError(`End date must be between ${formatDateToIndian(minDate)} and ${formatDateToIndian(maxDate)}.`);
+        return;
+      }
 
-    // Time ordering check: if same day, end time must be strictly after start time
-    if (timeStart && timeEnd) {
-      if ((!dateStart && !dateEnd) || dateStart === dateEnd) {
-        if (timeEnd <= timeStart) {
-          setError('End time must be after start time.');
-          return;
+      // Time ordering check: if same day, end time must be strictly after start time
+      if (timeStart && timeEnd) {
+        if ((!dateStart && !dateEnd) || dateStart === dateEnd) {
+          if (timeEnd <= timeStart) {
+            setError('End time must be after start time.');
+            return;
+          }
         }
       }
     }
@@ -364,12 +366,14 @@ export const HomePage: React.FC<HomePageProps> = ({
     setError(null);
 
     // Assemble unified event data
+    const numParticipants = participants ? Number(participants) : undefined;
     const eventData: Record<string, any> = {
       ...understood?.raw,
       ...answers,
       event_name: eventName,
       venue: venue,
-      participants: participants ? Number(participants) : undefined,
+      participants: numParticipants,
+      expected_participants: numParticipants,
       description: description,
       objectives: objectives,
     };
@@ -383,11 +387,8 @@ export const HomePage: React.FC<HomePageProps> = ({
       eventData.dates_confirmed = true;
     } else if (understood?.dates) {
       eventData.dates = understood.dates;
-      eventData.dates_confirmed = datesConfirmed;
+      eventData.dates_confirmed = datesConfirmed || previewWithBlanks;
     }
-
-    if (timeStart) eventData.time_start = timeStart;
-    if (timeEnd) eventData.time_end = timeEnd;
 
     try {
       const response = await api.home.generate(clubId, {
@@ -396,6 +397,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         ref_numbers_accepted: true,
         event_id: selectedEventId || undefined,
         event_title: eventName || 'College Event',
+        allow_blanks: previewWithBlanks,
       });
       onDocumentsGenerated(response);
     } catch (err: any) {
@@ -647,9 +649,22 @@ export const HomePage: React.FC<HomePageProps> = ({
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs sm:text-sm flex items-start gap-2.5">
-          <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-600 mt-0.5" />
-          <div className="flex-1 font-medium">{error}</div>
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs sm:text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-600 mt-0.5" />
+            <div className="font-medium leading-relaxed">{error}</div>
+          </div>
+          {selectedTemplateIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => handleGenerate(true)}
+              className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-xs border border-slate-300 rounded-lg shadow-xs transition-colors cursor-pointer"
+              title="Generate and preview document with clean blank lines for unfilled fields"
+            >
+              <FileText className="w-3.5 h-3.5 text-slate-600" />
+              Preview with blanks instead
+            </button>
+          )}
         </div>
       )}
 
@@ -1043,8 +1058,8 @@ export const HomePage: React.FC<HomePageProps> = ({
               <button
                 type="button"
                 id="previewWithBlanksBtn"
-                onClick={handleGenerate}
-                disabled={generating || selectedTemplateIds.length === 0 || !refNumbersAccepted || Boolean(hasUnconfirmedDraft)}
+                onClick={() => handleGenerate(true)}
+                disabled={generating || selectedTemplateIds.length === 0}
                 className="w-full sm:w-auto px-5 py-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-sm rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
                 title="Generate with clean blank lines for hand-filling"
               >
@@ -1054,7 +1069,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <button
                 type="button"
                 id="generateDocumentsBtn"
-                onClick={handleGenerate}
+                onClick={() => handleGenerate(false)}
                 disabled={generating || selectedTemplateIds.length === 0 || !refNumbersAccepted || Boolean(hasUnconfirmedDraft)}
                 className="w-full sm:w-auto px-6 py-3 bg-[#1b365d] hover:bg-[#132742] text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed"
               >

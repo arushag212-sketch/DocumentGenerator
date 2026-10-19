@@ -27,7 +27,11 @@ export const ResultPage: React.FC<ResultPageProps> = ({
     setPreviewError(null);
 
     // Fetch PDF as Blob with credentials to guarantee cross-browser iframe embedding
-    const url = `${activeDoc.pdf_url}?disposition=inline`;
+    const baseUrl = activeDoc.pdf_url.includes('/download')
+      ? activeDoc.pdf_url.replace('/download', '/pdf')
+      : activeDoc.pdf_url;
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    const url = `${baseUrl}${sep}disposition=inline`;
     fetch(url, { credentials: 'include' })
       .then(async (res) => {
         if (!res.ok) {
@@ -276,7 +280,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                           Switch to Page View Image
                         </button>
                         <a
-                          href={`${activeDoc.pdf_url}?disposition=inline`}
+                          href={activeDoc.pdf_url.includes('/download') ? activeDoc.pdf_url.replace('/download', '/pdf') + '?disposition=inline' : activeDoc.pdf_url}
                           target="_blank"
                           rel="noreferrer"
                           className="text-xs text-[#1b365d] hover:underline"
@@ -287,7 +291,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                     </div>
                   ) : (
                     <iframe
-                      src={`${activeDoc.pdf_url}?disposition=inline#toolbar=0`}
+                      src={`${activeDoc.pdf_url.includes('/download') ? activeDoc.pdf_url.replace('/download', '/pdf') : activeDoc.pdf_url}${activeDoc.pdf_url.includes('?') ? '&' : '?'}disposition=inline#toolbar=0`}
                       title={activeDoc.title}
                       className="w-full h-full rounded-xl border border-slate-300 shadow-inner bg-white"
                     />

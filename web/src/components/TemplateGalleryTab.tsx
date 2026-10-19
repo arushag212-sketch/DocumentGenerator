@@ -30,6 +30,29 @@ interface TemplateGalleryTabProps {
   onOpenEditor?: (templateId: string) => void;
 }
 
+const AI_TEMPLATE_EXAMPLES: { label: string; prompt: string }[] = [
+  {
+    label: 'Sponsorship Request',
+    prompt: 'A sponsorship request letter to a company with event name, date, venue, a tiers table with an amount per tier, and signatures for the coordinator and the faculty advisor',
+  },
+  {
+    label: 'Meeting Attendance Sheet',
+    prompt: 'A meeting attendance sheet with event name, date, venue, a table of attendees with roll number, name and signature, and signatures for the coordinator and faculty advisor',
+  },
+  {
+    label: 'Participation Certificate',
+    prompt: 'A certificate of participation with participant name, event name, dates and organising club, using the club logo at the top and signatures for the student head and faculty advisor',
+  },
+  {
+    label: 'Equipment Gate Pass',
+    prompt: 'A letter to the Chief Security Officer requesting a gate pass to take equipment off campus, with purpose, dates, a table of items with quantity and serial number, and signatures for the coordinator and faculty advisor',
+  },
+  {
+    label: 'Volunteer Thank-you Letter',
+    prompt: 'A thank-you letter to event volunteers with volunteer name, event name, date, a short paragraph on their contribution, and the student head signature',
+  },
+];
+
 export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
   clubId,
   permissions,
@@ -273,20 +296,16 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[11px] text-blue-200">Examples:</span>
-                <button
-                  type="button"
-                  onClick={() => setAiPrompt("A sponsorship request letter to a company with event name, date, venue, a tiers table with an amount per tier, and signatures for the coordinator and the faculty advisor")}
-                  className="text-[11px] bg-blue-800/80 hover:bg-blue-700 text-blue-100 px-2 py-0.5 rounded transition-colors"
-                >
-                  Sponsorship Request
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAiPrompt("A meeting attendance sheet with event name, date, venue, a table of attendees with roll number, name and signature, and signatures for the coordinator and faculty advisor")}
-                  className="text-[11px] bg-blue-800/80 hover:bg-blue-700 text-blue-100 px-2 py-0.5 rounded transition-colors"
-                >
-                  Meeting Attendance Sheet
-                </button>
+                {AI_TEMPLATE_EXAMPLES.map((ex) => (
+                  <button
+                    key={ex.label}
+                    type="button"
+                    onClick={() => setAiPrompt(ex.prompt)}
+                    className="text-[11px] bg-blue-800/80 hover:bg-blue-700 text-blue-100 px-2 py-0.5 rounded transition-colors"
+                  >
+                    {ex.label}
+                  </button>
+                ))}
               </div>
               <button
                 type="submit"
@@ -307,6 +326,11 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                 )}
               </button>
             </div>
+            {submittingAi && (
+              <p className="text-[11px] text-blue-200" role="status">
+                The AI is designing fields, tables and signatories. This can take up to a minute when the model is busy.
+              </p>
+            )}
           </form>
           {aiError && (
             <div className="mt-3 p-3 bg-red-900/60 border border-red-500 rounded-lg text-xs text-red-100 flex flex-col gap-1.5">

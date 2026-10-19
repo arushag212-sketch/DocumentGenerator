@@ -109,6 +109,9 @@ class JoinRequest(TimestampMixin, Base):
     club_id: Mapped[str] = mapped_column(String(36), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     position: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Access level the applicant asked for; admins may grant a different one on approval.
+    requested_role: Mapped[str] = mapped_column(String(50), default="editor", server_default="editor", nullable=False)  # editor | viewer
+    message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False)  # pending | approved | rejected | cancelled
     reviewed_by: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Shared primitives for app pages (match the navy #1b365d brand used across the portal) */
+@layer components {
+  .surface-card {
+    @apply bg-white border border-slate-200 rounded-3xl shadow-sm;
+  }
+  .field-label {
+    @apply block text-xs font-semibold text-slate-700 mb-1.5;
+  }
+  .input-field {
+    @apply w-full text-sm px-3 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-800 placeholder:text-slate-400
+      focus:outline-none focus:ring-2 focus:ring-[#1b365d]/40 focus:border-[#1b365d] transition-shadow;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#1b365d] hover:bg-[#132742] text-white text-sm font-bold
+      rounded-xl shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+      focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#1b365d];
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold
+      border border-slate-200 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+      focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-400;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border;
+  }
+}
+
 /* Self-Hosted Curated Open Fonts (OFL / Apache 2.0) */
 @font-face {
   font-family: 'Tinos';
@@ -252,8 +279,7 @@ body {
 
 .ProseMirror figure.image-block--wrap-behind {
   position: absolute;
-  opacity: 0.15;
-  pointer-events: none;
+  opacity: 0.25;
   z-index: 0;
 }
 

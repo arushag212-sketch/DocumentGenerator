@@ -190,7 +190,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    joinRequest: (clubId: string | number, data: { position: string }) =>
+    joinRequest: (clubId: string | number, data: { position: string; requested_role?: 'editor' | 'viewer'; message?: string }) =>
       apiFetch<JoinRequest>(`/clubs/${clubId}/join-requests`, {
         method: 'POST',
         body: JSON.stringify(data),
@@ -213,7 +213,16 @@ export const api = {
       apiFetch<void>(`/clubs/${clubId}/join-requests/${reqId}/reject`, {
         method: 'POST',
       }),
+    cancelJoinRequest: (clubId: string | number, reqId: string) =>
+      apiFetch<JoinRequest>(`/clubs/${clubId}/join-requests/${reqId}/cancel`, {
+        method: 'POST',
+      }),
     get: (clubId: string | number) => apiFetch<Club>(`/clubs/${clubId}`),
+    update: (clubId: string | number, data: any) =>
+      apiFetch<Club>(`/clubs/${clubId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
     getMembers: (clubId: string | number) => apiFetch<ClubMember[]>(`/clubs/${clubId}/members`),
     addMember: (clubId: string | number, data: { user_email: string; role: string; title?: string }) =>
       apiFetch<ClubMember>(`/clubs/${clubId}/members`, {
@@ -625,6 +634,7 @@ export const api = {
         ref_numbers_accepted: boolean;
         event_id?: string;
         event_title?: string;
+        allow_blanks?: boolean;
       }
     ) =>
       apiFetch<HomeGenerateResponse>(`/clubs/${clubId}/home/generate`, {

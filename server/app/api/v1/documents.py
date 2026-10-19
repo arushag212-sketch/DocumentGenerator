@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import shutil
 import subprocess
 import tempfile
 import uuid
+
+logger = logging.getLogger(__name__)
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Optional

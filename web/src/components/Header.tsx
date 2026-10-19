@@ -33,6 +33,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenClubModal }) => {
     }
   }, [activeClub?.id, isClubAdmin, location.pathname]);
 
+  // Nav is only useful once the user holds a role in the active club; pending
+  // applicants only see onboarding.
+  const hasClubAccess = Boolean(user?.is_platform_admin || activeClub?.my_role);
+
   const navLinks = [
     { to: '/home', label: 'Home' },
     { to: '/documents', label: 'My Documents' },
@@ -117,9 +121,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenClubModal }) => {
                         }`}
                       >
                         <span className="truncate pr-2">{c.name}</span>
-                        <span className="text-[11px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 flex-shrink-0">
-                          {c.code || c.short_name}
-                        </span>
+                        {c.my_role || user?.is_platform_admin ? (
+                          <span className="text-[11px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 flex-shrink-0">
+                            {c.code || c.short_name}
+                          </span>
+                        ) : (
+                          <span className="badge bg-amber-50 text-amber-700 border-amber-200 flex-shrink-0">Pending</span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -144,11 +152,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenClubModal }) => {
                 <p className="font-semibold text-slate-800">{user?.full_name}</p>
                 <p className="text-slate-500 text-[10px] truncate max-w-[140px]">{user?.email}</p>
               </div>
-              {user?.is_platform_admin && (
+              {user?.is_platform_admin ? (
                 <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded border border-amber-300 font-semibold">
-                  Admin
+                  Platform admin
                 </span>
-              )}
+              ) : activeClub?.my_role ? (
+                <span className="badge bg-blue-50 text-[#1b365d] border-blue-200 capitalize" title="Your access in this club">
+                  {activeClub.my_role}
+                </span>
+              ) : null}
             </div>
 
             {/* Logout Button */}
@@ -164,6 +176,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenClubModal }) => {
         </div>
 
         {/* Navigation Tabs */}
+        {hasClubAccess && (
         <div className="flex items-center justify-between border-t border-slate-100 pt-1 overflow-x-auto no-scrollbar">
           <div className="flex space-x-1">
             {navLinks.map((link) => (
@@ -204,6 +217,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenClubModal }) => {
             )}
           </div>
         </div>
+        )}
       </div>
     </header>
   );

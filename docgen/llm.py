@@ -85,10 +85,11 @@ def discover_gemini_models(api_key: Optional[str] = None, force_refresh: bool = 
 
     key = api_key or os.environ.get("GEMINI_API_KEY")
     fallback_candidates = [
-        "gemini-3.8-flash",
+        "gemini-3.5-flash",
         "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "gemini-2.5-flash",
+        "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-flash-lite-latest",
         "gemini-flash-latest",
     ]
 
@@ -112,20 +113,21 @@ def discover_gemini_models(api_key: Optional[str] = None, force_refresh: bool = 
                 name = m.get("name", "").replace("models/", "")
                 methods = m.get("supportedGenerationMethods", [])
                 if "generateContent" in methods and "flash" in name.lower():
-                    # Exclude specialized modalities like -image, -tts
-                    if not any(sub in name.lower() for sub in ["-image", "-tts"]):
-                        valid_models.append(name)
+                    # Exclude specialized modalities and deprecated models
+                    if any(sub in name.lower() for sub in ["-image", "-tts", "gemini-2.5-flash", "gemini-2.5-pro"]):
+                        continue
+                    valid_models.append(name)
 
             if valid_models:
                 def _version_key(name: str):
-                    # Penalize preview / experimental models
                     is_preview = 1 if any(p in name.lower() for p in ["preview", "exp", "experimental"]) else 0
+                    is_healthy = 1 if any(h in name.lower() for h in ["3.5-flash", "3.6-flash", "3.7-flash", "flash-lite-latest"]) else 0
                     match = re.search(r"(\d+(?:\.\d+)*)", name)
                     if match:
                         parts = tuple(int(x) for x in match.group(1).split("."))
                     else:
                         parts = (0,)
-                    return (-is_preview, parts)
+                    return (is_healthy, -is_preview, parts)
 
                 valid_models.sort(key=_version_key, reverse=True)
 
@@ -158,9 +160,11 @@ def simplify_schema_for_gemini(raw_schema: dict[str, Any]) -> dict[str, Any]:
                     return inline_refs(resolved)
             res = {}
             for k, v in node.items():
-                if k in ("$defs", "$schema", "title"):
+                if k in ("$defs", "$schema", "title", "additionalProperties"):
                     continue
                 res[k] = inline_refs(v)
+            if res.get("type") == "object" and not res.get("properties"):
+                res["properties"] = {}
             return res
         elif isinstance(node, list):
             return [inline_refs(item) for item in node]
@@ -371,6 +375,7 @@ class GeminiLLMClient(LLMClient):
                     logger.error("Network failure contacting Gemini API on 404 fallback: %s", str(e))
                     raise AIServiceError("AI could not draft this template right now. You can build it manually in the editor.")
 
+        active_payload = payload
         # Check for 400 schema error -> retry ONCE without any schema (prompt-only JSON mode)
         if resp.status_code == 400:
             raw_err_msg = ""
@@ -394,7 +399,7 @@ class GeminiLLMClient(LLMClient):
                 raise AIAuthenticationError("Gemini API key is invalid or expired. Check your .env.")
 
             logger.warning("Gemini rejected schema with HTTP 400 (%s). Retrying ONCE in prompt-only JSON mode.", raw_err_msg)
-            fallback_payload = {
+            active_payload = {
                 "contents": [{"parts": [{"text": prompt_with_schema}]}],
                 "generationConfig": {
                     "responseMimeType": "application/json",
@@ -402,28 +407,28 @@ class GeminiLLMClient(LLMClient):
                 },
             }
             try:
-                resp = requests.post(url, headers=headers, json=fallback_payload, timeout=30)
+                resp = requests.post(url, headers=headers, json=active_payload, timeout=30)
             except requests.exceptions.Timeout:
                 raise AITimeoutError("AI service timed out after 30s. Try a shorter prompt.")
             except requests.exceptions.RequestException as e:
                 logger.error("Network failure contacting Gemini API on retry: %s", str(e))
                 raise AIServiceError("AI could not draft this template right now. You can build it manually in the editor.")
 
-        # On 429 ("quota exceeded"): try candidate flash models in order, with 1s backoff, max 2 retries
-        if resp.status_code == 429:
-            logger.warning("Gemini model '%s' hit HTTP 429 quota. Trying fallback models with 1s backoff...", current_model)
-            alt_candidates = [m for m in candidates if m != current_model][:2]
+        # On 429 or 503 ("quota exceeded" or "high demand"): try candidate flash models in order
+        if resp.status_code in (429, 503):
+            logger.warning("Gemini model '%s' hit HTTP %d. Trying fallback models with 1s backoff...", current_model, resp.status_code)
+            alt_candidates = [m for m in candidates if m != current_model][:4]
             for fb_model in alt_candidates:
                 time.sleep(1)
                 fb_url = f"https://generativelanguage.googleapis.com/v1beta/models/{fb_model}:generateContent"
                 try:
-                    fb_resp = requests.post(fb_url, headers=headers, json=payload, timeout=30)
+                    fb_resp = requests.post(fb_url, headers=headers, json=active_payload, timeout=30)
                     if fb_resp.status_code == 200:
                         logger.info("Successfully completed request using fallback model '%s'", fb_model)
                         self.model = fb_model
                         resp = fb_resp
                         break
-                    elif fb_resp.status_code != 429:
+                    elif fb_resp.status_code not in (429, 503, 404):
                         resp = fb_resp
                         break
                 except Exception as fb_err:

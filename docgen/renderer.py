@@ -93,7 +93,8 @@ class Renderer:
                extra_context: dict[str, Any] | None = None,
                output_dir: Path | None = None,
                version: int = 1,
-               convert_pdf: bool = True) -> RenderResult:
+               convert_pdf: bool = True,
+               allow_blanks: bool = False) -> RenderResult:
         """Render a template with event data.
 
         Args:
@@ -103,6 +104,7 @@ class Renderer:
             output_dir: Override output directory
             version: Version number for the output filename
             convert_pdf: Whether to convert the rendered DOCX to PDF (raises if soffice missing)
+            allow_blanks: If True, unfilled fields render as clean blank underlines without raising validation errors
 
         Returns:
             RenderResult with paths to generated files
@@ -111,7 +113,7 @@ class Renderer:
         docx_source = self.template_source.get_template_docx_stream(template_id)
 
         # Build context from event record
-        context = self._build_context(event, schema, extra_context)
+        context = self._build_context(event, schema, extra_context, allow_blanks=allow_blanks)
 
         # Render DOCX with SandboxedEnvironment and StrictUndefined (autoescape=True)
         if hasattr(docx_source, "seek"):
@@ -146,9 +148,17 @@ class Renderer:
         )
 
     def _build_context(self, event: EventRecord, schema: TemplateSchema,
-                       extra_context: dict[str, Any] | None = None) -> dict[str, Any]:
+                       extra_context: dict[str, Any] | None = None,
+                       allow_blanks: bool = False) -> dict[str, Any]:
         """Build the template context from event data + config + computed values."""
         ctx = event.flat_dict()
+        BLANK_LINE = "____________________"
+
+        # Synchronize participants and expected_participants in context
+        if ctx.get("expected_participants") is not None and ctx.get("participants") is None:
+            ctx["participants"] = ctx["expected_participants"]
+        elif ctx.get("participants") is not None and ctx.get("expected_participants") is None:
+            ctx["expected_participants"] = ctx["participants"]
 
         # Add config values
         ctx["club_name"] = self.config.club_name
@@ -462,7 +472,7 @@ class Renderer:
                 clean_reimb.append(r_dict)
             ctx["other_reimbursements"] = clean_reimb
 
-        if "budget_items" in ctx and isinstance(ctx["budget_items"], list):
+        if "budget_items" in ctx and isinstance(ctx["budget_items"], list) and len(ctx["budget_items"]) > 0:
             clean_budget = []
             for b in ctx["budget_items"]:
                 b_dict = b.model_dump() if hasattr(b, "model_dump") else dict(b)
@@ -471,6 +481,10 @@ class Renderer:
                         b_dict[bk] = ""
                 clean_budget.append(b_dict)
             ctx["budget_items"] = clean_budget
+        elif allow_blanks:
+            ctx["budget_items"] = [{"item": BLANK_LINE, "amount": BLANK_LINE}]
+        else:
+            ctx["budget_items"] = []
 
         # Compute bill totals and line totals if bill_items present
         if ctx.get("bill_items") and isinstance(ctx["bill_items"], list):
@@ -501,11 +515,27 @@ class Renderer:
                 tax_dec = Decimal("0")
             ctx["tax_amount"] = tax_dec
             ctx["bill_total_with_tax"] = fn_total_with_tax(bill_subtotal, tax_dec)
+        else:
+            if "bill_items" not in ctx:
+                ctx["bill_items"] = [{"item": BLANK_LINE, "qty": "1", "unit_cost": BLANK_LINE, "line_total": BLANK_LINE}] if allow_blanks else []
+            ctx["bill_total"] = BLANK_LINE if allow_blanks else Decimal("0")
+            ctx["tax_amount"] = BLANK_LINE if allow_blanks else Decimal("0")
+            ctx["bill_total_with_tax"] = BLANK_LINE if allow_blanks else Decimal("0")
 
-        # Compute budget total if budget items present
-        if ctx.get("budget_items"):
+        # Compute budget total
+        has_numeric_budget = False
+        if ctx.get("budget_items") and isinstance(ctx["budget_items"], list):
+            for b in ctx["budget_items"]:
+                if isinstance(b, dict) and str(b.get("amount", "")).replace(".", "", 1).isdigit():
+                    has_numeric_budget = True
+                    break
+
+        if has_numeric_budget:
             ctx["budget_total"] = fn_sum(ctx["budget_items"], "amount")
             ctx["budget_total_inr"] = fn_format_inr(ctx["budget_total"])
+        else:
+            ctx["budget_total"] = BLANK_LINE if allow_blanks else Decimal("0")
+            ctx["budget_total_inr"] = BLANK_LINE if allow_blanks else "₹0.00"
 
         # Compute bill summary totals: winners (prize money) + other reimbursements
         prize_tot = Decimal("0")
@@ -535,6 +565,10 @@ class Renderer:
                 ctx["dates"] = ctx["date_range_str"]
         elif ctx.get("dates"):
             ctx["date_range_str"] = fn_format_date(str(ctx["dates"]))
+        else:
+            ctx["date_range_str"] = BLANK_LINE if allow_blanks else ""
+            if not ctx.get("dates"):
+                ctx["dates"] = ctx["date_range_str"]
 
         from docgen.functions import fn_format_time
         if ctx.get("time_start"):
@@ -604,14 +638,14 @@ class Renderer:
         for f in schema.fields:
             is_essential = getattr(f, "importance", "optional") == "essential"
             val = ctx.get(f.key)
-            if not is_essential:
-                # If optional field is empty or literal "None", render clean blank line for hand-filling
+            if not is_essential or allow_blanks:
+                # If field is empty or literal "None", render clean blank line for hand-filling
                 if val is None or str(val).strip() in ("", "None", "null"):
                     if f.type in ("table",):
                         ctx[f.key] = [] if val is None else val
                     elif f.key in ("description", "objectives"):
                         # Keep empty string if unfilled (Permission Letter's venue clause carries meaning)
-                        ctx[f.key] = ""
+                        ctx[f.key] = "" if not allow_blanks else BLANK_LINE
                     else:
                         ctx[f.key] = BLANK_LINE
             else:
@@ -620,13 +654,13 @@ class Renderer:
 
         # GLOBAL GUARD (Extended per Requirement 2 & W3.1):
         # 1. Any context value that is callable, a function/method repr, or contains "<function", "<bound", "object at 0x", "[AI-drafted" must raise.
-        # 2. Any required field that is None or resolves to empty must raise.
+        # 2. Any required field that is None or resolves to empty must raise (unless allow_blanks is True).
         # 3. Any computed field that resolves to empty must raise.
-        self._validate_rendered_context(ctx, schema)
+        self._validate_rendered_context(ctx, schema, allow_blanks=allow_blanks)
 
         return ctx
 
-    def _validate_rendered_context(self, ctx: dict[str, Any], schema: TemplateSchema) -> None:
+    def _validate_rendered_context(self, ctx: dict[str, Any], schema: TemplateSchema, allow_blanks: bool = False) -> None:
         """Extended global guard enforcing data integrity on template variables."""
         def check_val(key_name: str, val: Any):
             if callable(val):
@@ -655,18 +689,19 @@ class Renderer:
 
         walk_ctx(ctx)
 
-        # Check essential required fields
-        for f_schema in schema.fields:
-            val = ctx.get(f_schema.key)
-            is_essential = getattr(f_schema, "importance", "optional") == "essential"
-            if f_schema.required is True and not f_schema.defer_ok and is_essential:
-                if val is None or str(val).strip() in ("", "None", "null"):
-                    raise ValueError(
-                        f"Rendering validation failed for template '{schema.id}': "
-                        f"Required field '{f_schema.key}' is missing or None. "
-                        f"Official templates cannot render empty or 'None' values. "
-                        f"(Field prompt: {f_schema.ask})"
-                    )
+        # Check essential required fields (only when not in allow_blanks mode)
+        if not allow_blanks:
+            for f_schema in schema.fields:
+                val = ctx.get(f_schema.key)
+                is_essential = getattr(f_schema, "importance", "optional") == "essential"
+                if f_schema.required is True and not f_schema.defer_ok and is_essential:
+                    if val is None or str(val).strip() in ("", "None", "null"):
+                        raise ValueError(
+                            f"Rendering validation failed for template '{schema.id}': "
+                            f"Required field '{f_schema.key}' is missing or None. "
+                            f"Official templates cannot render empty or 'None' values. "
+                            f"(Field prompt: {f_schema.ask})"
+                        )
             # Raise when a computed field resolves to empty
             if f_schema.computed:
                 if val is None or str(val).strip() in ("", "None", "null"):

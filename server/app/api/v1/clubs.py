@@ -512,6 +512,39 @@ def create_club(
 # ---------------- JOIN REQUEST ENDPOINTS ----------------
 
 
+def _join_request_out(
+    jr: JoinRequest,
+    club: Club,
+    user: Optional[User],
+    admin_user: Optional[User] = None,
+) -> JoinRequestOut:
+    return JoinRequestOut(
+        id=jr.id,
+        club_id=club.id,
+        club_name=club.name,
+        user_id=jr.user_id,
+        user_name=user.name if user else "Unknown",
+        user_email=user.email if user else "unknown@svnit.ac.in",
+        position=jr.position,
+        requested_role=jr.requested_role or Role.EDITOR,
+        message=jr.message,
+        status=jr.status,
+        admin_name=admin_user.name if admin_user else None,
+        reviewed_by=jr.reviewed_by,
+        reviewed_at=jr.reviewed_at,
+        created_at=jr.created_at,
+    )
+
+
+def _club_admin_user(db: Session, club_id: str) -> Optional[User]:
+    admin_membership = ScopedRepository(db, Membership, club_id=club_id).find_first(
+        Membership.status == "active", Membership.role.in_([Role.OWNER, Role.ADMIN])
+    )
+    if not admin_membership:
+        return None
+    return db.query(User).filter(User.id == admin_membership.user_id).first()
+
+
 @router.post("/{club_id}/join-requests", response_model=JoinRequestOut, status_code=status.HTTP_201_CREATED)
 def create_join_request(
     club_id: str,
@@ -595,32 +628,20 @@ def create_join_request(
         JoinRequest.status == "pending",
     ).first()
     if existing_jr:
-        admin_membership = m_repo.find_first(Membership.status == "active", Membership.role.in_(["owner", "admin"]))
-        admin_user = db.query(User).filter(User.id == admin_membership.user_id).first() if admin_membership else None
-        return JoinRequestOut(
-            id=existing_jr.id,
-            club_id=club.id,
-            club_name=club.name,
-            user_id=current_user.id,
-            user_name=current_user.name,
-            user_email=current_user.email,
-            position=existing_jr.position,
-            status=existing_jr.status,
-            admin_name=admin_user.name if admin_user else None,
-            created_at=existing_jr.created_at,
-        )
+        return _join_request_out(existing_jr, club, current_user, _club_admin_user(db, club.id))
 
     jr = JoinRequest(
         club_id=club.id,
         user_id=current_user.id,
         position=stored_pos,
+        requested_role=payload.requested_role,
+        message=(payload.message or "").strip() or None,
         status="pending",
     )
     db.add(jr)
     db.flush()
 
-    admin_membership = m_repo.find_first(Membership.status == "active", Membership.role.in_(["owner", "admin"]))
-    admin_user = db.query(User).filter(User.id == admin_membership.user_id).first() if admin_membership else None
+    admin_user = _club_admin_user(db, club.id)
 
     client_ip = request.client.host if request.client else None
     log_audit(
@@ -630,25 +651,14 @@ def create_join_request(
         entity_id=jr.id,
         club_id=club.id,
         user_id=current_user.id,
-        meta={"position": jr.position},
+        meta={"position": jr.position, "requested_role": jr.requested_role},
         ip=client_ip,
     )
 
     db.commit()
     db.refresh(jr)
 
-    return JoinRequestOut(
-        id=jr.id,
-        club_id=club.id,
-        club_name=club.name,
-        user_id=current_user.id,
-        user_name=current_user.name,
-        user_email=current_user.email,
-        position=jr.position,
-        status=jr.status,
-        admin_name=admin_user.name if admin_user else None,
-        created_at=jr.created_at,
-    )
+    return _join_request_out(jr, club, current_user, admin_user)
 
 
 @router.get("/{club_id}/join-requests/my", response_model=Optional[JoinRequestOut])
@@ -671,23 +681,7 @@ def get_my_join_request(
     if not jr:
         return None
 
-    admin_membership = ScopedRepository(db, Membership, club_id=club.id).find_first(Membership.status == "active", Membership.role.in_(["owner", "admin"]))
-    admin_user = db.query(User).filter(User.id == admin_membership.user_id).first() if admin_membership else None
-
-    return JoinRequestOut(
-        id=jr.id,
-        club_id=club.id,
-        club_name=club.name,
-        user_id=current_user.id,
-        user_name=current_user.name,
-        user_email=current_user.email,
-        position=jr.position,
-        status=jr.status,
-        admin_name=admin_user.name if admin_user else None,
-        reviewed_by=jr.reviewed_by,
-        reviewed_at=jr.reviewed_at,
-        created_at=jr.created_at,
-    )
+    return _join_request_out(jr, club, current_user, _club_admin_user(db, club.id))
 
 
 @router.get("/{club_id}/join-requests", response_model=list[JoinRequestOut])
@@ -702,25 +696,9 @@ def list_join_requests(
         query = query.filter(JoinRequest.status == status_filter)
     requests = query.order_by(JoinRequest.created_at.desc()).all()
 
-    out = []
-    for r in requests:
-        u = db.query(User).filter(User.id == r.user_id).first()
-        out.append(
-            JoinRequestOut(
-                id=r.id,
-                club_id=ctx.club.id,
-                club_name=ctx.club.name,
-                user_id=r.user_id,
-                user_name=u.name if u else "Unknown",
-                user_email=u.email if u else "unknown@svnit.ac.in",
-                position=r.position,
-                status=r.status,
-                reviewed_by=r.reviewed_by,
-                reviewed_at=r.reviewed_at,
-                created_at=r.created_at,
-            )
-        )
-    return out
+    user_ids = {r.user_id for r in requests}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    return [_join_request_out(r, ctx.club, users.get(r.user_id)) for r in requests]
 
 
 @router.post("/{club_id}/join-requests/{request_id}/approve", response_model=JoinRequestOut)
@@ -740,10 +718,11 @@ def approve_join_request(
         raise HTTPException(status_code=400, detail=f"Join request is already {jr.status}")
 
     from server.app.core.permissions import ROLE_RANKS
-    if ROLE_RANKS.get(payload.role, 0) > ROLE_RANKS.get(ctx.role, 0) and not ctx.user.is_platform_admin:
+    granted_role = payload.role or jr.requested_role or Role.EDITOR
+    if ROLE_RANKS.get(granted_role, 0) > ROLE_RANKS.get(ctx.role, 0) and not ctx.user.is_platform_admin:
         raise HTTPException(
             status_code=403,
-            detail=f"Cannot grant role '{payload.role}' which exceeds your own role '{ctx.role}'",
+            detail=f"Cannot grant role '{granted_role}' which exceeds your own role '{ctx.role}'",
         )
 
     target_user = db.query(User).filter(User.id == jr.user_id).first()
@@ -770,13 +749,13 @@ def approve_join_request(
     membership_repo = ScopedRepository(db, Membership, club_id=ctx.club.id)
     m = membership_repo.find_first(Membership.user_id == jr.user_id)
     if m:
-        m.role = payload.role
+        m.role = granted_role
         m.status = "active"
         m.position = jr.position
     else:
         membership_repo.create(
             user_id=jr.user_id,
-            role=payload.role,
+            role=granted_role,
             position=jr.position,
             status="active",
         )
@@ -789,25 +768,13 @@ def approve_join_request(
         entity_id=jr.id,
         club_id=ctx.club.id,
         user_id=ctx.user.id,
-        meta={"assigned_role": payload.role, "position": jr.position, "target_user_id": jr.user_id},
+        meta={"assigned_role": granted_role, "requested_role": jr.requested_role, "position": jr.position, "target_user_id": jr.user_id},
         ip=client_ip,
     )
 
     db.commit()
 
-    return JoinRequestOut(
-        id=jr.id,
-        club_id=ctx.club.id,
-        club_name=ctx.club.name,
-        user_id=jr.user_id,
-        user_name=target_user.name if target_user else "Unknown",
-        user_email=target_user.email if target_user else "unknown@svnit.ac.in",
-        position=jr.position,
-        status=jr.status,
-        reviewed_by=jr.reviewed_by,
-        reviewed_at=jr.reviewed_at,
-        created_at=jr.created_at,
-    )
+    return _join_request_out(jr, ctx.club, target_user)
 
 
 @router.post("/{club_id}/join-requests/{request_id}/reject", response_model=JoinRequestOut)
@@ -842,19 +809,7 @@ def reject_join_request(
         ip=client_ip,
     )
 
-    return JoinRequestOut(
-        id=jr.id,
-        club_id=ctx.club.id,
-        club_name=ctx.club.name,
-        user_id=jr.user_id,
-        user_name=target_user.name if target_user else "Unknown",
-        user_email=target_user.email if target_user else "unknown@svnit.ac.in",
-        position=jr.position,
-        status=jr.status,
-        reviewed_by=jr.reviewed_by,
-        reviewed_at=jr.reviewed_at,
-        created_at=jr.created_at,
-    )
+    return _join_request_out(jr, ctx.club, target_user)
 
 
 @router.post("/{club_id}/join-requests/{request_id}/cancel", response_model=JoinRequestOut)
@@ -879,17 +834,9 @@ def cancel_join_request(
     db.flush()
 
     club = db.query(Club).filter(Club.id == club_id).first()
-    return JoinRequestOut(
-        id=jr.id,
-        club_id=club_id,
-        club_name=club.name if club else "Club",
-        user_id=current_user.id,
-        user_name=current_user.name,
-        user_email=current_user.email,
-        position=jr.position,
-        status=jr.status,
-        created_at=jr.created_at,
-    )
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found")
+    return _join_request_out(jr, club, current_user)
 
 
 @router.get("/{club_id}", response_model=ClubOut)
@@ -1013,13 +960,17 @@ def update_club(
     if payload.short_name is not None:
         club.short_name = payload.short_name.strip()
     if payload.chapter_code is not None:
-        club.chapter_code = payload.chapter_code
+        club.chapter_code = payload.chapter_code.strip() if payload.chapter_code else None
     if payload.head_of_account is not None:
-        club.head_of_account = payload.head_of_account
+        club.head_of_account = payload.head_of_account.strip() if payload.head_of_account else None
     if payload.academic_year_default is not None:
-        club.academic_year_default = payload.academic_year_default
+        club.academic_year_default = payload.academic_year_default.strip()
+    if payload.department is not None:
+        curr = dict(club.settings or {})
+        curr["department"] = payload.department.strip()
+        club.settings = curr
     if payload.settings is not None:
-        curr = club.settings or {}
+        curr = dict(club.settings or {})
         curr.update(payload.settings)
         club.settings = curr
 
@@ -1921,6 +1872,50 @@ async def upload_club_logo(
     }
 
 
+@router.get("/{club_id}/logo")
+def get_club_logo(
+    club_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Serve the active logo asset for the club."""
+    from fastapi.responses import FileResponse, Response
+    from server.app.models import Asset, Letterhead
+    from server.app.core.storage import get_storage, LocalDiskStorage
+
+    logo_asset_id = (ctx.club.settings or {}).get("logo_asset_id")
+    asset = None
+    if logo_asset_id:
+        asset = db.query(Asset).filter(Asset.id == logo_asset_id, Asset.club_id == ctx.club.id).first()
+    if not asset:
+        lh = db.query(Letterhead).filter(Letterhead.club_id == ctx.club.id).first()
+        if lh and lh.right_logo_asset_id:
+            asset = db.query(Asset).filter(Asset.id == lh.right_logo_asset_id, Asset.club_id == ctx.club.id).first()
+    if not asset:
+        asset = db.query(Asset).filter(Asset.club_id == ctx.club.id, Asset.kind == "logo").order_by(Asset.created_at.desc()).first()
+
+    if not asset:
+        raise HTTPException(status_code=404, detail="Club logo not found")
+
+    try:
+        active_storage = get_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    if isinstance(active_storage, LocalDiskStorage):
+        f_path = active_storage.local_path(asset.storage_key)
+        if not f_path.is_file():
+            raise HTTPException(status_code=404, detail="Club logo file not found on storage")
+        return FileResponse(str(f_path), media_type=asset.mime or "image/png")
+
+    try:
+        return Response(content=active_storage.load(asset.storage_key), media_type=asset.mime or "image/png")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Club logo file not found on storage")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
 # ---------------- INVITES (Club Admins create/list/revoke) ----------------
 
 
@@ -2085,11 +2080,15 @@ def list_venues(
             club_id=v.club_id,
             name=v.name,
             short_name=v.short_name,
+            location=v.short_name,
             addressee_default=v.addressee_default,
+            addressee=v.addressee_default,
             tech_assistant_person_id=v.tech_assistant_person_id,
             tech_assistant_name=people.get(v.tech_assistant_person_id) if v.tech_assistant_person_id else None,
+            tech_assistant=people.get(v.tech_assistant_person_id) if v.tech_assistant_person_id else None,
             faculty_incharge_person_id=v.faculty_incharge_person_id,
             faculty_incharge_name=people.get(v.faculty_incharge_person_id) if v.faculty_incharge_person_id else None,
+            faculty_in_charge=people.get(v.faculty_incharge_person_id) if v.faculty_incharge_person_id else None,
             created_at=v.created_at,
         )
         for v in venues
@@ -2108,10 +2107,13 @@ def create_venue(
     venue_repo = ScopedRepository(db, Venue, club_id=ctx.club.id)
     person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
 
+    raw_short = payload.short_name or payload.location
+    raw_addressee = payload.addressee_default or payload.addressee
+
     venue = venue_repo.create(
         name=payload.name.strip(),
-        short_name=payload.short_name.strip() if payload.short_name else None,
-        addressee_default=payload.addressee_default.strip() if payload.addressee_default else None,
+        short_name=raw_short.strip() if raw_short else None,
+        addressee_default=raw_addressee.strip() if raw_addressee else None,
         tech_assistant_person_id=payload.tech_assistant_person_id,
         faculty_incharge_person_id=payload.faculty_incharge_person_id,
     )
@@ -2136,11 +2138,15 @@ def create_venue(
         club_id=venue.club_id,
         name=venue.name,
         short_name=venue.short_name,
+        location=venue.short_name,
         addressee_default=venue.addressee_default,
+        addressee=venue.addressee_default,
         tech_assistant_person_id=venue.tech_assistant_person_id,
         tech_assistant_name=ta.full_name if ta else None,
+        tech_assistant=ta.full_name if ta else None,
         faculty_incharge_person_id=venue.faculty_incharge_person_id,
         faculty_incharge_name=fi.full_name if fi else None,
+        faculty_in_charge=fi.full_name if fi else None,
         created_at=venue.created_at,
     )
 
@@ -2166,10 +2172,12 @@ def update_venue(
 
     if payload.name is not None:
         venue.name = payload.name.strip()
-    if payload.short_name is not None:
-        venue.short_name = payload.short_name.strip() if payload.short_name else None
-    if payload.addressee_default is not None:
-        venue.addressee_default = payload.addressee_default.strip() if payload.addressee_default else None
+    raw_short = payload.short_name if payload.short_name is not None else payload.location
+    if raw_short is not None:
+        venue.short_name = raw_short.strip() if raw_short else None
+    raw_addressee = payload.addressee_default if payload.addressee_default is not None else payload.addressee
+    if raw_addressee is not None:
+        venue.addressee_default = raw_addressee.strip() if raw_addressee else None
     if payload.tech_assistant_person_id is not None:
         venue.tech_assistant_person_id = payload.tech_assistant_person_id or None
     if payload.faculty_incharge_person_id is not None:
@@ -2198,11 +2206,15 @@ def update_venue(
         club_id=venue.club_id,
         name=venue.name,
         short_name=venue.short_name,
+        location=venue.short_name,
         addressee_default=venue.addressee_default,
+        addressee=venue.addressee_default,
         tech_assistant_person_id=venue.tech_assistant_person_id,
         tech_assistant_name=ta.full_name if ta else None,
+        tech_assistant=ta.full_name if ta else None,
         faculty_incharge_person_id=venue.faculty_incharge_person_id,
         faculty_incharge_name=fi.full_name if fi else None,
+        faculty_in_charge=fi.full_name if fi else None,
         created_at=venue.created_at,
     )
 
@@ -2255,9 +2267,11 @@ def list_numbering_series(
             id=s.id,
             club_id=s.club_id,
             key=s.key,
+            series_key=s.key,
             format=s.format,
             academic_year=s.academic_year,
             last_seq=s.last_seq,
+            current_counter=s.last_seq,
             created_at=s.created_at,
         )
         for s in series
@@ -2362,9 +2376,11 @@ def update_numbering_series_format(
         id=s.id,
         club_id=s.club_id,
         key=s.key,
+        series_key=s.key,
         format=s.format,
         academic_year=s.academic_year,
         last_seq=s.last_seq,
+        current_counter=s.last_seq,
         created_at=s.created_at,
     )
 

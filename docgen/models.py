@@ -378,6 +378,12 @@ class EventRecord(BaseModel):
             b_val = data.get("estimated_budget") or data.get("budget") or data.get("budget_amount") or data.get("sanctioned_budget")
             data["budget_items"] = coerce_to_budget_items(b_val)
 
+        # Align participants and expected_participants
+        if "participants" in data and ("expected_participants" not in data or not data.get("expected_participants")):
+            data["expected_participants"] = data["participants"]
+        elif "expected_participants" in data and ("participants" not in data or not data.get("participants")):
+            data["participants"] = data["expected_participants"]
+
         # Normalize winners
         if "winners" in data:
             w_val = data["winners"]
@@ -496,6 +502,12 @@ class EventRecord(BaseModel):
                 else:
                     result[extra_key] = extra_val
 
+        # Guarantee both expected_participants and participants are in result
+        if result.get("expected_participants") is not None and result.get("participants") is None:
+            result["participants"] = result["expected_participants"]
+        elif result.get("participants") is not None and result.get("expected_participants") is None:
+            result["expected_participants"] = result["participants"]
+
         return result
 
     def get_missing_fields(self, required_keys: list[str]) -> list[str]:
@@ -534,6 +546,12 @@ class EventRecord(BaseModel):
             b_val = clean_data.get("estimated_budget") or clean_data.get("budget") or clean_data.get("budget_amount") or clean_data.get("sanctioned_budget")
             clean_data["budget_items"] = coerce_to_budget_items(b_val)
 
+        # Normalize and cross-populate participants
+        if "participants" in clean_data and ("expected_participants" not in clean_data or not clean_data.get("expected_participants")):
+            clean_data["expected_participants"] = clean_data["participants"]
+        elif "expected_participants" in clean_data and ("participants" not in clean_data or not clean_data.get("participants")):
+            clean_data["participants"] = clean_data["expected_participants"]
+
         kwargs: dict[str, Any] = {}
         for field_name, field_info in cls.model_fields.items():
             if field_name in clean_data:
@@ -547,6 +565,10 @@ class EventRecord(BaseModel):
                     kwargs[field_name] = val
             elif field_name == "event_name" and ("title" in clean_data or "name" in clean_data):
                 kwargs["event_name"] = TrackedField(value=clean_data.get("title") or clean_data.get("name"), source=FieldSource.user, confirmed=True)
+            elif field_name == "expected_participants" and ("participants" in clean_data and clean_data.get("participants") is not None):
+                kwargs["expected_participants"] = TrackedField(value=clean_data.get("participants"), source=FieldSource.user, confirmed=True)
+            elif field_name == "participants" and ("expected_participants" in clean_data and clean_data.get("expected_participants") is not None):
+                kwargs["participants"] = TrackedField(value=clean_data.get("expected_participants"), source=FieldSource.user, confirmed=True)
 
         if "budget_items" in clean_data:
             kwargs["budget_items"] = coerce_to_budget_items(clean_data["budget_items"])

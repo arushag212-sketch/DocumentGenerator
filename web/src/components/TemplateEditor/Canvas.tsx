@@ -217,7 +217,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       ref={containerRef}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="relative flex-1 bg-slate-100 overflow-y-auto flex flex-col items-center select-text"
+      className="relative flex-1 bg-slate-100 overflow-auto flex flex-col items-center select-text"
     >
       {/* Floating Selection Bubble Menu */}
       {bubblePos && editor && (

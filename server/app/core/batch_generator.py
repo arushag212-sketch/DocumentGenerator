@@ -79,6 +79,7 @@ class BatchGenerator:
         event_data: dict[str, Any],
         event_id: Optional[str] = None,
         event_title: Optional[str] = None,
+        allow_blanks: bool = False,
         db: Session = None,
     ) -> dict[str, Any]:
         try:
@@ -106,6 +107,12 @@ class BatchGenerator:
             b_list = coerce_to_budget_items(b_val)
             event_data["budget_items"] = [b.model_dump() for b in b_list]
 
+        # Align participants and expected_participants in event_data
+        if "participants" in event_data and ("expected_participants" not in event_data or not event_data.get("expected_participants")):
+            event_data["expected_participants"] = event_data["participants"]
+        elif "expected_participants" in event_data and ("participants" not in event_data or not event_data.get("participants")):
+            event_data["participants"] = event_data["expected_participants"]
+
         if "winners" in event_data and not isinstance(event_data["winners"], list):
             event_data["winners"] = []
 
@@ -113,6 +120,10 @@ class BatchGenerator:
             event_data["bills"] = []
 
         # ---------------- 0. INPUT DATES HANDLING ----------------
+        if allow_blanks and not event_data.get("dates") and not event_data.get("date_start"):
+            event_data["dates_confirmed"] = True
+            event_data["dates"] = "____________________"
+
         has_picker_dates = bool(
             event_data.get("date_start")
             and event_data.get("date_end")
@@ -367,7 +378,7 @@ class BatchGenerator:
                 seen_keys.add(m["key"])
                 deduped_missing.append(m)
 
-        if deduped_missing:
+        if not allow_blanks and deduped_missing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -380,7 +391,10 @@ class BatchGenerator:
         # ---------------- 4. ATOMIC EXECUTION (TRANSACTION & ROLLBACK) ----------------
         final_title = event_title or event_data.get("event_name")
         if not final_title:
-            raise HTTPException(status_code=400, detail="Event name/title is required for batch generation.")
+            if allow_blanks:
+                final_title = "College Event"
+            else:
+                raise HTTPException(status_code=400, detail="Event name/title is required for batch generation.")
         if not event_data.get("event_name"):
             event_data["event_name"] = final_title
 
@@ -603,6 +617,7 @@ class BatchGenerator:
                     extra_context=task_ctx,
                     output_dir=out_dir,
                     convert_pdf=True,
+                    allow_blanks=allow_blanks,
                 )
 
                 docx_path = render_result.docx_path
