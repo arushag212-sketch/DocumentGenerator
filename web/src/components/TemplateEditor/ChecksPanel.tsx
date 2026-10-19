@@ -1,34 +1,78 @@
 import React, { useState } from 'react';
-import { CheckCircle2, AlertTriangle, AlertCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, AlertCircle, RefreshCw, ShieldCheck, Wrench } from 'lucide-react';
+import { api } from '../../api/client';
 
 export interface CheckFinding {
   id: string;
-  type: 'error' | 'warning' | 'info';
+  type: 'error' | 'warning' | 'info' | 'suggestion';
   category: string;
+  title: string;
   message: string;
   actionLabel?: string;
-  fix?: () => void;
+  fix?: any;
 }
 
 interface ChecksPanelProps {
   editor: any;
   fields: any[];
+  clubId?: string;
+  templateId?: string;
+  theme?: string;
   onAutoFix?: (findingId: string) => void;
+  onApplyChatAction?: (action: any) => void;
 }
 
-export const ChecksPanel: React.FC<ChecksPanelProps> = ({ editor, fields }) => {
+export const ChecksPanel: React.FC<ChecksPanelProps> = ({
+  editor,
+  fields,
+  clubId,
+  templateId,
+  theme,
+  onAutoFix,
+  onApplyChatAction,
+}) => {
   const [isRunning, setIsRunning] = useState(false);
   const [findings, setFindings] = useState<CheckFinding[]>([]);
+  const [score, setScore] = useState<number | null>(null);
   const [hasRun, setHasRun] = useState(false);
 
-  const runChecks = () => {
+  const runChecks = async () => {
     if (!editor) return;
     setIsRunning(true);
-    const newFindings: CheckFinding[] = [];
 
+    try {
+      if (clubId && templateId) {
+        const res = await api.documents.checkTemplate(clubId, templateId, {
+          editor_json: editor.getJSON(),
+          fields,
+          theme: theme || 'modern_academic',
+        });
+
+        if (res && res.findings) {
+          const mapped: CheckFinding[] = res.findings.map((f: any) => ({
+            id: f.id,
+            type: f.severity === 'suggestion' ? 'info' : (f.severity as any),
+            category: f.rule?.replace(/_/g, ' ') || 'Quality',
+            title: f.title || 'Audit Finding',
+            message: f.message,
+            actionLabel: f.fix?.summary || 'Apply Fix',
+            fix: f.fix,
+          }));
+          setFindings(mapped);
+          setScore(res.score ?? 100);
+          setHasRun(true);
+          setIsRunning(false);
+          return;
+        }
+      }
+    } catch {
+      // Fallback to local heuristic check
+    }
+
+    // Local heuristic fallback
+    const newFindings: CheckFinding[] = [];
     const docText = editor.state.doc.textBetween(0, editor.state.doc.content.size, ' ');
 
-    // 1. Check for official wording placeholders unfilled
     let officialPlaceholders = 0;
     editor.state.doc.descendants((node: any) => {
       if (node.attrs?.official_wording_required || node.text?.includes('Add official wording here')) {
@@ -40,12 +84,16 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({ editor, fields }) => {
         id: 'official_placeholder',
         type: 'warning',
         category: 'Official Protocol',
-        message: `${officialPlaceholders} block(s) contain placeholder text requiring real official wording before publishing.`,
-        actionLabel: 'Review Official Wording',
+        title: 'Unfilled Official Wording',
+        message: `${officialPlaceholders} block(s) contain placeholder text requiring real official wording.`,
+        actionLabel: 'Use Standard Request Text',
+        fix: {
+          type: 'insert_clause',
+          payload: { text: 'We respectfully submit this proposal for your kind consideration and approval.' },
+        },
       });
     }
 
-    // 2. Check for missing essential fields
     const essentialKeys = fields.filter((f) => f.importance === 'essential' || f.required).map((f) => f.key);
     const presentKeys = new Set<string>();
     editor.state.doc.descendants((node: any) => {
@@ -60,36 +108,54 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({ editor, fields }) => {
         id: 'missing_essential',
         type: 'error',
         category: 'Required Fields',
+        title: 'Missing Essential Fields',
         message: `Essential fields missing from document: ${missingEssential.join(', ')}.`,
-        actionLabel: 'Insert Missing Fields',
+        actionLabel: 'Insert Missing Field Chip',
+        fix: {
+          type: 'insert_chip',
+          payload: { field_key: missingEssential[0] },
+        },
       });
     }
 
-    // 3. Check for empty template
     if (docText.trim().length < 20) {
       newFindings.push({
         id: 'short_doc',
         type: 'warning',
         category: 'Completeness',
+        title: 'Document Too Short',
         message: 'The document appears to have very little text. Ensure required sections are included.',
       });
     }
 
-    // 4. Inconsistent punctuation or multiple spaces
     if (/ {3,}/.test(docText)) {
       newFindings.push({
         id: 'extra_spaces',
         type: 'info',
         category: 'Formatting',
-        message: 'Multiple consecutive spaces detected. Consider normalizing paragraph spacing.',
+        title: 'Multiple Consecutive Spaces',
+        message: 'Multiple consecutive spaces detected. Spacing can be normalized.',
+        actionLabel: 'Normalize Spaces',
       });
     }
 
-    setTimeout(() => {
-      setFindings(newFindings);
-      setIsRunning(false);
-      setHasRun(true);
-    }, 400);
+    setFindings(newFindings);
+    setScore(Math.max(100 - newFindings.length * 15, 30));
+    setHasRun(true);
+    setIsRunning(false);
+  };
+
+  const handleFix = (finding: CheckFinding) => {
+    if (finding.fix && onApplyChatAction) {
+      onApplyChatAction({
+        type: finding.fix.action_type || finding.fix.type,
+        payload: finding.fix.payload || {},
+      });
+    } else if (onAutoFix) {
+      onAutoFix(finding.id);
+    }
+    // Remove fixed finding
+    setFindings((prev) => prev.filter((f) => f.id !== finding.id));
   };
 
   return (
@@ -97,11 +163,12 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({ editor, fields }) => {
       {/* Top Banner */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-200">
         <div>
-          <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider">
+          <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-indigo-600" />
             Document Quality Checks
           </h3>
           <p className="text-[11px] text-slate-500">
-            Rules and protocol pre-flight validation
+            Rules, protocol & pre-flight validation
           </p>
         </div>
         <button
@@ -113,6 +180,18 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({ editor, fields }) => {
           Run Checks
         </button>
       </div>
+
+      {score !== null && hasRun && (
+        <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Compliance Score</span>
+            <div className="text-xl font-extrabold text-slate-800">{score}<span className="text-xs font-normal text-slate-400">/100</span></div>
+          </div>
+          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${score >= 90 ? 'bg-emerald-100 text-emerald-800' : score >= 70 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}`}>
+            {score >= 90 ? 'Ready to Publish' : score >= 70 ? 'Needs Attention' : 'Action Required'}
+          </span>
+        </div>
+      )}
 
       {!hasRun ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500">
@@ -146,7 +225,7 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({ editor, fields }) => {
           {findings.map((f) => (
             <div
               key={f.id}
-              className={`p-3 rounded-xl border bg-white shadow-sm space-y-1.5 ${
+              className={`p-3 rounded-xl border bg-white shadow-sm space-y-2 ${
                 f.type === 'error'
                   ? 'border-rose-200'
                   : f.type === 'warning'
@@ -159,7 +238,7 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({ editor, fields }) => {
                   {f.type === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-600" />}
                   {f.type === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />}
                   {f.type === 'info' && <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />}
-                  {f.category}
+                  {f.title}
                 </span>
                 <span
                   className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
@@ -174,6 +253,15 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({ editor, fields }) => {
                 </span>
               </div>
               <p className="text-[11px] text-slate-600">{f.message}</p>
+              {f.actionLabel && (
+                <button
+                  onClick={() => handleFix(f)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded text-[10px] transition"
+                >
+                  <Wrench className="w-3 h-3 text-indigo-600" />
+                  {f.actionLabel}
+                </button>
+              )}
             </div>
           ))}
         </div>

@@ -524,6 +524,67 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ text }),
       }),
+    getWizardQuestions: (clubId: string | number, prompt: string) =>
+      apiFetch<{ prompt: string; questions: Array<{ id: string; question: string; category: string; options: string[] }>; suggested_title: string }>(
+        `/clubs/${clubId}/documents/templates/wizard/questions`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ prompt }),
+        }
+      ),
+    generateFromWizard: (clubId: string | number, data: { prompt: string; answers: Record<string, string>; numbering_series?: string }) =>
+      apiFetch<any>(`/clubs/${clubId}/documents/templates/wizard/generate`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    importTextTemplate: (clubId: string | number, data: { text: string; name?: string }) =>
+      apiFetch<{ editor_json: any; fields: any[]; name: string }>(`/clubs/${clubId}/documents/templates/import/text`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    importDocxTemplate: async (clubId: string | number, file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return apiFetch<{ editor_json: any; fields: any[]; unsupported_elements: string[]; name: string }>(
+        `/clubs/${clubId}/documents/templates/import/docx`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+    },
+    improveText: (clubId: string | number, data: { text: string; mode?: string }) =>
+      apiFetch<{ original: string; improved: string; mode: string; explanation: string; diff: { before: string; after: string } }>(
+        `/clubs/${clubId}/documents/improve-text`,
+        {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }
+      ),
+    suggestDetails: (clubId: string | number, data: { event_type: string; existing_fields?: string[] }) =>
+      apiFetch<{ suggestions: Array<{ key: string; label: string; type: string; ask: string; sample: string; required: boolean; ai_suggested: boolean }> }>(
+        `/clubs/${clubId}/documents/suggest-details`,
+        {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }
+      ),
+    checkTemplate: (clubId: string | number, templateId: string, data: any) =>
+      apiFetch<{ score: number; total_findings: number; findings: any[] }>(
+        `/clubs/${clubId}/documents/templates/${templateId}/check`,
+        {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }
+      ),
+    translateTemplate: (clubId: string | number, templateId: string, data: { target_lang: string; editor_json?: any }) =>
+      apiFetch<{ editor_json: any; design_settings: any; target_lang: string }>(
+        `/clubs/${clubId}/documents/templates/${templateId}/translate`,
+        {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }
+      ),
   },
   events: {
     list: (clubId: string | number) =>

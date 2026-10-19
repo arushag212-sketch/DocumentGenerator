@@ -88,6 +88,7 @@ OFFICIAL_WORDING_TRIGGERS = [
 # Regex patterns for redacting sensitive PII before prompt is constructed
 PAN_REGEX = re.compile(r"\b[A-Z]{5}[0-9]{4}[A-Z]\b", re.IGNORECASE)
 PHONE_REGEX = re.compile(r"\b(?:\+91|91|0)?[6-9]\d{9}\b")
+EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
 BANK_ACC_REGEX = re.compile(r"\b\d{9,18}\b")
 IFSC_REGEX = re.compile(r"\b[A-Z]{4}0[A-Z0-9]{6}\b", re.IGNORECASE)
 
@@ -120,12 +121,20 @@ class TemplateSpec(BaseModel):
 
 
 def strip_pii_from_text(text: str) -> str:
-    """Redact personal financial & contact data (PAN, phone, bank account, IFSC) from input."""
+    """Redact personal financial & contact data (PAN, phone, bank account, IFSC, email) from input."""
     s = PAN_REGEX.sub("[REDACTED_PAN]", text)
     s = PHONE_REGEX.sub("[REDACTED_PHONE]", s)
+    s = EMAIL_REGEX.sub("[REDACTED_EMAIL]", s)
     s = IFSC_REGEX.sub("[REDACTED_IFSC]", s)
     s = BANK_ACC_REGEX.sub("[REDACTED_ACCOUNT]", s)
     return s
+
+
+def sanitize_identifier(name: str) -> str:
+    """Normalize user input or field label into a safe snake_case identifier."""
+    cleaned = re.sub(r"[^a-zA-Z0-9_]", "_", name.strip().lower())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned or "field"
 
 
 def normalize_text_for_match(t: str) -> str:

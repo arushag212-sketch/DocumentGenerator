@@ -707,15 +707,23 @@ class Renderer:
         soffice = self._find_soffice()
         if soffice:
             try:
-                result = subprocess.run(
-                    [soffice, "--headless", "--convert-to", "pdf:writer_pdf_Export",
-                     str(docx_path), "--outdir", str(docx_path.parent)],
-                    capture_output=True, text=True, timeout=60,
-                )
-                pdf_path = docx_path.with_suffix(".pdf")
-                if pdf_path.exists():
-                    print(f"  [PDF Converter] Used official converter: LibreOffice ('{soffice}')")
-                    return pdf_path, "LibreOffice"
+                with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as user_dir:
+                    user_url = Path(user_dir).as_uri()
+                    env_flag = f"-env:UserInstallation={user_url}"
+                    result = subprocess.run(
+                        [soffice, env_flag, "--headless", "--convert-to", "pdf:writer_pdf_Export",
+                         str(docx_path), "--outdir", str(docx_path.parent)],
+                        capture_output=True, text=True, timeout=60,
+                    )
+                    pdf_path = docx_path.with_suffix(".pdf")
+                    import time
+                    for _ in range(15):
+                        if pdf_path.exists() and pdf_path.stat().st_size > 0:
+                            break
+                        time.sleep(0.2)
+                    if pdf_path.exists() and pdf_path.stat().st_size > 0:
+                        print(f"  [PDF Converter] Used official converter: LibreOffice ('{soffice}')")
+                        return pdf_path, "LibreOffice"
             except Exception as e:
                 print(f"  [PDF Converter] LibreOffice conversion warning: {e}")
 

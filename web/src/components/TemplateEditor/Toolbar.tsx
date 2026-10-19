@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ArrowLeft,
   Undo2,
@@ -12,6 +12,7 @@ import {
   ZoomIn,
   ZoomOut,
   Sparkles,
+  Languages,
 } from 'lucide-react';
 import { SaveStatus } from './useEditorAutosave';
 
@@ -31,6 +32,8 @@ interface ToolbarProps {
   onPublish: () => void;
   previewLoading?: boolean;
   unreviewedAiCount?: number;
+  onTranslate?: (lang: 'hi' | 'gu') => void;
+  translating?: boolean;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -49,7 +52,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onPublish,
   previewLoading = false,
   unreviewedAiCount = 0,
+  onTranslate,
+  translating = false,
 }) => {
+  const [showTranslateMenu, setShowTranslateMenu] = useState(false);
   const canUndo = editor?.can?.().undo?.() ?? false;
   const canRedo = editor?.can?.().redo?.() ?? false;
 
@@ -147,6 +153,44 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <Command className="w-4 h-4" />
         </button>
+
+        <div className="w-px h-4 bg-slate-200 mx-1" />
+
+        <div className="relative">
+          <button
+            onClick={() => setShowTranslateMenu(!showTranslateMenu)}
+            disabled={translating}
+            className="p-1.5 rounded text-slate-600 hover:text-indigo-600 hover:bg-white disabled:opacity-50 transition"
+            title="Translate Document (Hindi / Gujarati)"
+          >
+            <Languages className={`w-4 h-4 ${translating ? 'animate-spin text-indigo-600' : ''}`} />
+          </button>
+          {showTranslateMenu && (
+            <div className="absolute top-full mt-2 left-0 z-50 bg-white border border-slate-200 shadow-xl rounded-xl p-2 w-48 text-xs flex flex-col gap-1">
+              <span className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">Translate Document</span>
+              <button
+                onClick={() => {
+                  setShowTranslateMenu(false);
+                  onTranslate?.('hi');
+                }}
+                className="px-2.5 py-1.5 text-left rounded-lg hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 font-medium flex items-center justify-between transition"
+              >
+                <span>Hindi (हिंदी)</span>
+                <span className="text-[10px] text-slate-400">Devanagari</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowTranslateMenu(false);
+                  onTranslate?.('gu');
+                }}
+                className="px-2.5 py-1.5 text-left rounded-lg hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 font-medium flex items-center justify-between transition"
+              >
+                <span>Gujarati (ગુજરાતી)</span>
+                <span className="text-[10px] text-slate-400">Gujarati</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Right: Autosave Status, Preview & Publish */}

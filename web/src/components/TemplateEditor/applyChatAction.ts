@@ -93,8 +93,10 @@ export function applyChatAction({
     return;
   }
 
-  if (type === 'insert_chip' && payload.field_key) {
-    editor.chain().insertContent({ type: 'fieldChip', attrs: { key: payload.field_key } }).run();
+  if (type === 'insert_chip' && (payload.field_key || (payload as any).field_name)) {
+    const fn = (payload as any).field_name || payload.field_key;
+    const lbl = (payload as any).label || fn;
+    editor.chain().insertContent({ type: 'fieldChip', attrs: { fieldName: fn, key: fn, label: lbl } }).run();
     markUnsaved();
     return;
   }
@@ -167,6 +169,31 @@ export function applyChatAction({
     });
     if (deletePos !== null && deleteNodeSize > 0) {
       (editor.chain() as any).deleteRange({ from: deletePos, to: deletePos + deleteNodeSize }).run();
+      markUnsaved();
+    }
+    return;
+  }
+
+  if (type === 'update_block' && (payload as any).block_id) {
+    const targetBlockId = (payload as any).block_id;
+    let targetPos: number | null = null;
+    let targetNodeSize = 0;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.attrs?.blockId === targetBlockId && targetPos === null) {
+        targetPos = pos;
+        targetNodeSize = node.nodeSize;
+      }
+    });
+    if (targetPos !== null && targetNodeSize > 0) {
+      const newText = (payload as any).text || '';
+      (editor.chain() as any)
+        .deleteRange({ from: targetPos, to: targetPos + targetNodeSize })
+        .insertContentAt(targetPos, {
+          type: 'paragraph',
+          attrs: { blockId: targetBlockId },
+          content: newText ? [{ type: 'text', text: newText }] : [],
+        })
+        .run();
       markUnsaved();
     }
     return;

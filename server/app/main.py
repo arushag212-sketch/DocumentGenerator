@@ -53,6 +53,20 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def log_errors_middleware(request: Request, call_next):
+    try:
+        response = await call_next(request)
+        if response.status_code >= 400:
+            print(f"[HTTP {response.status_code}] {request.method} {request.url.path}")
+        return response
+    except Exception as exc:
+        import traceback
+        print(f"[HTTP EXCEPTION] {request.method} {request.url.path}: {exc}")
+        traceback.print_exc()
+        raise
+
+
 # 3. Mount Static Assets
 assets_dir = settings.ASSETS_DIR
 web_dir = Path(__file__).resolve().parent.parent.parent / "web"

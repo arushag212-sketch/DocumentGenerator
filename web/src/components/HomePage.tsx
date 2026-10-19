@@ -129,6 +129,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [participants, setParticipants] = useState<number | string>('');
   const [description, setDescription] = useState('');
   const [objectives, setObjectives] = useState('');
+  const [detailSuggestions, setDetailSuggestions] = useState<string[]>([]);
+  const [improvingText, setImprovingText] = useState(false);
 
   // Active events dropdown & People picker state
   const [activeEvents, setActiveEvents] = useState<any[]>([]);
@@ -266,6 +268,41 @@ export const HomePage: React.FC<HomePageProps> = ({
       setError(err.message || 'Could not understand requirements. Please try typing in different words.');
     } finally {
       setUnderstanding(false);
+    }
+  };
+
+  const handleImproveText = async (
+    text: string,
+    mode: 'formal' | 'proofread' | 'expand' | 'shorten',
+    setter: (val: string) => void
+  ) => {
+    if (!text || text.includes('[AI-drafted')) return;
+    setImprovingText(true);
+    try {
+      const res = await api.documents.improveText(clubId, { text, mode });
+      if (res && res.improved) {
+        setter(res.improved);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setImprovingText(false);
+    }
+  };
+
+  const handleSuggestDetails = async () => {
+    try {
+      const res = await api.documents.suggestDetails(clubId, {
+        event_type: eventName || 'college_event',
+        existing_fields: ['event_name', 'venue', 'date_start'],
+      });
+      if (res && Array.isArray(res.suggestions)) {
+        setDetailSuggestions(
+          res.suggestions.map((s: any) => (typeof s === 'string' ? s : s.label || s.ask || s.key))
+        );
+      }
+    } catch {
+      // ignore
     }
   };
 
@@ -808,6 +845,26 @@ export const HomePage: React.FC<HomePageProps> = ({
                           Accept AI Draft
                         </button>
                       )}
+                      {val && !val.includes('[AI-drafted') && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={improvingText}
+                            onClick={() => handleImproveText(val, 'formal', setVal)}
+                            className="text-[10px] font-medium text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-2 py-0.5 rounded transition cursor-pointer"
+                          >
+                            Make Formal
+                          </button>
+                          <button
+                            type="button"
+                            disabled={improvingText}
+                            onClick={() => handleImproveText(val, 'proofread', setVal)}
+                            className="text-[10px] font-medium text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-2 py-0.5 rounded transition cursor-pointer"
+                          >
+                            Proofread
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <textarea
@@ -817,6 +874,31 @@ export const HomePage: React.FC<HomePageProps> = ({
                     placeholder={`Leave blank to omit or write a custom ${label.toLowerCase()}...`}
                     className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
                   />
+                  {label === 'Description' && (
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleSuggestDetails}
+                        className="text-[10px] font-semibold text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 px-2 py-0.5 rounded border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles className="w-2.5 h-2.5 text-indigo-600" />
+                        Suggest optional details
+                      </button>
+                      {detailSuggestions.map((sug, sIdx) => (
+                        <button
+                          key={sIdx}
+                          type="button"
+                          onClick={() => {
+                            setVal(val ? `${val}\n• ${sug}` : `• ${sug}`);
+                            setDetailSuggestions((prev) => prev.filter((_, idx) => idx !== sIdx));
+                          }}
+                          className="text-[10px] text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition cursor-pointer"
+                        >
+                          + {sug}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

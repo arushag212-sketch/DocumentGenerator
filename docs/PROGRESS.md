@@ -460,3 +460,37 @@ Screenshots archived to `docs/screenshots/baseline/`.
   - `npm run build`: 0 TypeScript errors (built in 4.83s).
   - Pytest unit and integration suite `tests/test_design_studio.py`: **ALL 11 PASSED** (theme catalog loading, all 6 themes compilation, 5 curated fonts rFonts embedding, portrait vs landscape orientation dimensions, margin presets, watermark and page background XML, official system templates non-regression).
   - Browser E2E Selenium verification (`scripts/verify_part4_design_selenium.py`): **ALL 7 STEPS PASSED** (opened template, switched to Design tab, applied 'SVNIT Blue & Gold' theme, set Body Font to Open Sans, switched to Landscape orientation, added watermark 'SVNIT OFFICIAL DRAFT', displayed live preview modal, verified clean console with 0 severe errors, saved evidence screenshot to `docs/screenshots/part4_design_studio.png`).
+
+---
+
+## Studio Part 5: AI Everywhere
+- **Status**: **DONE**
+- **Changes**:
+  - **Template Creation Wizard (`template_wizard.py`, `TemplateWizardModal.tsx`)**:
+    - "What document do you want?" prompt input with presets.
+    - Proposes at most 3 clarifying question chips (Purpose, Audience, Tone) via LLM or rule-based fallback.
+    - Builds complete designed template (fields, blocks, tables, signatures, theme) ready in the editor.
+    - Embedded `design_settings` into `editor_json` for persistence and preview.
+  - **Document Importer (`document_importer.py`, `TemplateImportModal.tsx`)**:
+    - Text importer: converts pasted notice/letter text into TipTap document blocks with bracketed/quoted field detection and variable extraction.
+    - DOCX importer: parses uploaded `.docx` using python-docx into paragraphs, headings, tables, bold/italic, and field proposals with an unsupported elements report.
+  - **Text Improver & Detail Suggester (`text_improver.py`, `HomePage.tsx`)**:
+    - Four improvement modes: `formal`, `proofread`, `shorter`, `longer` with word-level before/after diffs.
+    - Added "Improve text" and "Suggest details" chips to HomePage description and objectives.
+    - Strict guardrails: stripped all PII (names, emails, phones, roll numbers) before LLM calls; never invents official details.
+  - **Document Checker & Audit (`document_checker.py`, `ChecksPanel.tsx`)**:
+    - Audits document drafts for unfilled official wording triggers, date/number inconsistencies, missing essential fields, overlong paragraphs, low contrast ratios, and consecutive spaces.
+    - One-click "Fix" actions applied cleanly with undo support.
+  - **Indic Language Translation (`Toolbar.tsx`, `text_improver.py`)**:
+    - English <-> Hindi / Gujarati translation keeping field chips and structural blocks intact.
+    - Switches font family to `Noto Sans Devanagari` (Hindi) and `Noto Sans Gujarati` (Gujarati) automatically.
+  - **Modularity Compliance**:
+    - All 27 editor files in `web/src/components/TemplateEditor/` strictly under 400 lines (TemplateEditor.tsx is 378 lines).
+  - **Subprocess & Concurrency Hardening (`renderer.py`, `documents.py`)**:
+    - LibreOffice conversions isolated using `-env:UserInstallation` and `ignore_cleanup_errors=True` with multi-threaded flush wait.
+    - Fixed NoneType class attribute check in `validate_template_identifiers`.
+- **Verification**:
+  - `npm run build`: 0 TypeScript errors (built in 4.99s).
+  - Pytest unit and integration suite `tests/test_ai_everywhere.py`: **ALL 9 PASSED in 0.40s** (wizard questions, wizard generation, text import, docx import, improve text modes & diff, suggest details guardrails, document checker, indic translation, PII stripping & prompt injection safety).
+  - Browser E2E Stopwatch Verification (`scripts/verify_part5_ai_selenium.py`): **ALL 6 STEPS PASSED in 33.84s** (< 180s limit): logged in as demo owner, opened template wizard, answered clarifying question chips, built designed template, loaded editor canvas, generated live PDF preview with LibreOffice, verified clean console with 0 severe errors, saved evidence screenshot to `docs/screenshots/part5_ai_everywhere.png`.
+

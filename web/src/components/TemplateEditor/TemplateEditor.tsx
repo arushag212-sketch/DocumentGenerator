@@ -76,7 +76,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // TipTap editor with interactions
+  const [translating, setTranslating] = useState(false);
+
   const {
     editor,
     bubblePos,
@@ -85,6 +86,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     chipPopover,
     setChipPopover,
     selectedImageBlock,
+    updateChip,
+    toggleChipRequired,
+    toggleChipSensitive,
+    deleteChip,
+    updateImageBlock,
   } = useTemplateEditor({
     onDocChange: () => markUnsaved(),
     clubId,
@@ -230,6 +236,32 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     }
   };
 
+  const handleTranslate = async (targetLang: 'hi' | 'gu') => {
+    if (!editor || !template) return;
+    setTranslating(true);
+    try {
+      const res = await api.documents.translateTemplate(clubId, templateId, {
+        target_lang: targetLang,
+        editor_json: editor.getJSON(),
+      });
+      if (res?.editor_json) {
+        editor.commands.setContent(res.editor_json);
+        if (res.design_settings?.fontFamily) {
+          setDesignSettings((prev) => ({
+            ...prev,
+            fontFamily: res.design_settings.fontFamily,
+            headingFontFamily: res.design_settings.headingFontFamily || res.design_settings.fontFamily,
+          }));
+        }
+        markUnsaved();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Translation failed');
+    } finally {
+      setTranslating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -258,6 +290,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         onPreview={handlePreview}
         onPublish={handlePublish}
         previewLoading={previewLoading}
+        onTranslate={handleTranslate}
+        translating={translating}
       />
 
       <div className="flex flex-1 overflow-hidden relative">
@@ -280,48 +314,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             bubblePos={bubblePos}
             chipPopover={chipPopover}
             onCloseChipPopover={() => setChipPopover(null)}
-            onUpdateChip={(updates) => {
-              if (!chipPopover || !editor) return;
-              editor.commands.command(({ tr }: any) => {
-                tr.setNodeMarkup(chipPopover.position, undefined, updates);
-                return true;
-              });
-              markUnsaved();
-            }}
-            onToggleChipRequired={(req) => {
-              if (!chipPopover || !editor) return;
-              const imp = req ? 'essential' : 'optional';
-              editor.commands.command(({ tr }: any) => {
-                tr.setNodeMarkup(chipPopover.position, undefined, {
-                  importance: imp,
-                  required: req,
-                });
-                return true;
-              });
-              setChipPopover((prev: any) => ({ ...prev, required: req, importance: imp }));
-              markUnsaved();
-            }}
-            onToggleChipSensitive={(sens) => {
-              if (!chipPopover || !editor) return;
-              editor.commands.command(({ tr }: any) => {
-                tr.setNodeMarkup(chipPopover.position, undefined, { sensitive: sens });
-                return true;
-              });
-              setChipPopover((prev: any) => ({ ...prev, sensitive: sens }));
-              markUnsaved();
-            }}
-            onDeleteChip={() => {
-              if (!chipPopover || !editor) return;
-              editor.chain().focus().setNodeSelection(chipPopover.position).deleteSelection().run();
-              setChipPopover(null);
-              markUnsaved();
-            }}
+            onUpdateChip={updateChip}
+            onToggleChipRequired={toggleChipRequired}
+            onToggleChipSensitive={toggleChipSensitive}
+            onDeleteChip={deleteChip}
             selectedImageBlock={selectedImageBlock}
-            onUpdateImageBlock={(updates) => {
-              if (!selectedImageBlock || !editor) return;
-              editor.chain().focus().setNodeSelection(selectedImageBlock.position).updateAttributes('imageBlock', updates).run();
-              markUnsaved();
-            }}
+            onUpdateImageBlock={updateImageBlock}
             clubLogoOptions={clubLogoOptions}
             showSlashMenu={showSlashMenu}
             onCloseSlashMenu={() => setShowSlashMenu(false)}

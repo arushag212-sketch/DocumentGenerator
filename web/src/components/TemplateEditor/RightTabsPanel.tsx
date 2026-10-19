@@ -176,7 +176,14 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
 
         {activeTab === 'checks' && (
           <EditorErrorBoundary title="Checks Panel Error">
-            <ChecksPanel editor={editor} fields={fields} />
+            <ChecksPanel
+              editor={editor}
+              fields={fields}
+              clubId={clubId}
+              templateId={templateId}
+              theme={designSettings.theme}
+              onApplyChatAction={onApplyChatAction}
+            />
           </EditorErrorBoundary>
         )}
       </div>

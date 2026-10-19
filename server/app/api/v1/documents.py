@@ -16,7 +16,7 @@ from typing import Any, Optional
 import pymupdf
 import yaml
 from docxtpl import DocxTemplate
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
@@ -27,6 +27,22 @@ from server.app.core.template_generator import (
     generate_draft_template,
     resolve_club_logo_by_text,
 )
+from server.app.core.template_wizard import (
+    WizardGenerateRequest,
+    WizardQuestionsResponse,
+    create_wizard_template,
+    get_wizard_questions,
+)
+from server.app.core.document_importer import (
+    convert_docx_to_tiptap_with_fields,
+    convert_text_to_tiptap_with_fields,
+)
+from server.app.core.text_improver import (
+    improve_text as core_improve_text,
+    suggest_optional_details as core_suggest_details,
+    translate_template_content as core_translate_content,
+)
+from server.app.core.document_checker import audit_document as core_audit_document
 
 
 from docgen.config import ClubConfig
@@ -254,6 +270,37 @@ class LetterheadOut(BaseModel):
     svnit_logo_locked: bool = True
     club_logo_url: Optional[str] = None
     svnit_logo_url: Optional[str] = None
+
+
+class WizardQuestionsRequest(BaseModel):
+    prompt: str
+
+
+class ImportTextRequest(BaseModel):
+    text: str
+    name: Optional[str] = None
+
+
+class ImproveTextRequest(BaseModel):
+    text: str
+    mode: Optional[str] = "formal"
+
+
+class SuggestDetailsRequest(BaseModel):
+    event_type: str = "Workshop"
+    existing_fields: Optional[list[str]] = None
+
+
+class CheckDocumentRequest(BaseModel):
+    editor_json: Optional[dict[str, Any]] = None
+    fields: Optional[list[dict[str, Any]]] = None
+    design_settings: Optional[dict[str, Any]] = None
+
+
+class TranslateTemplateRequest(BaseModel):
+    target_lang: str = "hi"
+    editor_json: Optional[dict[str, Any]] = None
+
 
 
 
@@ -1512,40 +1559,52 @@ def preview_template(
 
     pages_base64: list[str] = []
 
-    with tempfile.TemporaryDirectory() as td:
-        tmp_dir = Path(td)
-        tmpl_docx = tmp_dir / "template.docx"
-        tmpl_docx.write_bytes(docx_bytes)
+    try:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            tmp_dir = Path(td)
+            tmpl_docx = tmp_dir / "template.docx"
+            tmpl_docx.write_bytes(docx_bytes)
 
-        schema_dict = yaml.safe_load(schema_yaml)
-        schema_obj = TemplateSchema(**schema_dict)
-        from server.app.core.template_compiler import _build_editor_dummy_context, safe_render_docx
-        dummy_ctx = _build_editor_dummy_context(schema_obj, fields, editor_json)
+            schema_dict = yaml.safe_load(schema_yaml)
+            schema_obj = TemplateSchema(**schema_dict)
+            from server.app.core.template_compiler import _build_editor_dummy_context, safe_render_docx
+            dummy_ctx = _build_editor_dummy_context(schema_obj, fields, editor_json)
 
-        doc = DocxTemplate(str(tmpl_docx))
-        safe_render_docx(doc, dummy_ctx, timeout=30.0, strict=False)
-        rendered_docx = tmp_dir / "rendered.docx"
-        doc.save(str(rendered_docx))
+            doc = DocxTemplate(str(tmpl_docx))
+            safe_render_docx(doc, dummy_ctx, timeout=30.0, strict=False)
+            rendered_docx = tmp_dir / "rendered.docx"
+            doc.save(str(rendered_docx))
 
-        from docgen.renderer import Renderer
-        renderer = Renderer()
-        try:
-            pdf_path, _ = renderer._convert_to_pdf(rendered_docx)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"PDF conversion failed: {e}")
+            from docgen.renderer import Renderer
+            renderer = Renderer()
+            try:
+                pdf_path, _ = renderer._convert_to_pdf(rendered_docx)
+            except Exception:
+                import time
+                time.sleep(1)
+                try:
+                    pdf_path, _ = renderer._convert_to_pdf(rendered_docx)
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"PDF conversion failed: {e}")
 
-        pdf_doc = pymupdf.open(str(pdf_path))
-        for page in pdf_doc:
-            pix = page.get_pixmap(dpi=150)
-            png_bytes = pix.tobytes("png")
-            b64 = base64.b64encode(png_bytes).decode("ascii")
-            pages_base64.append(f"data:image/png;base64,{b64}")
-        pdf_doc.close()
+            pdf_doc = pymupdf.open(str(pdf_path))
+            for page in pdf_doc:
+                pix = page.get_pixmap(dpi=150)
+                png_bytes = pix.tobytes("png")
+                b64 = base64.b64encode(png_bytes).decode("ascii")
+                pages_base64.append(f"data:image/png;base64,{b64}")
+            pdf_doc.close()
 
-    return TemplatePreviewResponse(
-        pages=pages_base64,
-        page_count=len(pages_base64),
-    )
+        return TemplatePreviewResponse(
+            pages=pages_base64,
+            page_count=len(pages_base64),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Preview error: {e}")
 
 
 @router.post("/templates/{template_id}/publish", response_model=TemplateGalleryItemOut)
@@ -3054,3 +3113,166 @@ def get_document_preview_page1(
 ):
     """Serve high-resolution rasterized PNG page preview of rendered document."""
     return get_document_page_preview(doc_id=doc_id, page_no=1, v=v, ctx=ctx, db=db)
+
+
+# ---------------------------------------------------------------------------
+# Part 5: AI Everywhere Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/templates/wizard/questions", response_model=WizardQuestionsResponse)
+def wizard_questions(
+    payload: WizardQuestionsRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+):
+    """Propose at most 3 clarifying question chips for template creation."""
+    return get_wizard_questions(payload.prompt, club_name=ctx.club.name)
+
+
+@router.post("/templates/wizard/generate", status_code=status.HTTP_201_CREATED)
+def wizard_generate(
+    payload: WizardGenerateRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Generate a designed template from wizard prompt and selected answer chips."""
+    tmpl, ver = create_wizard_template(
+        prompt=payload.prompt,
+        answers=payload.answers,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        db=db,
+        numbering_series=payload.numbering_series or "DOC",
+    )
+    return {
+        "template": {
+            "id": tmpl.id,
+            "slug": tmpl.slug,
+            "name": tmpl.name,
+            "category": tmpl.category,
+            "status": tmpl.status,
+            "is_system": False,
+        },
+        "draft": {
+            "template_id": tmpl.id,
+            "version_no": ver.version_no,
+            "editor_json": ver.editor_json,
+            "design_settings": (ver.editor_json or {}).get("design_settings") if isinstance(ver.editor_json, dict) else {},
+        },
+        "message": f"Designed template '{tmpl.name}' generated successfully via wizard.",
+    }
+
+
+@router.post("/templates/import/text")
+def import_text(
+    payload: ImportTextRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+):
+    """Convert pasted notice/letter text into TipTap document blocks with proposed fields."""
+    editor_json, fields, unsupported = convert_text_to_tiptap_with_fields(payload.text)
+    name = payload.name or "Imported Document Template"
+    return {
+        "editor_json": editor_json,
+        "fields": fields,
+        "name": name,
+        "unsupported_elements": unsupported,
+    }
+
+
+@router.post("/templates/import/docx")
+async def import_docx(
+    file: UploadFile = File(...),
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+):
+    """Convert uploaded DOCX into TipTap document blocks with proposed fields and unsupported elements report."""
+    content = await file.read()
+    editor_json, fields, unsupported = convert_docx_to_tiptap_with_fields(content)
+    base_name = Path(file.filename or "imported.docx").stem.replace("_", " ").title()
+    return {
+        "editor_json": editor_json,
+        "fields": fields,
+        "unsupported_elements": unsupported,
+        "name": base_name,
+    }
+
+
+@router.post("/improve-text")
+def improve_text_endpoint(
+    payload: ImproveTextRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+):
+    """Improve text description or objectives (formal, proofread, shorten, expand) with before/after diff."""
+    mode = payload.mode if payload.mode in ("formal", "proofread", "shorter", "longer") else "formal"
+    return core_improve_text(payload.text, mode=mode)
+
+
+@router.post("/suggest-details")
+def suggest_details_endpoint(
+    payload: SuggestDetailsRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+):
+    """Propose non-official optional fields for event documentation."""
+    suggestions = core_suggest_details(
+        event_type=payload.event_type,
+        club_name=ctx.club.name,
+        existing_fields=payload.existing_fields,
+    )
+    return {"suggestions": suggestions}
+
+
+@router.post("/templates/{template_id}/check")
+def check_template_quality(
+    template_id: str,
+    payload: CheckDocumentRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Audit template quality, protocol consistency, contrast, and official wording with actionable fixes."""
+    template = db.query(Template).filter((Template.id == template_id) | (Template.slug == template_id)).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    editor_json = payload.editor_json
+    fields = payload.fields
+    design_settings = payload.design_settings
+
+    if not editor_json:
+        ver = db.query(TemplateVersion).filter(TemplateVersion.template_id == template.id).order_by(TemplateVersion.version_no.desc()).first()
+        if ver:
+            editor_json = ver.editor_json
+            design_settings = ver.design_settings
+            if ver.schema_yaml:
+                try:
+                    s_dict = yaml.safe_load(ver.schema_yaml)
+                    fields = s_dict.get("fields", []) if isinstance(s_dict, dict) else []
+                except Exception:
+                    fields = []
+
+    return core_audit_document(editor_json or {}, fields or [], design_settings or {})
+
+
+@router.post("/templates/{template_id}/translate")
+def translate_template(
+    template_id: str,
+    payload: TranslateTemplateRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Translate template text to Hindi or Gujarati while keeping all field chips 100% intact."""
+    template = db.query(Template).filter((Template.id == template_id) | (Template.slug == template_id)).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    editor_json = payload.editor_json
+    if not editor_json:
+        ver = db.query(TemplateVersion).filter(TemplateVersion.template_id == template.id).order_by(TemplateVersion.version_no.desc()).first()
+        if ver:
+            editor_json = ver.editor_json
+
+    target_lang = payload.target_lang if payload.target_lang in ("hi", "gu", "en") else "hi"
+    translated_json, design_update = core_translate_content(editor_json or {}, target_lang=target_lang)
+    return {
+        "editor_json": translated_json,
+        "design_settings": design_update,
+        "target_lang": target_lang,
+    }
+

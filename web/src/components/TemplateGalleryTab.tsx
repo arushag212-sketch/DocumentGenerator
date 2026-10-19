@@ -15,9 +15,13 @@ import {
   Archive,
   FileText,
   X,
+  Wand2,
+  Upload,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { TemplateGalleryItem, ClubPermissions } from '../types';
+import { TemplateWizardModal } from './TemplateWizardModal';
+import { TemplateImportModal } from './TemplateImportModal';
 
 interface TemplateGalleryTabProps {
   clubId: string | number;
@@ -57,6 +61,10 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
     candidates: any[];
     templateId: string;
   } | null>(null);
+
+  // Wizard & Import state
+  const [showWizardModal, setShowWizardModal] = useState<boolean>(false);
+  const [showImportModal, setShowImportModal] = useState<boolean>(false);
 
   const handleAiDraftSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,15 +203,37 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
 
         <div className="flex items-center gap-2 self-start md:self-auto">
           {canManage && onOpenEditor && (
-            <button
-              type="button"
-              data-testid="new-blank-template-btn"
-              onClick={() => setActionModal({ type: 'blank', value: '' })}
-              className="inline-flex items-center gap-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg font-semibold shadow-xs transition-colors"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              New Blank Template
-            </button>
+            <>
+              <button
+                type="button"
+                data-testid="wizard-template-btn"
+                onClick={() => setShowWizardModal(true)}
+                className="inline-flex items-center gap-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg font-semibold shadow-xs transition-colors"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                Template Wizard
+              </button>
+
+              <button
+                type="button"
+                data-testid="import-template-btn"
+                onClick={() => setShowImportModal(true)}
+                className="inline-flex items-center gap-1.5 text-xs text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-semibold shadow-xs transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5 text-blue-600" />
+                Import Document
+              </button>
+
+              <button
+                type="button"
+                data-testid="new-blank-template-btn"
+                onClick={() => setActionModal({ type: 'blank', value: '' })}
+                className="inline-flex items-center gap-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg font-semibold shadow-xs transition-colors"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                New Blank Template
+              </button>
+            </>
           )}
 
           <button
@@ -661,6 +691,28 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Template Wizard Modal */}
+      <TemplateWizardModal
+        clubId={clubId}
+        isOpen={showWizardModal}
+        onClose={() => setShowWizardModal(false)}
+        onSuccess={(id) => {
+          fetchTemplates();
+          if (onOpenEditor) onOpenEditor(id);
+        }}
+      />
+
+      {/* Template Import Modal */}
+      <TemplateImportModal
+        clubId={clubId}
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={(id) => {
+          fetchTemplates();
+          if (onOpenEditor) onOpenEditor(id);
+        }}
+      />
     </div>
   );
 };

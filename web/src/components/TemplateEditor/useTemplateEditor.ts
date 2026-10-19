@@ -170,6 +170,52 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
     },
   });
 
+  const updateChip = (updates: any) => {
+    if (!chipPopover || !editor) return;
+    editor.commands.command(({ tr }: any) => {
+      tr.setNodeMarkup(chipPopover.position, undefined, updates);
+      return true;
+    });
+    if (onDocChange) onDocChange();
+  };
+
+  const toggleChipRequired = (req: boolean) => {
+    if (!chipPopover || !editor) return;
+    const imp = req ? 'essential' : 'optional';
+    editor.commands.command(({ tr }: any) => {
+      tr.setNodeMarkup(chipPopover.position, undefined, {
+        importance: imp,
+        required: req,
+      });
+      return true;
+    });
+    setChipPopover((prev: any) => ({ ...prev, required: req, importance: imp }));
+    if (onDocChange) onDocChange();
+  };
+
+  const toggleChipSensitive = (sens: boolean) => {
+    if (!chipPopover || !editor) return;
+    editor.commands.command(({ tr }: any) => {
+      tr.setNodeMarkup(chipPopover.position, undefined, { sensitive: sens });
+      return true;
+    });
+    setChipPopover((prev: any) => ({ ...prev, sensitive: sens }));
+    if (onDocChange) onDocChange();
+  };
+
+  const deleteChip = () => {
+    if (!chipPopover || !editor) return;
+    editor.chain().focus().setNodeSelection(chipPopover.position).deleteSelection().run();
+    setChipPopover(null);
+    if (onDocChange) onDocChange();
+  };
+
+  const updateImageBlock = (updates: any) => {
+    if (!selectedImageBlock || !editor) return;
+    editor.chain().focus().setNodeSelection(selectedImageBlock.position).updateAttributes('imageBlock', updates).run();
+    if (onDocChange) onDocChange();
+  };
+
   return {
     editor,
     bubblePos,
@@ -180,5 +226,10 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
     setChipPopover,
     selectedImageBlock,
     setSelectedImageBlock,
+    updateChip,
+    toggleChipRequired,
+    toggleChipSensitive,
+    deleteChip,
+    updateImageBlock,
   };
 }

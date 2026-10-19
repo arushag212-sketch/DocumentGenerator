@@ -311,10 +311,11 @@ def validate_template_identifiers(editor_json: dict[str, Any] | None, fields: li
         blocks = migrated_json.get("content", [])
         for b in blocks:
             b_type = b.get("type")
-            attrs = b.get("attrs", {})
+            attrs = b.get("attrs") or {}
+            cls_name = attrs.get("class") or ""
             if b_type == "table":
                 block_type = attrs.get("blockType") or ""
-                if block_type == "repeatingTable" or "cd-repeating-table" in attrs.get("class", ""):
+                if block_type == "repeatingTable" or "cd-repeating-table" in cls_name:
                     list_var = attrs.get("listVariable")
                     if list_var:
                         validate_identifier(list_var, "List variable")
@@ -1847,7 +1848,7 @@ def _is_field_referenced_in_editor(editor_json: dict[str, Any], field_key: str) 
         if b_type == "repeatingTable":
             if attrs.get("listVariable") == field_key:
                 return True
-            for c in attrs.get("columns", []):
+            for c in (attrs.get("columns") or []):
                 if c.get("key") == field_key:
                     return True
         elif b_type == "infoTable":
@@ -1892,7 +1893,7 @@ def rename_field_in_editor_json(editor_json: dict[str, Any], old_key: str, new_k
             elif n_type == "repeatingTable":
                 if attrs.get("listVariable") == old_key:
                     attrs["listVariable"] = new_key
-                for col in attrs.get("columns", []):
+                for col in (attrs.get("columns") or []):
                     if col.get("key") == old_key:
                         col["key"] = new_key
             for v in node.values():
