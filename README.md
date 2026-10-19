@@ -121,6 +121,16 @@ SVNIT ClubDocs is designed strictly around official institutional document gover
 
 ## 🧪 Testing & Verification
 
+The reproducible offline check is:
+
+```bash
+make test
+```
+
+It compiles the backend and runs the locked frontend build. It does not require
+network access or external AI credentials. For the full Python test suite (when
+the development dependencies are installed), run:
+
 Run the comprehensive test suite in PowerShell (foreground, isolated SQLite test DB):
 
 ```powershell
