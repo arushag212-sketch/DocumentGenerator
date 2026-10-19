@@ -25,7 +25,7 @@ from typing import Any, Optional
 
 import yaml
 from docx import Document
-from docx.enum.section import WD_SECTION
+from docx.enum.section import WD_ORIENT, WD_SECTION
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.oxml import parse_xml
@@ -547,35 +547,152 @@ def set_paragraph_keep_with_next(p):
 # TipTap JSON -> python-docx Document Builder
 # ---------------------------------------------------------------------------
 
+def load_themes_catalog() -> dict[str, dict[str, Any]]:
+    themes_file = Path(__file__).resolve().parent / "themes.json"
+    if themes_file.exists():
+        try:
+            import json
+            data = json.loads(themes_file.read_text(encoding="utf-8"))
+            return {t["id"]: t for t in data if isinstance(t, dict) and "id" in t}
+        except Exception:
+            pass
+    return {}
+
+THEMES_CATALOG = load_themes_catalog()
+
+def hex_to_rgb(hex_str: str | None) -> RGBColor | None:
+    if not hex_str or not isinstance(hex_str, str):
+        return None
+    clean = hex_str.strip().lstrip("#")
+    if len(clean) == 6:
+        try:
+            return RGBColor(int(clean[0:2], 16), int(clean[2:4], 16), int(clean[4:6], 16))
+        except Exception:
+            return None
+    return None
+
+def set_run_font(run, font_name: str | None):
+    if not font_name:
+        font_name = "Times New Roman"
+    run.font.name = font_name
+    try:
+        rPr = run._r.get_or_add_rPr()
+        rFonts = rPr.find(qn('w:rFonts'))
+        if rFonts is None:
+            rFonts = parse_xml(
+                f'<w:rFonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+                f'w:ascii="{font_name}" w:hAnsi="{font_name}" w:cs="{font_name}"/>'
+            )
+            rPr.append(rFonts)
+        else:
+            rFonts.set(qn('w:ascii'), font_name)
+            rFonts.set(qn('w:hAnsi'), font_name)
+            rFonts.set(qn('w:cs'), font_name)
+    except Exception:
+        pass
+
+
 class TipTapDocxCompiler:
     """Converts TipTap document JSON into a styled python-docx Document."""
 
     def __init__(self, editor_json: dict[str, Any], fields: list[dict[str, Any]],
-                 club_slug: str = "acm", letterhead_cfg: dict[str, Any] | None = None):
+                 club_slug: str = "acm", letterhead_cfg: dict[str, Any] | None = None,
+                 design_settings: dict[str, Any] | None = None):
         self.editor_json = migrate_template_content(editor_json or {"type": "doc", "content": []})
         self.fields = fields or []
         self.fields_by_key = {f.get("key"): f for f in self.fields if f.get("key")}
         self.club_slug = club_slug
         self.letterhead_cfg = letterhead_cfg or {}
+
+        # Merge with theme presets if theme specified
+        self.design_settings = dict(design_settings or {})
+        if not self.design_settings and isinstance(editor_json, dict):
+            self.design_settings = editor_json.get("design_settings") or editor_json.get("attrs", {}).get("design_settings") or {}
+
+        theme_id = self.design_settings.get("theme")
+        if theme_id and theme_id in THEMES_CATALOG:
+            theme_def = THEMES_CATALOG[theme_id]
+            for k, v in theme_def.items():
+                if k not in self.design_settings or not self.design_settings[k]:
+                    self.design_settings[k] = v
+
+        self.body_font = self.design_settings.get("fontFamily") or self.design_settings.get("body_font") or "Times New Roman"
+        self.heading_font = self.design_settings.get("headingFontFamily") or self.design_settings.get("heading_font") or self.body_font
+        self.heading_color_rgb = hex_to_rgb(self.design_settings.get("headingColor") or self.design_settings.get("heading_color"))
+        self.text_color_rgb = hex_to_rgb(self.design_settings.get("textColor") or self.design_settings.get("text_color"))
+
+        th_bg = self.design_settings.get("tableHeaderBg") or self.design_settings.get("table_header_bg") or ""
+        self.table_header_bg_hex = th_bg.strip().lstrip("#").upper()
+        self.table_header_text_rgb = hex_to_rgb(self.design_settings.get("tableHeaderTextColor") or self.design_settings.get("table_header_text"))
+
         self.doc = Document()
         self._configure_page()
 
     def _configure_page(self):
-        """Set standard SVNIT document margins (0.75-0.8 inch)."""
-        for section in self.doc.sections:
-            section.top_margin = Inches(0.8)
-            section.bottom_margin = Inches(0.8)
-            section.left_margin = Inches(0.8)
-            section.right_margin = Inches(0.8)
-            section.page_width = Inches(8.27)   # A4
-            section.page_height = Inches(11.69) # A4
+        """Set page dimensions, orientation, margins, borders, watermark, and styling."""
+        orientation = self.design_settings.get("orientation", "portrait")
+        margins_preset = self.design_settings.get("margins", "normal")
+        margin_in = 0.5 if margins_preset == "compact" else 1.25 if margins_preset == "wide" else 0.8
 
-            # Set normal style font
-            style = self.doc.styles['Normal']
-            font = style.font
-            font.name = 'Times New Roman'
-            font.size = Pt(11)
-            font.color.rgb = RGBColor(0x1F, 0x29, 0x37)
+        for section in self.doc.sections:
+            if orientation == "landscape":
+                section.orientation = WD_ORIENT.LANDSCAPE
+                section.page_width = Inches(11.69)
+                section.page_height = Inches(8.27)
+            else:
+                section.orientation = WD_ORIENT.PORTRAIT
+                section.page_width = Inches(8.27)
+                section.page_height = Inches(11.69)
+
+            section.top_margin = Inches(margin_in)
+            section.bottom_margin = Inches(margin_in)
+            section.left_margin = Inches(margin_in)
+            section.right_margin = Inches(margin_in)
+
+            # Page border
+            page_border = self.design_settings.get("pageBorder") or self.design_settings.get("border_style") or "none"
+            if page_border in ("single", "double"):
+                val = "double" if page_border == "double" else "single"
+                sz = "12" if page_border == "double" else "8"
+                b_color = (self.design_settings.get("borderColor") or self.design_settings.get("border_color") or "94A3B8").strip().lstrip("#").upper()
+                borders_xml = parse_xml(
+                    f'<w:pgBorders xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:offsetFrom="page">'
+                    f'<w:top w:val="{val}" w:sz="{sz}" w:space="24" w:color="{b_color}"/>'
+                    f'<w:left w:val="{val}" w:sz="{sz}" w:space="24" w:color="{b_color}"/>'
+                    f'<w:bottom w:val="{val}" w:sz="{sz}" w:space="24" w:color="{b_color}"/>'
+                    f'<w:right w:val="{val}" w:sz="{sz}" w:space="24" w:color="{b_color}"/>'
+                    f'</w:pgBorders>'
+                )
+                section._sectPr.append(borders_xml)
+
+            # Watermark text in header
+            watermark_text = self.design_settings.get("watermark") or ""
+            if watermark_text.strip():
+                p_wm = section.header.add_paragraph()
+                p_wm.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_wm.paragraph_format.space_before = Pt(4)
+                p_wm.paragraph_format.space_after = Pt(4)
+                run_wm = p_wm.add_run(f"[{watermark_text.strip().upper()}]")
+                run_wm.font.size = Pt(26)
+                run_wm.font.bold = True
+                run_wm.font.color.rgb = RGBColor(0xCB, 0xD5, 0xE1)
+
+        # Page background color
+        page_bg = self.design_settings.get("pageBg") or self.design_settings.get("page_bg")
+        if page_bg and page_bg.lower() not in ("#ffffff", "#fff", "white"):
+            clean_hex = page_bg.strip().lstrip("#").upper()
+            if len(clean_hex) == 6:
+                bg_xml = parse_xml(
+                    f'<w:background xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:color="{clean_hex}"/>'
+                )
+                self.doc.element.insert(0, bg_xml)
+
+        # Set normal style font
+        style = self.doc.styles['Normal']
+        font = style.font
+        font.name = self.body_font
+        font.size = Pt(11)
+        font.color.rgb = self.text_color_rgb or RGBColor(0x1F, 0x29, 0x37)
 
     def build(self) -> Document:
         """Construct the complete DOCX document."""
@@ -703,20 +820,20 @@ class TipTapDocxCompiler:
             p.paragraph_format.space_before = Pt(12)
             p.paragraph_format.space_after = Pt(4)
             font_size = 14
-            color = RGBColor(0x1E, 0x5B, 0x94)  # SVNIT Blue
+            color = self.heading_color_rgb or RGBColor(0x1E, 0x5B, 0x94)  # SVNIT Blue
         elif level == 2:
             p.paragraph_format.space_before = Pt(8)
             p.paragraph_format.space_after = Pt(3)
             font_size = 12
-            color = RGBColor(0x11, 0x18, 0x27)
+            color = self.heading_color_rgb or RGBColor(0x11, 0x18, 0x27)
         else:
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(2)
             font_size = 11
-            color = RGBColor(0x37, 0x41, 0x51)
+            color = self.heading_color_rgb or RGBColor(0x37, 0x41, 0x51)
 
         self._render_inline_content(p, block.get("content", []), default_size=font_size,
-                                   default_bold=True, default_color=color)
+                                   default_bold=True, default_color=color, font_name=self.heading_font)
 
     def _add_paragraph(self, block: dict[str, Any]):
         """Render paragraph block with inline text, marks, and field chips."""
@@ -1365,7 +1482,7 @@ class TipTapDocxCompiler:
                     run = p.add_run(clean_text)
                     run.bold = is_bold or any(m.get("type") == "bold" for m in child.get("marks", []))
                     run.italic = any(m.get("type") == "italic" for m in child.get("marks", []))
-                    run.font.name = "Times New Roman"
+                    set_run_font(run, self.body_font)
                     run.font.size = Pt(10)
                     if font_color:
                         run.font.color.rgb = font_color
@@ -1383,7 +1500,7 @@ class TipTapDocxCompiler:
                         else:
                             tag_text = f"{{{{ {fn} }}}}"
                         run = p.add_run(tag_text)
-                        run.font.name = "Times New Roman"
+                        set_run_font(run, self.body_font)
                         run.font.size = Pt(10)
 
     def _add_page_break(self):
@@ -1394,8 +1511,10 @@ class TipTapDocxCompiler:
 
     def _render_inline_content(self, paragraph, content_list: list[dict[str, Any]],
                                default_size: int = 11, default_bold: bool = False,
-                               default_color: RGBColor | None = None):
+                               default_color: RGBColor | None = None,
+                               font_name: str | None = None):
         """Render inline elements: text runs with marks and field chips in single runs."""
+        effective_font = font_name or self.body_font
         for item in content_list:
             i_type = item.get("type", "")
             if i_type == "text":
@@ -1405,10 +1524,12 @@ class TipTapDocxCompiler:
                 run.bold = default_bold or ("bold" in marks)
                 run.italic = "italic" in marks
                 run.underline = "underline" in marks
-                run.font.name = "Times New Roman"
+                set_run_font(run, effective_font)
                 run.font.size = Pt(default_size)
                 if default_color:
                     run.font.color.rgb = default_color
+                elif self.text_color_rgb:
+                    run.font.color.rgb = self.text_color_rgb
             elif i_type == "fieldChip":
                 # Crucial: render Jinja variable tag in a single run
                 attrs = item.get("attrs", {})
@@ -1419,10 +1540,12 @@ class TipTapDocxCompiler:
                             validate_identifier(part, "Field chip name part")
                     run = paragraph.add_run(f"{{{{ {f_name} }}}}")
                     run.bold = default_bold
-                    run.font.name = "Times New Roman"
+                    set_run_font(run, effective_font)
                     run.font.size = Pt(default_size)
                     if default_color:
                         run.font.color.rgb = default_color
+                    elif self.text_color_rgb:
+                        run.font.color.rgb = self.text_color_rgb
             elif i_type == "hardBreak":
                 paragraph.add_run().add_break()
 
@@ -1451,13 +1574,13 @@ class TemplateCompiler:
         template_meta: dict[str, Any],
         club_slug: str = "acm",
         letterhead_cfg: dict[str, Any] | None = None,
+        design_settings: dict[str, Any] | None = None,
     ) -> tuple[bytes, str, dict[str, Any]]:
         """Compile TipTap JSON + fields into DOCX bytes, schema.yaml string, and validation report.
         
         Returns:
             (docx_bytes, schema_yaml_str, validation_report_dict)
         """
-        # 1. Check for repeating tables with computed totals and register computed fields in schema
         # 0. Validate identifiers in fields and editor_json
         validate_template_identifiers(editor_json, fields)
 
@@ -1488,11 +1611,16 @@ class TemplateCompiler:
                         })
 
         # 2. Build python-docx Document
+        eff_design_settings = dict(design_settings or {})
+        if not eff_design_settings and isinstance(editor_json, dict):
+            eff_design_settings = editor_json.get("design_settings") or editor_json.get("attrs", {}).get("design_settings") or {}
+
         compiler = TipTapDocxCompiler(
             editor_json=editor_json,
             fields=enriched_fields,
             club_slug=club_slug,
             letterhead_cfg=letterhead_cfg,
+            design_settings=eff_design_settings,
         )
         doc = compiler.build()
 

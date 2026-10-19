@@ -428,6 +428,35 @@ Screenshots archived to `docs/screenshots/baseline/`.
 
 ---
 
-
-
-
+## Studio Part 4: Design Studio
+- **Status**: **DONE**
+- **Changes**:
+  - **Self-Hosted Open-License Fonts**:
+    - Downloaded and bundled 10 curated fonts into `assets/fonts/` (with `FONTS_LICENSES.md`) and `web/public/fonts/`:
+      - Formal serif: `Tinos` (Regular, Bold), `Merriweather`, `Playfair Display`.
+      - Modern sans: `Roboto`, `Open Sans`, `Montserrat`.
+      - Monospace: `Roboto Mono`.
+      - Indic scripts: `Noto Sans Devanagari`, `Noto Sans Gujarati`.
+    - Automatically registered into Windows user font registry for LibreOffice/Word PDF font embedding.
+    - Added `@font-face` declarations in `web/src/index.css`.
+  - **Themes & Contrast Guard**:
+    - Defined 6 document themes in `server/app/core/themes.json` and `web/src/components/TemplateEditor/themes.ts`: `official_navy`, `svnit_gold`, `classic_bw`, `modern_green`, `warm_sunset`, `minimal_grey`.
+    - Implemented WCAG 2.1 contrast ratio calculation (`calculateContrastRatio`) and ink-heavy print background detector (`isInkHeavy`).
+    - Added visual contrast badge (`AA Pass` vs `Low Contrast` warning) and ink consumption advisory in `DesignPanel.tsx`.
+  - **Design Studio UI (`DesignPanel.tsx`, `A4Page.tsx`, `Canvas.tsx`, `TemplateEditor.tsx`)**:
+    - Rewrote `DesignPanel.tsx` (333 lines, `< 400`): Theme grid, typography selectors with grouped font options, color pickers (headings, body text, table headers, page background), layout controls (orientation, margins, page border), watermark input with opacity slider, and "Make it Look Professional" copilot action.
+    - Updated `A4Page.tsx` and `Canvas.tsx` to react to theme fonts, heading colors, page background, page borders (`none`, `single`, `double`), and watermark opacity.
+    - Updated `useEditorAutosave.ts` and `TemplateEditor.tsx` to load, autosave, and forward `design_settings` across compiler and preview requests.
+  - **Backend Compiler & API (`template_compiler.py`, `documents.py`)**:
+    - Updated `TipTapDocxCompiler`:
+      - Added `_configure_page()` for page orientation (`portrait`/`landscape`), margins (`normal`/`compact`/`wide`), page borders (`w:pgBorders`), watermark in header, and page background color (`w:background`).
+      - Added `set_run_font(run, font_name)` embedding explicit `<w:rFonts w:ascii="..." w:hAnsi="..." w:cs="..." />` into run properties.
+      - Applied theme fonts and colors to headings, body text, and table headers.
+    - Updated `TemplateCompiler.compile` and document endpoints (`/draft`, `/compile`, `/preview`) to parse, persist, and apply `design_settings`.
+    - Preserved zero regression on official system templates: default Times New Roman and portrait orientation when `design_settings` is omitted.
+  - **Modularity Compliance**:
+    - All 27 editor modules strictly under 400 lines.
+- **Verification**:
+  - `npm run build`: 0 TypeScript errors (built in 4.83s).
+  - Pytest unit and integration suite `tests/test_design_studio.py`: **ALL 11 PASSED** (theme catalog loading, all 6 themes compilation, 5 curated fonts rFonts embedding, portrait vs landscape orientation dimensions, margin presets, watermark and page background XML, official system templates non-regression).
+  - Browser E2E Selenium verification (`scripts/verify_part4_design_selenium.py`): **ALL 7 STEPS PASSED** (opened template, switched to Design tab, applied 'SVNIT Blue & Gold' theme, set Body Font to Open Sans, switched to Landscape orientation, added watermark 'SVNIT OFFICIAL DRAFT', displayed live preview modal, verified clean console with 0 severe errors, saved evidence screenshot to `docs/screenshots/part4_design_studio.png`).

@@ -4,20 +4,35 @@ interface A4PageProps {
   children: React.ReactNode;
   zoom?: number;
   watermarkText?: string;
+  watermarkOpacity?: number;
   orientation?: 'portrait' | 'landscape';
   margins?: 'normal' | 'compact' | 'wide';
+  pageBg?: string;
+  pageBorder?: 'none' | 'single' | 'double';
+  headingColor?: string;
+  textColor?: string;
+  fontFamily?: string;
+  headingFontFamily?: string;
+  tableHeaderBg?: string;
+  tableHeaderTextColor?: string;
 }
 
 export const A4Page: React.FC<A4PageProps> = ({
   children,
   zoom = 1,
   watermarkText,
+  watermarkOpacity = 0.15,
   orientation = 'portrait',
   margins = 'normal',
+  pageBg = '#ffffff',
+  pageBorder = 'none',
+  headingColor = '#1e3a8a',
+  textColor = '#0f172a',
+  fontFamily = 'Tinos',
+  headingFontFamily = 'Tinos',
+  tableHeaderBg = '#1e3a8a',
+  tableHeaderTextColor = '#ffffff',
 }) => {
-  // Standard A4 dimensions in CSS pixels at 96 DPI:
-  // Portrait: 794px x 1123px (~210mm x 297mm)
-  // Landscape: 1123px x 794px
   const isLandscape = orientation === 'landscape';
   const widthPx = isLandscape ? 1123 : 794;
   const minHeightPx = isLandscape ? 794 : 1123;
@@ -28,6 +43,26 @@ export const A4Page: React.FC<A4PageProps> = ({
     wide: 'px-20 py-16',
   };
 
+  const borderStyles: React.CSSProperties =
+    pageBorder === 'double'
+      ? { border: '4px double #94a3b8' }
+      : pageBorder === 'single'
+      ? { border: '1px solid #cbd5e1' }
+      : { border: '1px solid rgba(226, 232, 240, 0.8)' };
+
+  const customProperties = {
+    '--cd-heading-color': headingColor,
+    '--cd-text-color': textColor,
+    '--cd-body-font': fontFamily,
+    '--cd-heading-font': headingFontFamily,
+    '--cd-table-header-bg': tableHeaderBg,
+    '--cd-table-header-text': tableHeaderTextColor,
+    backgroundColor: pageBg,
+    color: textColor,
+    fontFamily: `${fontFamily}, system-ui, sans-serif`,
+    ...borderStyles,
+  } as React.CSSProperties;
+
   return (
     <div
       className="flex justify-center my-6 transition-transform origin-top duration-150"
@@ -36,21 +71,25 @@ export const A4Page: React.FC<A4PageProps> = ({
       }}
     >
       <div
-        className={`relative bg-white text-slate-900 shadow-2xl rounded-sm border border-slate-200/80 ${marginMap[margins]} transition-all`}
+        className={`relative shadow-2xl rounded-sm ${marginMap[margins]} transition-all`}
         style={{
           width: `${widthPx}px`,
           minHeight: `${minHeightPx}px`,
+          ...customProperties,
         }}
       >
-        {/* Subtle Watermark */}
-        {watermarkText && (
+        {/* Document Watermark */}
+        {watermarkText && watermarkText.trim() && (
           <div
             className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden select-none z-0"
             aria-hidden="true"
           >
             <span
-              className="text-slate-900/[0.04] font-black uppercase text-7xl tracking-widest -rotate-45 transform"
-              style={{ fontSize: '7rem' }}
+              className="font-black uppercase text-7xl tracking-widest -rotate-45 transform text-slate-800"
+              style={{
+                fontSize: '6.5rem',
+                opacity: watermarkOpacity,
+              }}
             >
               {watermarkText}
             </span>

@@ -12,6 +12,7 @@ import { ShortcutsModal } from './ShortcutsModal';
 import { FindReplaceModal } from './FindReplaceModal';
 import { PreviewModal, ValidationModal, UnreviewedAiModal } from './TemplateEditorModals';
 import { DesignSettings } from './DesignPanel';
+import { DEFAULT_DESIGN_SETTINGS, THEMES } from './themes';
 import { TemplateField } from './FieldsPanel';
 import { applyChatAction } from './applyChatAction';
 
@@ -59,15 +60,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [unreviewedModal, setUnreviewedModal] = useState<any[] | null>(null);
   const [reviewingAi, setReviewingAi] = useState(false);
 
-  const [designSettings, setDesignSettings] = useState<DesignSettings>({
-    theme: 'official_navy',
-    fontFamily: 'serif',
-    fontSize: 'base',
-    lineHeight: 'normal',
-    orientation: 'portrait',
-    margins: 'normal',
-    watermark: '',
-  });
+  const [designSettings, setDesignSettings] = useState<DesignSettings>(DEFAULT_DESIGN_SETTINGS);
 
   const contentLoadedRef = useRef<boolean>(false);
 
@@ -109,6 +102,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     templateId,
     template,
     editor,
+    designSettings,
     onSaveSuccess: (updated) => setTemplate(updated),
   });
 
@@ -196,6 +190,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         description: template.description,
         editor_json: editorJson,
         fields,
+        design_settings: designSettings,
       });
       setPreviewPages(res.pages || []);
     } catch (err: any) {
@@ -349,16 +344,24 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             markUnsaved();
           }}
           onAutoStyle={() => {
-            setDesignSettings({
-              theme: 'svnit_gold',
-              fontFamily: 'serif',
-              fontSize: 'base',
-              lineHeight: 'normal',
-              orientation: 'portrait',
-              margins: 'normal',
-              watermark: '',
-            });
-            markUnsaved();
+            const svnit = THEMES.find((t) => t.id === 'svnit_gold');
+            if (svnit) {
+              setDesignSettings((prev) => ({
+                ...prev,
+                theme: svnit.id,
+                headingColor: svnit.heading_color,
+                textColor: svnit.text_color,
+                tableHeaderBg: svnit.table_header_bg,
+                tableHeaderTextColor: svnit.table_header_text,
+                borderColor: svnit.border_color,
+                dividerColor: svnit.divider_color,
+                fontFamily: svnit.body_font,
+                headingFontFamily: svnit.heading_font,
+                pageBorder: svnit.border_style,
+                pageBg: svnit.page_bg,
+              }));
+              markUnsaved();
+            }
           }}
           onApplyChatAction={handleApplyChatAction}
           isOpen={rightOpen}

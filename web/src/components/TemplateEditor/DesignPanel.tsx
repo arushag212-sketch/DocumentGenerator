@@ -1,14 +1,25 @@
 import React from 'react';
-import { Palette, Type, Layout, ShieldAlert, Sparkles, Check } from 'lucide-react';
+import { Palette, Type, Layout, ShieldAlert, Sparkles, Check, AlertTriangle, Droplets } from 'lucide-react';
+import { THEMES, FONT_OPTIONS, calculateContrastRatio, isInkHeavy } from './themes';
 
 export interface DesignSettings {
   theme: string;
   fontFamily: string;
+  headingFontFamily: string;
   fontSize: string;
   lineHeight: string;
+  headingColor: string;
+  textColor: string;
+  tableHeaderBg: string;
+  tableHeaderTextColor: string;
+  borderColor: string;
+  dividerColor: string;
+  pageBg: string;
   orientation: 'portrait' | 'landscape';
   margins: 'normal' | 'compact' | 'wide';
+  pageBorder: 'none' | 'single' | 'double';
   watermark: string;
+  watermarkOpacity: number;
 }
 
 interface DesignPanelProps {
@@ -17,31 +28,36 @@ interface DesignPanelProps {
   onAutoStyle?: () => void;
 }
 
-export const THEME_PRESETS = [
-  { id: 'official_navy', name: 'Official Navy', primary: '#1e3a8a', accent: '#3b82f6', bg: '#ffffff' },
-  { id: 'svnit_gold', name: 'SVNIT Blue & Gold', primary: '#0f2942', accent: '#d97706', bg: '#ffffff' },
-  { id: 'classic_bw', name: 'Classic Black & White', primary: '#0f172a', accent: '#475569', bg: '#ffffff' },
-  { id: 'modern_green', name: 'Modern Forest', primary: '#14532d', accent: '#22c55e', bg: '#ffffff' },
-  { id: 'warm_sunset', name: 'Warm Crimson', primary: '#881337', accent: '#f43f5e', bg: '#ffffff' },
-  { id: 'minimal_grey', name: 'Minimal Slate', primary: '#334155', accent: '#64748b', bg: '#ffffff' },
-];
-
-export const FONT_PRESETS = [
-  { id: 'serif', name: 'Formal Serif (Times-like)', family: '"Times New Roman", Times, Georgia, serif' },
-  { id: 'sans', name: 'Modern Sans (Inter / Roboto)', family: 'Inter, system-ui, -apple-system, sans-serif' },
-  { id: 'display', name: 'Clean Editorial (Merriweather)', family: 'Merriweather, Georgia, serif' },
-  { id: 'mono', name: 'Monospace Code', family: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
-  { id: 'indic', name: 'Indic Bilingual (Noto Sans)', family: '"Noto Sans", "Noto Sans Devanagari", sans-serif' },
-];
-
 export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, onAutoStyle }) => {
+  const contrastRatio = calculateContrastRatio(settings.textColor || '#0f172a', settings.pageBg || '#ffffff');
+  const isLowContrast = contrastRatio < 4.5;
+  const inkHeavy = isInkHeavy(settings.pageBg || '#ffffff');
+
+  const handleThemeSelect = (themeId: string) => {
+    const t = THEMES.find((item) => item.id === themeId);
+    if (!t) return;
+    onChange({
+      theme: t.id,
+      headingColor: t.heading_color,
+      textColor: t.text_color,
+      tableHeaderBg: t.table_header_bg,
+      tableHeaderTextColor: t.table_header_text,
+      borderColor: t.border_color,
+      dividerColor: t.divider_color,
+      fontFamily: t.body_font,
+      headingFontFamily: t.heading_font,
+      pageBorder: t.border_style,
+      pageBg: t.page_bg,
+    });
+  };
+
   return (
-    <div className="flex flex-col h-full bg-slate-50/50 overflow-y-auto p-4 space-y-6 text-xs">
+    <div className="flex flex-col h-full bg-slate-50/50 overflow-y-auto p-4 space-y-5 text-xs">
       {/* AI Professional Quick-Action */}
       <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-3 rounded-xl border border-indigo-200/80 shadow-sm">
         <div className="flex items-center gap-2 mb-1.5">
           <Sparkles className="w-4 h-4 text-indigo-600" />
-          <span className="font-bold text-slate-800 text-xs">Design Copilot</span>
+          <span className="font-bold text-slate-800 text-xs">Design Studio Copilot</span>
         </div>
         <p className="text-[11px] text-slate-600 mb-2.5">
           Harmonize fonts, margins, heading accents, and table borders for official institute standards.
@@ -59,15 +75,15 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
       <div>
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
           <Palette className="w-3.5 h-3.5 text-indigo-600" />
-          Curated Color Themes
+          Curated Document Themes
         </label>
         <div className="grid grid-cols-2 gap-2">
-          {THEME_PRESETS.map((t) => {
+          {THEMES.map((t) => {
             const isSelected = settings.theme === t.id;
             return (
               <button
                 key={t.id}
-                onClick={() => onChange({ theme: t.id })}
+                onClick={() => handleThemeSelect(t.id)}
                 className={`p-2.5 rounded-lg border text-left transition flex flex-col gap-1.5 ${
                   isSelected
                     ? 'border-indigo-600 bg-white ring-2 ring-indigo-500/20 shadow-sm'
@@ -76,8 +92,8 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: t.primary }} />
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.accent }} />
+                    <div className="w-3.5 h-3.5 rounded-full border border-slate-300" style={{ backgroundColor: t.primary }} />
+                    <div className="w-2.5 h-2.5 rounded-full border border-slate-300" style={{ backgroundColor: t.accent }} />
                   </div>
                   {isSelected && <Check className="w-3.5 h-3.5 text-indigo-600" />}
                 </div>
@@ -92,19 +108,34 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
       <div>
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
           <Type className="w-3.5 h-3.5 text-indigo-600" />
-          Typography
+          Typography & Fonts
         </label>
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <div>
-            <span className="block text-[11px] font-medium text-slate-600 mb-1">Font Family</span>
+            <span className="block text-[11px] font-medium text-slate-600 mb-1">Body Font</span>
             <select
               value={settings.fontFamily}
               onChange={(e) => onChange({ fontFamily: e.target.value })}
               className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             >
-              {FONT_PRESETS.map((f) => (
+              {FONT_OPTIONS.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.name}
+                  {f.name} ({f.group})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <span className="block text-[11px] font-medium text-slate-600 mb-1">Heading Font</span>
+            <select
+              value={settings.headingFontFamily || settings.fontFamily}
+              onChange={(e) => onChange({ headingFontFamily: e.target.value })}
+              className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            >
+              {FONT_OPTIONS.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({f.group})
                 </option>
               ))}
             </select>
@@ -118,9 +149,9 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
                 onChange={(e) => onChange({ fontSize: e.target.value })}
                 className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               >
-                <option value="sm">Compact (10pt)</option>
-                <option value="base">Standard (11pt)</option>
-                <option value="lg">Spacious (12pt)</option>
+                <option value="sm">10pt (Compact)</option>
+                <option value="base">11pt (Standard)</option>
+                <option value="lg">12pt (Spacious)</option>
               </select>
             </div>
 
@@ -133,20 +164,117 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
               >
                 <option value="tight">1.15 (Single)</option>
                 <option value="normal">1.35 (Official)</option>
-                <option value="relaxed">1.6 (Draft)</option>
+                <option value="relaxed">1.60 (Draft)</option>
               </select>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Page Setup */}
+      {/* Colors & Palette Customization */}
+      <div>
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+          <Droplets className="w-3.5 h-3.5 text-indigo-600" />
+          Color Palette
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <span className="block text-[10px] text-slate-500 mb-1">Headings Color</span>
+            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg p-1.5">
+              <input
+                type="color"
+                value={settings.headingColor || '#1e3a8a'}
+                onChange={(e) => onChange({ headingColor: e.target.value })}
+                className="w-5 h-5 rounded cursor-pointer border-0 p-0"
+              />
+              <span className="text-[10px] text-slate-600 font-mono">{settings.headingColor || '#1e3a8a'}</span>
+            </div>
+          </div>
+
+          <div>
+            <span className="block text-[10px] text-slate-500 mb-1">Text Color</span>
+            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg p-1.5">
+              <input
+                type="color"
+                value={settings.textColor || '#0f172a'}
+                onChange={(e) => onChange({ textColor: e.target.value })}
+                className="w-5 h-5 rounded cursor-pointer border-0 p-0"
+              />
+              <span className="text-[10px] text-slate-600 font-mono">{settings.textColor || '#0f172a'}</span>
+            </div>
+          </div>
+
+          <div>
+            <span className="block text-[10px] text-slate-500 mb-1">Table Header Bg</span>
+            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg p-1.5">
+              <input
+                type="color"
+                value={settings.tableHeaderBg || '#1e3a8a'}
+                onChange={(e) => onChange({ tableHeaderBg: e.target.value })}
+                className="w-5 h-5 rounded cursor-pointer border-0 p-0"
+              />
+              <span className="text-[10px] text-slate-600 font-mono">{settings.tableHeaderBg || '#1e3a8a'}</span>
+            </div>
+          </div>
+
+          <div>
+            <span className="block text-[10px] text-slate-500 mb-1">Page Background</span>
+            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg p-1.5">
+              <input
+                type="color"
+                value={settings.pageBg || '#ffffff'}
+                onChange={(e) => onChange({ pageBg: e.target.value })}
+                className="w-5 h-5 rounded cursor-pointer border-0 p-0"
+              />
+              <span className="text-[10px] text-slate-600 font-mono">{settings.pageBg || '#ffffff'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Contrast & Ink Guard */}
+      <div className={`p-3 rounded-lg border text-[11px] space-y-1.5 ${
+        isLowContrast || inkHeavy ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+      }`}>
+        <div className="flex items-center justify-between font-bold">
+          <div className="flex items-center gap-1.5">
+            {isLowContrast || inkHeavy ? (
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            ) : (
+              <ShieldAlert className="w-4 h-4 text-emerald-600 shrink-0" />
+            )}
+            <span>WCAG Contrast: {contrastRatio.toFixed(1)}:1</span>
+          </div>
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+            isLowContrast ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900'
+          }`}>
+            {isLowContrast ? 'Low Contrast' : 'AA Pass'}
+          </span>
+        </div>
+        {isLowContrast && (
+          <p className="text-[10px] text-amber-800">
+            Warning: Text contrast is below 4.5:1. Document text may be difficult to read when printed.
+          </p>
+        )}
+        {inkHeavy && (
+          <p className="text-[10px] text-amber-800 font-medium">
+            Caution: Dark background will consume significant ink and toner. Light backgrounds are recommended.
+          </p>
+        )}
+        {!isLowContrast && !inkHeavy && (
+          <p className="text-[10px] text-emerald-700">
+            Optimal print contrast. SVNIT letterhead slot remains locked and protected.
+          </p>
+        )}
+      </div>
+
+      {/* Page Setup & Layout */}
       <div>
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
           <Layout className="w-3.5 h-3.5 text-indigo-600" />
           Page Setup & Layout
         </label>
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <div className="grid grid-cols-2 gap-2">
             <div>
               <span className="block text-[11px] font-medium text-slate-600 mb-1">Orientation</span>
@@ -167,10 +295,43 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
                 onChange={(e) => onChange({ margins: e.target.value as any })}
                 className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               >
-                <option value="compact">Compact (20mm)</option>
+                <option value="compact">Compact (15mm)</option>
                 <option value="normal">Normal (25mm)</option>
-                <option value="wide">Wide (30mm)</option>
+                <option value="wide">Wide (32mm)</option>
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <span className="block text-[11px] font-medium text-slate-600 mb-1">Page Border</span>
+              <select
+                value={settings.pageBorder || 'none'}
+                onChange={(e) => onChange({ pageBorder: e.target.value as any })}
+                className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              >
+                <option value="none">None</option>
+                <option value="single">Single Line</option>
+                <option value="double">Double Border (Certificate)</option>
+              </select>
+            </div>
+
+            <div>
+              <span className="block text-[11px] font-medium text-slate-600 mb-1">Watermark Opacity</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0.05"
+                  max="0.4"
+                  step="0.05"
+                  value={settings.watermarkOpacity ?? 0.15}
+                  onChange={(e) => onChange({ watermarkOpacity: parseFloat(e.target.value) })}
+                  className="w-full accent-indigo-600 cursor-pointer"
+                />
+                <span className="text-[10px] text-slate-500 w-8 text-right font-mono">
+                  {Math.round((settings.watermarkOpacity ?? 0.15) * 100)}%
+                </span>
+              </div>
             </div>
           </div>
 
@@ -178,20 +339,13 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
             <span className="block text-[11px] font-medium text-slate-600 mb-1">Document Watermark</span>
             <input
               type="text"
-              value={settings.watermark}
+              value={settings.watermark || ''}
               onChange={(e) => onChange({ watermark: e.target.value })}
-              placeholder="e.g. DRAFT or CONFIDENTIAL"
+              placeholder="e.g. DRAFT, CONFIDENTIAL, or SAMPLE"
               className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-            />
+            >
+            </input>
           </div>
-        </div>
-      </div>
-
-      {/* Readability Guard */}
-      <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-800 flex items-start gap-2">
-        <ShieldAlert className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-        <div className="text-[11px]">
-          <span className="font-bold">Readability Guard Active:</span> Contrast ratio meets WCAG AA standards for print readability. SVNIT letterhead slot remains locked.
         </div>
       </div>
     </div>

@@ -21,14 +21,15 @@ import { ChipPopover } from './ChipPopover';
 import { TableControls } from './TableControls';
 import { BlockDragHandle } from './BlockDragHandle';
 import { ImageBlockPopover } from './ImageBlockPopover';
+import { createImageBlockNode } from './imageBlock';
 import {
   insertInfoTable,
   insertRepeatingTable,
   insertSignatureGrid,
-  insertImageBlock,
   insertFieldChip,
   safeInsertBlock,
 } from './extensions';
+import { DesignSettings } from './DesignPanel';
 
 interface CanvasProps {
   editor: any;
@@ -36,6 +37,7 @@ interface CanvasProps {
   watermarkText?: string;
   orientation?: 'portrait' | 'landscape';
   margins?: 'normal' | 'compact' | 'wide';
+  designSettings?: DesignSettings;
   bubblePos: { top: number; left: number } | null;
   chipPopover: any;
   onCloseChipPopover: () => void;
@@ -57,6 +59,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   watermarkText,
   orientation = 'portrait',
   margins = 'normal',
+  designSettings,
   bubblePos,
   chipPopover,
   onCloseChipPopover,
@@ -201,7 +204,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         else if (parsed.type === 'infoTable') insertInfoTable(editor);
         else if (parsed.type === 'repeatingTable') insertRepeatingTable(editor);
         else if (parsed.type === 'signatureGrid') insertSignatureGrid(editor, 2);
-        else if (parsed.type === 'clubLogo') insertImageBlock(editor, { imageType: 'club-logo', alt: 'Club logo' });
+        else if (parsed.type === 'clubLogo') safeInsertBlock(editor, createImageBlockNode({ imageType: 'club-logo', alt: 'Club logo' }));
         else if (parsed.type === 'pageBreak') safeInsertBlock(editor, { type: 'pageBreak' });
       } catch (err) {
         console.error('Failed to drop block:', err);
@@ -326,9 +329,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       {/* Main A4 Document Sheet */}
       <A4Page
         zoom={zoom}
-        watermarkText={watermarkText}
-        orientation={orientation}
-        margins={margins}
+        watermarkText={designSettings?.watermark || watermarkText}
+        watermarkOpacity={designSettings?.watermarkOpacity}
+        orientation={designSettings?.orientation || orientation}
+        margins={designSettings?.margins || margins}
+        pageBg={designSettings?.pageBg}
+        pageBorder={designSettings?.pageBorder}
+        headingColor={designSettings?.headingColor}
+        textColor={designSettings?.textColor}
+        fontFamily={designSettings?.fontFamily}
+        headingFontFamily={designSettings?.headingFontFamily}
+        tableHeaderBg={designSettings?.tableHeaderBg}
+        tableHeaderTextColor={designSettings?.tableHeaderTextColor}
       >
         <EditorContent editor={editor} className="tiptap-editor-canvas focus:outline-none" />
       </A4Page>

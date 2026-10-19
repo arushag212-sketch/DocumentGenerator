@@ -8,6 +8,7 @@ interface UseEditorAutosaveOptions {
   templateId: string;
   template: any;
   editor: any;
+  designSettings?: any;
   onSaveSuccess?: (updatedTemplate: any) => void;
   debounceMs?: number;
 }
@@ -17,6 +18,7 @@ export function useEditorAutosave({
   templateId,
   template,
   editor,
+  designSettings,
   onSaveSuccess,
   debounceMs = 1000,
 }: UseEditorAutosaveOptions) {
@@ -53,6 +55,7 @@ export function useEditorAutosave({
           fields: template.fields || [],
           editor_json: editorJson,
           letterhead_id: template.letterhead_id || null,
+          design_settings: designSettings || template.design_settings || null,
         };
 
         // If version check is enabled, pass expected_version

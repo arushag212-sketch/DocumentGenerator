@@ -184,6 +184,7 @@ class TemplateDraftOut(BaseModel):
     editor_json: dict[str, Any]
     fields: list[dict[str, Any]]
     letterhead_id: Optional[str] = None
+    design_settings: Optional[dict[str, Any]] = None
     validation_report: Optional[dict[str, Any]] = None
     can_edit: bool = False
 
@@ -195,6 +196,7 @@ class TemplateDraftSaveRequest(BaseModel):
     editor_json: Optional[dict[str, Any]] = None
     fields: Optional[list[dict[str, Any]]] = None
     letterhead_id: Optional[str] = None
+    design_settings: Optional[dict[str, Any]] = None
 
 
 class TemplateCompileRequest(BaseModel):
@@ -205,6 +207,7 @@ class TemplateCompileRequest(BaseModel):
     description: Optional[str] = None
     letterhead_id: Optional[str] = None
     numbering_series: Optional[str] = None
+    design_settings: Optional[dict[str, Any]] = None
     for_publish: Optional[bool] = False
 
 
@@ -1090,6 +1093,12 @@ def get_template_draft(
 
     can_edit = ctx.role in (Role.EDITOR, Role.ADMIN, Role.OWNER)
 
+    draft_design_settings = None
+    if isinstance(editor_json, dict):
+        draft_design_settings = editor_json.get("design_settings") or editor_json.get("attrs", {}).get("design_settings")
+    if not draft_design_settings and ver and isinstance(ver.editor_json, dict):
+        draft_design_settings = ver.editor_json.get("design_settings") or ver.editor_json.get("attrs", {}).get("design_settings")
+
     return TemplateDraftOut(
         template_id=tmpl.id,
         slug=tmpl.slug,
@@ -1102,6 +1111,7 @@ def get_template_draft(
         editor_json=editor_json,
         fields=fields_list,
         letterhead_id=ver.letterhead_id,
+        design_settings=draft_design_settings,
         validation_report=ver.validation_report,
         can_edit=can_edit,
     )
@@ -1190,6 +1200,10 @@ def save_template_draft(
 
     if payload.editor_json is not None:
         target_ver.editor_json = payload.editor_json
+        if payload.design_settings is not None and isinstance(target_ver.editor_json, dict):
+            target_ver.editor_json["design_settings"] = payload.design_settings
+    elif payload.design_settings is not None and target_ver.editor_json and isinstance(target_ver.editor_json, dict):
+        target_ver.editor_json["design_settings"] = payload.design_settings
     if payload.letterhead_id is not None:
         selected_lh = db.query(Letterhead).filter(Letterhead.id == payload.letterhead_id).first()
         if not selected_lh:
@@ -1253,6 +1267,7 @@ def save_template_draft(
         editor_json=target_ver.editor_json or {},
         fields=fields_to_return,
         letterhead_id=target_ver.letterhead_id,
+        design_settings=payload.design_settings or (target_ver.editor_json.get("design_settings") if isinstance(target_ver.editor_json, dict) else None),
         validation_report=target_ver.validation_report,
         can_edit=True,
     )
@@ -1365,6 +1380,10 @@ def compile_template(
     else:
         num_series = derive_unique_series_key(template_name, ctx.club.id, db, exclude_template_id=tmpl.id)
 
+    comp_design_settings = payload.design_settings
+    if not comp_design_settings and isinstance(editor_json, dict):
+        comp_design_settings = editor_json.get("design_settings")
+
     docx_bytes, schema_yaml, report = TemplateCompiler.compile(
         editor_json=editor_json,
         fields=fields,
@@ -1377,6 +1396,7 @@ def compile_template(
         },
         club_slug=ctx.club.slug,
         letterhead_cfg=letterhead_cfg,
+        design_settings=comp_design_settings,
     )
 
     rel_key, _ = storage.save_content_addressed("templates", docx_bytes, "docx")
@@ -1472,6 +1492,10 @@ def preview_template(
                     if asset_path.exists():
                         letterhead_cfg["club_logo_path"] = str(asset_path)
 
+    preview_design_settings = payload.design_settings
+    if not preview_design_settings and isinstance(editor_json, dict):
+        preview_design_settings = editor_json.get("design_settings")
+
     docx_bytes, schema_yaml, report = TemplateCompiler.compile(
         editor_json=editor_json,
         fields=fields,
@@ -1483,6 +1507,7 @@ def preview_template(
         },
         club_slug=ctx.club.slug,
         letterhead_cfg=letterhead_cfg,
+        design_settings=preview_design_settings,
     )
 
     pages_base64: list[str] = []
