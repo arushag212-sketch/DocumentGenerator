@@ -1,0 +1,59 @@
+# Render Blueprint for the ClubDocs backend (Docker, free plan).
+# Render → New → Blueprint → pick this repository. Values marked `sync: false` are asked for
+# during setup and never stored in git. See docs/DEPLOYMENT.md for where each one comes from.
+services:
+  - type: web
+    name: clubdocs-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health/liveness
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      # 512 MB of memory: one server process and one PDF conversion at a time
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: PDF_CONVERT_SLOTS
+        value: "1"
+      # docker_start.sh already migrates once before the server starts
+      - key: AUTO_MIGRATE
+        value: "false"
+      - key: DB_POOL_SIZE
+        value: "3"
+      - key: DB_MAX_OVERFLOW
+        value: "2"
+      - key: ALLOWED_EMAIL_DOMAIN
+        value: svnit.ac.in
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      # Files live in Supabase Storage; the container disk is only a working copy
+      - key: STORAGE_BACKEND
+        value: s3
+      - key: S3_BUCKET
+        value: clubdocs
+      - key: AWS_REGION
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: FIELD_ENCRYPTION_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: PLATFORM_ADMIN_EMAILS
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

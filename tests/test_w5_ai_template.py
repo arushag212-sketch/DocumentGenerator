@@ -17,6 +17,7 @@ Scope:
 
 from __future__ import annotations
 
+import tempfile
 import hashlib
 import io
 import json
@@ -602,7 +603,7 @@ def test_w5_end_to_end_sponsorship_request_letter_from_text(client, auth_setup):
     pdf_bytes = pdf_res.content
 
     # Save evidence artifacts
-    evidence_dir = Path("docs/evidence")
+    evidence_dir = Path(tempfile.gettempdir()) / "clubdocs_test_evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
     (evidence_dir / "w5_sponsorship_letter_from_text.pdf").write_bytes(pdf_bytes)
 
@@ -733,7 +734,7 @@ def test_w5_second_template_meeting_attendance_sheet(client, auth_setup):
     assert pdf_res.status_code == 200
     pdf_bytes = pdf_res.content
 
-    evidence_dir = Path("docs/evidence")
+    evidence_dir = Path(tempfile.gettempdir()) / "clubdocs_test_evidence"
     (evidence_dir / "w5_attendance_sheet_from_text.pdf").write_bytes(pdf_bytes)
 
     pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")

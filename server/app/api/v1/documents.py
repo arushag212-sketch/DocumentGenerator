@@ -1693,7 +1693,7 @@ def preview_template(
         resolved_orientation = "portrait"
         if preview_design_settings and preview_design_settings.get("orientation") in ("portrait", "landscape"):
             resolved_orientation = preview_design_settings["orientation"]
-        elif isinstance(editor_json, dict) and editor_json.get("design_settings", {}).get("orientation") in ("portrait", "landscape"):
+        elif isinstance(editor_json, dict) and (editor_json.get("design_settings") or {}).get("orientation") in ("portrait", "landscape"):
             resolved_orientation = editor_json["design_settings"]["orientation"]
         else:
             resolved_orientation = detected_orientation
@@ -3219,7 +3219,7 @@ def email_document_endpoint(
         if not addr or "@" not in addr or "." not in addr.split("@")[-1]:
             raise HTTPException(status_code=400, detail=f"Not a valid email address: {raw}")
         recipients.append(addr)
-    check_rate_limit(f"email:{ctx.user.id}", max_requests=30, window_seconds=3600)
+    check_rate_limit(f"email:{ctx.user.id}", max_requests=30, window_seconds=3600, db=db)
 
     doc_record = _club_document(ctx, db, doc_id)
     ver = workflow.latest_version(db, doc_record)
@@ -3410,8 +3410,16 @@ async def import_docx(
     ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
 ):
     """Convert uploaded DOCX into TipTap document blocks with proposed fields and unsupported elements report."""
-    content = await file.read()
-    editor_json, fields, unsupported = convert_docx_to_tiptap_with_fields(content)
+    max_bytes = 10 * 1024 * 1024
+    content = await file.read(max_bytes + 1)
+    if not content:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail="The Word file is too large (limit 10 MB).")
+    try:
+        editor_json, fields, unsupported = convert_docx_to_tiptap_with_fields(content)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read this file. Upload a Word document (.docx).")
     base_name = Path(file.filename or "imported.docx").stem.replace("_", " ").title()
     return {
         "editor_json": editor_json,
@@ -3453,7 +3461,10 @@ def check_template_quality(
     db: Session = Depends(get_db),
 ):
     """Audit template quality, protocol consistency, contrast, and official wording with actionable fixes."""
-    template = db.query(Template).filter((Template.id == template_id) | (Template.slug == template_id)).first()
+    template = db.query(Template).filter(
+        ((Template.id == template_id) | (Template.slug == template_id)),
+        ((Template.club_id.is_(None)) | (Template.club_id == ctx.club.id)),
+    ).first()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
@@ -3484,7 +3495,10 @@ def translate_template(
     db: Session = Depends(get_db),
 ):
     """Translate template text to Hindi or Gujarati while keeping all field chips 100% intact."""
-    template = db.query(Template).filter((Template.id == template_id) | (Template.slug == template_id)).first()
+    template = db.query(Template).filter(
+        ((Template.id == template_id) | (Template.slug == template_id)),
+        ((Template.club_id.is_(None)) | (Template.club_id == ctx.club.id)),
+    ).first()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 

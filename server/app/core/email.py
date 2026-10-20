@@ -87,7 +87,7 @@ class ConsoleEmailSender(EmailSender):
         )
 
     def send_password_reset(self, to_email: str, reset_token: str) -> None:
-        reset_link = f"/reset-password?token={reset_token}"
+        reset_link = _reset_link(reset_token)
         msg = {
             "type": "password_reset",
             "to_email": to_email,
@@ -107,6 +107,14 @@ class ConsoleEmailSender(EmailSender):
 
 # Backward-compatible alias
 LoggingEmailSender = ConsoleEmailSender
+
+
+def _reset_link(reset_token: str) -> str:
+    """Full link to the sign-in page's reset form (APP_BASE_URL is the public site, e.g. the Vercel URL)."""
+    from urllib.parse import quote
+
+    base = os.environ.get("APP_BASE_URL", "http://localhost:5173").rstrip("/")
+    return f"{base}/login?reset_token={quote(reset_token)}"
 
 
 class SMTPEmailSender(EmailSender):
@@ -188,7 +196,7 @@ class SMTPEmailSender(EmailSender):
 
     def send_password_reset(self, to_email: str, reset_token: str) -> None:
         subject = "Reset your ClubDocs SVNIT account password"
-        reset_link = f"/reset-password?token={reset_token}"
+        reset_link = _reset_link(reset_token)
         text = (
             f"Hello,\n\n"
             f"You requested a password reset. Use the link below (valid for 30 minutes):\n"

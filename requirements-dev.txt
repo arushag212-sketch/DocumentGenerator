@@ -1,0 +1,5 @@
+# Development and test tools (not installed in the production image)
+-r requirements.txt
+
+pytest==9.1.1
+pytest-timeout==2.4.0

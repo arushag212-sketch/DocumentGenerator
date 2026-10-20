@@ -186,7 +186,7 @@ class S3Storage(Storage):
         endpoint_url: Optional[str] = None,
         access_key_id: Optional[str] = None,
         secret_access_key: Optional[str] = None,
-        region_name: str = "auto",
+        region_name: Optional[str] = None,
         public_base_url: Optional[str] = None,
         client: Optional[object] = None,
     ):
@@ -208,7 +208,11 @@ class S3Storage(Storage):
                     "region_name": self.region,
                 }
                 if self.endpoint_url:
+                    from botocore.config import Config  # type: ignore
+
                     kwargs["endpoint_url"] = self.endpoint_url
+                    # Supabase Storage and most S3-compatible services need path-style URLs
+                    kwargs["config"] = Config(s3={"addressing_style": os.environ.get("S3_ADDRESSING_STYLE", "path")})
                 self.s3_client = boto3.client("s3", **kwargs)
             except Exception as e:
                 logger.warning("boto3 client initialization error: %s", e)
@@ -295,6 +299,88 @@ class S3Storage(Storage):
         return f"https://{self.bucket}.s3.amazonaws.com/{clean_key}"
 
 
+class SyncedDiskStorage(LocalDiskStorage):
+    """Local disk as a working copy, mirrored to S3-compatible storage (e.g. Supabase Storage).
+
+    Rendering needs real files on disk, so all code keeps using local paths. Files that
+    records point at are uploaded after each commit (see ``register_persistence_hooks``), and
+    a missing local copy (for example after a free host restarts with an empty disk) is
+    downloaded the first time it is needed. Caches and thumbnails stay local and are rebuilt.
+    """
+
+    PERSISTENT_PREFIXES = ("assets/", "templates/", "documents/")
+
+    def __init__(self, base_dir: Optional[Path | str] = None, remote: Optional[S3Storage] = None):
+        super().__init__(base_dir)
+        self.remote = remote or S3Storage()
+
+    def _is_persistent(self, key: str) -> bool:
+        return key.startswith(self.PERSISTENT_PREFIXES)
+
+    def _fetch(self, key: str, target: Path) -> None:
+        """Download a persistent file that is missing locally; quietly skip if the bucket lacks it too."""
+        if target.exists() or not key or not self._is_persistent(key):
+            return
+        try:
+            data = self.remote.load(key)
+        except Exception:
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_name(target.name + ".part")
+        tmp.write_bytes(data)
+        tmp.replace(target)
+
+    def local_path(self, path: str) -> Path:
+        target = self._resolve_safe_path(path)
+        self._fetch(self.normalize_key(path), target)
+        return target
+
+    def push(self, path: str) -> bool:
+        """Upload one local file to the bucket. Returns False if it could not be uploaded."""
+        key = self.normalize_key(path)
+        if not key or not self._is_persistent(key):
+            return False
+        try:
+            target = self._resolve_safe_path(path)
+        except ValueError:
+            return False
+        if not target.is_file():
+            return False
+        try:
+            self.remote.save(key, target.read_bytes())
+            return True
+        except Exception as e:
+            logger.warning("Upload to remote storage failed for '%s': %s", key, e)
+            return False
+
+    def save(self, path: str, data: bytes) -> str:
+        key = super().save(path, data)
+        self.push(key)
+        return key
+
+    def save_content_addressed(self, prefix: str, data: bytes, ext: str = "docx") -> Tuple[str, str]:
+        key, sha = super().save_content_addressed(prefix, data, ext)
+        self.push(key)
+        return key, sha
+
+    def load(self, path: str) -> bytes:
+        self.local_path(path)  # brings the file back from the bucket if needed
+        return super().load(path)
+
+    def exists(self, path: str) -> bool:
+        try:
+            return self.local_path(path).is_file()
+        except Exception:
+            return False
+
+    def delete(self, path: str) -> bool:
+        ok = super().delete(path)
+        key = self.normalize_key(path)
+        if key and self._is_persistent(key):
+            ok = self.remote.delete(key) and ok
+        return ok
+
+
 _active_storage: Optional[Storage] = None
 
 
@@ -304,8 +390,9 @@ def get_storage() -> Storage:
         return _active_storage
 
     backend = os.environ.get("STORAGE_BACKEND", "local").lower()
-    if backend in ("s3", "cloud"):
-        _active_storage = S3Storage()
+    if backend in ("s3", "cloud", "supabase"):
+        # Rendering works on local files, so S3 is used as a mirror of the local working copy
+        _active_storage = SyncedDiskStorage()
     elif backend in ("local", "filesystem", "disk"):
         _active_storage = LocalDiskStorage()
     else:
@@ -314,6 +401,47 @@ def get_storage() -> Storage:
         )
 
     return _active_storage
+
+
+def register_persistence_hooks(session_factory) -> None:
+    """Upload the files that saved records point at, once their transaction commits.
+
+    About a dozen code paths write templates, documents and logos straight to disk; hooking
+    the session covers all of them. With plain local storage this does nothing.
+    """
+    from sqlalchemy import event
+
+    def _collect(session, flush_context):
+        if not isinstance(get_storage(), SyncedDiskStorage):
+            return
+        from server.app.models import Asset, DocumentVersion, TemplateVersion
+
+        pending = session.info.setdefault("storage_push", set())
+        for obj in list(session.new) + list(session.dirty):
+            if isinstance(obj, Asset):
+                keys = (obj.storage_key,)
+            elif isinstance(obj, TemplateVersion):
+                keys = (obj.docx_storage_key,)
+            elif isinstance(obj, DocumentVersion):
+                keys = (obj.docx_key, obj.pdf_key)
+            else:
+                continue
+            pending.update(k for k in keys if k)
+
+    def _push(session):
+        keys = session.info.pop("storage_push", None)
+        active = get_storage()
+        if not keys or not isinstance(active, SyncedDiskStorage):
+            return
+        for key in keys:
+            active.push(key)
+
+    def _discard(session):
+        session.info.pop("storage_push", None)
+
+    event.listen(session_factory, "after_flush", _collect)
+    event.listen(session_factory, "after_commit", _push)
+    event.listen(session_factory, "after_rollback", _discard)
 
 
 def set_storage(storage_instance: Optional[Storage]) -> None:

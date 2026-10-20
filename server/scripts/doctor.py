@@ -71,7 +71,6 @@ def check_python() -> list[CheckResult]:
         ("cryptography", "Fernet field encryption"),
         ("passlib", "Passlib password hashing"),
         ("argon2", "Argon2 password hasher"),
-        ("selenium", "Selenium browser automation"),
     ]
     missing = []
     for mod_name, label in pkgs:
@@ -251,7 +250,8 @@ def check_database() -> list[CheckResult]:
             templates_count = db.query(Template).count()
             db.close()
 
-            if clubs_count > 0 and templates_count > 0:
+            # A fresh production database has templates but no clubs until someone creates one
+            if templates_count > 0:
                 results.append(
                     CheckResult(
                         name="Database Schema & Seed Data",
@@ -424,7 +424,9 @@ def main() -> int:
 
     checks: list[CheckResult] = []
     checks.extend(check_python())
-    checks.extend(check_node_and_npm())
+    # The production image serves a pre-built website, so Node.js is only needed for development
+    if os.environ.get("ENVIRONMENT", "development").lower() != "production":
+        checks.extend(check_node_and_npm())
     checks.extend(check_libreoffice())
     checks.extend(check_database())
     checks.extend(check_env_vars())

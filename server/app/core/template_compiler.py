@@ -778,6 +778,9 @@ class TipTapDocxCompiler:
                 bg_xml = parse_xml(
                     f'<w:background xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:color="{clean_hex}"/>'
                 )
+                # _configure_page runs again after build(); keep a single background element
+                for existing_bg in self.doc.element.findall(qn("w:background")):
+                    self.doc.element.remove(existing_bg)
                 self.doc.element.insert(0, bg_xml)
 
         # Set normal style font
@@ -2061,50 +2064,13 @@ def rename_field_in_editor_json(editor_json: dict[str, Any], old_key: str, new_k
 def _realistic_dummy_value(key: str, label: str = "", field_type: str = "text") -> Any:
     k = (key or "").lower().strip()
     lbl = (label or "").lower().strip()
+    # Match whole words so "candidate" is not a date and "student_count" is not a name
+    tokens = set(re.split(r"[^a-z0-9]+", f"{k} {lbl}")) - {""}
 
-    if any(w in k or w in lbl for w in ("event_name", "event_title", "activity")):
-        return "Annual Photography Walk"
-    if "notice_title" in k or "notice_title" in lbl:
-        return "Annual Photography Walk & Exhibition Notice"
-    if "title" in k or "title" in lbl:
-        return "Annual Photography Walk"
-    if any(w in k or w in lbl for w in ("venue", "location", "place", "room")):
-        return "Central Lawn, SVNIT"
-    if any(w in k or w in lbl for w in ("recipient", "participant", "student_name", "student")):
-        return "Aarav Sharma"
-    if any(w in k or w in lbl for w in ("roll_no", "roll_number", "admission_no", "registration_no")):
-        return "U24CS001"
-    if any(w in k or w in lbl for w in ("dates", "date")):
-        return "15/10/2026"
-    if any(w in k or w in lbl for w in ("time", "timing")):
-        return "10:00 AM to 05:00 PM"
-    if any(w in k or w in lbl for w in ("link", "url", "website")):
-        return "https://svnit.ac.in/events/register"
-    if any(w in k or w in lbl for w in ("position", "rank", "award")):
-        return "First Place"
-    if any(w in k or w in lbl for w in ("company", "firm", "sponsor", "agency")):
-        return "Yamaha Music India Pvt. Ltd."
-    if any(w in k or w in lbl for w in ("address",)):
-        return "Surat, Gujarat"
-    if any(w in k or w in lbl for w in ("contact", "coordinator", "head", "secretary", "faculty", "convenor")):
-        return "Dr. K. N. Mehta"
-    if any(w in k or w in lbl for w in ("email",)):
-        return "convenor@svnit.ac.in"
-    if any(w in k or w in lbl for w in ("phone", "mobile", "contact_no")):
-        return "9876543210"
-    if any(w in k or w in lbl for w in ("notice_body", "circular_body", "body")):
-        return "All students and club members are hereby informed that the Annual Photography Walk will be held on the institute campus. Interested students should assemble near the Central Lawn."
-    if any(w in k or w in lbl for w in ("description", "purpose", "details")):
-        return "Conducting hands-on training sessions and interactive workshops for registered students."
-    if any(w in k or w in lbl for w in ("objective", "goals")):
-        return "To provide practical skills and foster peer collaboration across branches."
-    if any(w in k or w in lbl for w in ("department", "branch")):
-        return "Computer Science and Engineering"
-    if any(w in k or w in lbl for w in ("designation",)):
-        return "Student Coordinator"
-    if any(w in k or w in lbl for w in ("submitted_to", "addressee")):
-        return "The Dean (Student Welfare), SVNIT"
+    def _has(words) -> bool:
+        return any((w in k or w in lbl) if "_" in w else w in tokens for w in words)
 
+    # Typed fields get a value of their own type before any name-based guess
     if field_type == "int":
         return 100
     if field_type == "money":
@@ -2115,6 +2081,50 @@ def _realistic_dummy_value(key: str, label: str = "", field_type: str = "text") 
         return "15/10/2026 - 16/10/2026"
     if field_type == "time_range":
         return "10:00 AM to 05:00 PM"
+
+    if _has(("event_name", "event_title", "activity")):
+        return "Annual Photography Walk"
+    if _has(("notice_title",)):
+        return "Annual Photography Walk & Exhibition Notice"
+    if _has(("title",)):
+        return "Annual Photography Walk"
+    if _has(("venue", "location", "place", "room")):
+        return "Central Lawn, SVNIT"
+    if _has(("recipient", "participant", "student_name", "student")):
+        return "Aarav Sharma"
+    if _has(("roll_no", "roll_number", "admission_no", "registration_no")):
+        return "U24CS001"
+    if _has(("dates", "date")):
+        return "15/10/2026"
+    if _has(("time", "timing")):
+        return "10:00 AM to 05:00 PM"
+    if _has(("link", "url", "website")):
+        return "https://svnit.ac.in/events/register"
+    if _has(("position", "rank", "award")):
+        return "First Place"
+    if _has(("company", "firm", "sponsor", "agency")):
+        return "Yamaha Music India Pvt. Ltd."
+    if _has(("address",)):
+        return "Surat, Gujarat"
+    if _has(("contact", "coordinator", "head", "secretary", "faculty", "convenor")):
+        return "Dr. K. N. Mehta"
+    if _has(("email",)):
+        return "convenor@svnit.ac.in"
+    if _has(("phone", "mobile", "contact_no")):
+        return "9876543210"
+    if _has(("notice_body", "circular_body", "body")):
+        return "All students and club members are hereby informed that the Annual Photography Walk will be held on the institute campus. Interested students should assemble near the Central Lawn."
+    if _has(("description", "purpose", "details")):
+        return "Conducting hands-on training sessions and interactive workshops for registered students."
+    if _has(("objective", "goals")):
+        return "To provide practical skills and foster peer collaboration across branches."
+    if _has(("department", "branch")):
+        return "Computer Science and Engineering"
+    if _has(("designation",)):
+        return "Student Coordinator"
+    if _has(("submitted_to", "addressee")):
+        return "The Dean (Student Welfare), SVNIT"
+
     if field_type == "person_ref":
         return "Aarav Sharma (Student Coordinator)"
     if field_type == "longtext":

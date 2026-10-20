@@ -98,7 +98,8 @@ def get_current_user(
 ) -> User:
     """Authenticate current user from JWT token and verify server-side session validity."""
     payload = decode_access_token(token)
-    if not payload or "sub" not in payload:
+    # Only access tokens authenticate requests; a 7-day refresh token must not work as one
+    if not payload or "sub" not in payload or payload.get("type") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "INVALID_TOKEN", "message": "Invalid or expired token"},
@@ -120,7 +121,7 @@ def get_current_user(
 
     # Server-side session verification: token_version must match user.token_version
     token_version = payload.get("token_version")
-    if token_version is not None and token_version != user.token_version:
+    if token_version != user.token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={

@@ -1,11 +1,12 @@
 # Official Dependencies for SVNIT ClubDocs (DocumentGenerator)
 # Python >= 3.11 (Pinned exact versions for reproducible builds)
+# Production only; test tools are in requirements-dev.txt
 
 # Core Web Server & APIs
 fastapi==0.143.0
 uvicorn[standard]==0.54.0
 python-multipart==0.0.32
-pydantic==2.14.1
+pydantic[email]==2.14.1
 pydantic-core==2.50.1
 
 # Database & Migrations
@@ -35,7 +36,5 @@ anyio==4.15.1
 google-auth==2.62.0
 requests==2.33.1
 
-# Testing & Browser Automation
-pytest==9.1.1
-pytest-timeout==2.4.0
-selenium==4.42.0
+# File storage on Supabase Storage / S3 (STORAGE_BACKEND=s3)
+boto3>=1.35,<2

@@ -85,7 +85,7 @@ def test_concurrency_numbering_atomic_sqlite():
             pass
 
 
-@pytest.mark.skip(reason="Docker/PostgreSQL not available")
+@pytest.mark.skipif(not os.environ.get("POSTGRES_TEST_URL"), reason="Set POSTGRES_TEST_URL to a PostgreSQL database to run")
 def test_concurrency_numbering_postgres():
     """Verify 20 parallel threads allocate 20 unique, gap-free numbers on PostgreSQL."""
     pg_url = os.environ.get(

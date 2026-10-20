@@ -555,17 +555,17 @@ def test_numbering_series_format_update_never_rewrites_existing_numbers(client, 
 
 
 def test_invite_rate_limit_brute_force_gets_429(client):
-    """10 requests allowed per minute; 11th request triggers 429."""
+    """60 requests allowed per minute per IP; the 61st triggers 429."""
     from server.app.core.rate_limit import clear_rate_limits
     clear_rate_limits()
 
-    # Make 10 requests from same IP with different invalid tokens
-    for i in range(10):
+    # Make 60 requests from same IP with different invalid tokens
+    for i in range(60):
         res = client.get(f"/api/v1/invites/brute_force_token_{i}")
         assert res.status_code == 400
 
-    # 11th request from same IP gets 429 Too Many Requests
-    res_blocked = client.get("/api/v1/invites/brute_force_token_11")
+    # 61st request from same IP gets 429 Too Many Requests
+    res_blocked = client.get("/api/v1/invites/brute_force_token_61")
     assert res_blocked.status_code == 429
     assert res_blocked.json()["detail"]["code"] == "RATE_LIMIT_EXCEEDED"
 

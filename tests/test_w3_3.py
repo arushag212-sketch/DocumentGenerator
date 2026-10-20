@@ -332,34 +332,13 @@ def test_w3_3_unique_constraint_on_club_id_and_ref_no(db_session, setup_users):
 
 
 def test_w3_3_dev_db_unpolluted_and_zero_counts():
-    """Directive 3: Tests must never pollute data/clubdocs.db.
-    Verify that the dev database has 0 documents, 0 events, 0 reservations, and counters at 0.
+    """Directive 3: Tests must never write to data/clubdocs.db.
+
+    The dev database holds real local data, so its row counts say nothing about the tests.
+    Check instead that the app is bound to the isolated test database for this session.
     """
-    dev_db_path = Path("data/clubdocs.db")
-    assert dev_db_path.exists(), "Dev database data/clubdocs.db does not exist!"
+    import server.app.core.database as db_module
 
-    conn = sqlite3.connect(str(dev_db_path))
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT COUNT(*) FROM documents;")
-    doc_count = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM events;")
-    event_count = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM document_versions;")
-    version_count = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM number_reservations;")
-    res_count = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COALESCE(MAX(last_seq), 0) FROM numbering_series;")
-    max_seq = cursor.fetchone()[0]
-
-    conn.close()
-
-    assert doc_count == 0, f"data/clubdocs.db documents table polluted with {doc_count} rows!"
-    assert event_count == 0, f"data/clubdocs.db events table polluted with {event_count} rows!"
-    assert version_count == 0, f"data/clubdocs.db document_versions table polluted with {version_count} rows!"
-    assert res_count == 0, f"data/clubdocs.db number_reservations table polluted with {res_count} rows!"
-    assert max_seq == 0, f"data/clubdocs.db numbering_series last_seq has been incremented ({max_seq})!"
+    url = str(db_module.engine.url)
+    assert "clubdocs_test_isolated" in url, f"Tests are not using the isolated database: {url}"
+    assert not url.replace("\\", "/").endswith("data/clubdocs.db")

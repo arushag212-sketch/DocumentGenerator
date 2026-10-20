@@ -1,184 +1,99 @@
-# SVNIT ClubDocs — Official Document Generation Platform
+# SVNIT ClubDocs
 
-The official, template-driven document generation, serial numbering, and approval preparation platform for student chapters and clubs at **Sardar Vallabhbhai National Institute of Technology (SVNIT), Surat**.
+Official documents for SVNIT student clubs (permission letters, approval notes, certificates, bills,
+minutes) in minutes instead of hours. Describe what you need, check the details, download PDF or Word.
 
----
+- **Sign in with your SVNIT Google account** (only `@svnit.ac.in` addresses).
+- **Each club has its own space:** members, letterhead, logo, templates and reference numbers.
+- **Templates:** built-in SVNIT formats, a visual editor, and AI help to draft or import new ones.
+- **Documents:** generated from one description, numbered automatically, reviewed and approved in the app.
+  Approved PDFs carry a code anyone can verify at `/verify`.
 
-## ⏱️ 10-Minute Quick Start for a New Club Member (Windows PowerShell)
+## Tech stack
 
-Get up and running locally in under 10 minutes:
+| Part | Built with |
+|---|---|
+| Website | React 18, TypeScript, Vite, Tailwind CSS, TipTap editor |
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2, Alembic |
+| Documents | python-docx and docxtpl (Word), LibreOffice (PDF), PyMuPDF (page images) |
+| AI | Google Gemini (optional; simple built-in rules without a key) |
+| Data | SQLite locally, PostgreSQL in production; files on disk or Supabase Storage |
+
+## Run it locally (Windows)
+
+Needs Python 3.12+, Node 20+ and LibreOffice.
 
 ```powershell
-# 1. Clone repository & open folder
-cd C:\Users\OMEN\Desktop\DocumentGenerator
-
-# 2. Activate Python virtual environment
-.\.venv\Scripts\Activate.ps1
-
-# 3. Verify system readiness (Python, LibreOffice, Database, Crypto)
-python -m server.scripts.doctor
-
-# 4. Start the unified web server (Frontend + Backend on port 8000)
+copy .env.example .env          # then fill in at least GOOGLE_CLIENT_ID
+python -m pip install -r requirements-dev.txt
+python -m server.scripts.seed   # built-in templates and the demo accounts
+python -m server.scripts.doctor # checks Python packages, LibreOffice and the database
 python -m uvicorn server.app.main:app --port 8000
 ```
 
-> **Open your browser at:** [http://localhost:8000](http://localhost:8000)  
-> Sign in with the demo account: `demo.owner@svnit.ac.in` / `DemoOwnerPass123!` (or join via an invite link provided by your club admin).
+In a second terminal:
 
----
-
-## 📸 System Screenshots
-
-| Desktop Workflow (1600px) | Mobile Experience (390px) |
-| :--- | :--- |
-| ![Recommendations](docs/screenshots/w6a/01_recommendations.png) | ![Mobile Dashboard](docs/screenshots/w6b/mobile/02_dashboard_390px.png) |
-| *Event Description & Recommended Documents* | *Mobile Dashboard at 390px Viewport* |
-| ![Grouped Missing Panel](docs/screenshots/w6a/02_grouped_missing_panel.png) | ![Missing Info Panel](docs/screenshots/w6b/mobile/04_missing_info_panel_390px.png) |
-| *Grouped Missing-Info Panel with Propagation* | *Mobile Grouped Input (Zero Horizontal Scroll)* |
-| ![Batch Complete](docs/screenshots/w6a/03_generation_progress_and_complete.png) | ![Document Review](docs/screenshots/w6b/mobile/06_document_review_download_390px.png) |
-| *Batch Package Generation & Atomic Numbering* | *Document Review, Version History & PDF Download* |
-
----
-
-## 🛡️ Access Roles & Permission Boundaries
-
-SVNIT ClubDocs enforces strict club-level tenancy and granular role-based permissions:
-
-| Role | Hierarchy Rank | Access Scope & Capabilities |
-| :--- | :---: | :--- |
-| **Platform Admin** | *Global* | Institute superuser across all clubs, system templates, and system audits. |
-| **Club Owner** | `Rank 4` | Full club authority: create/delete clubs, transfer ownership, assign all roles, generate invites, upload letterheads. |
-| **Club Admin** | `Rank 3` | Administrative control: manage members, configure numbering series formats, manage venues, create editor/viewer invites, reveal masked contacts. |
-| **Lead / Co-Lead** | `Rank 3` | Official chapter leadership: draft, review, and finalize documents, assign event committees. |
-| **Treasurer** | `Rank 2.5` | Financial custodian: verify vouchers, edit bill certificates, approve bill summaries and expenditure totals. |
-| **Faculty Advisor** | `Rank 2` | Official faculty patron: review permissions and sanction notes before submission to HoD/Dean. |
-| **Editor** | `Rank 2` | Document author: draft packages, edit event parameters, accept AI drafts; read-only access to venues and numbering. |
-| **Viewer** | `Rank 1` | Read-only member: view finalized documents and active events; cannot draft or create invites. |
-
----
-
-## 🏛️ How to Add a Club
-
-1. Log in with a platform admin or club creator account.
-2. Open the **Club Switcher** dropdown in the top navigation bar and click **"+ Register New Club"** (or run the first-run Setup Wizard).
-3. Specify:
-   - **Full Club Name**: e.g., *Association for Computing Machinery (ACM) Student Chapter*
-   - **Short Code / Acronym**: e.g., *ACM*
-   - **Affiliated Department**: e.g., *Department of Computer Science & Engineering*
-   - **Default Academic Year**: e.g., *2026-27*
-4. Click **Create Club**. The platform automatically provisions the club's isolated database space, initial numbering series (`ACM/26-27/DOC/001`, `ACM/26-27/ROOM/001`), and creates the default institutional letterhead.
-
----
-
-## 📝 How to Create a Template
-
-The portal offers 3 ways to create and customize document templates:
-
-1. **Template Gallery (Forking)**:
-   - Navigate to the **Template Gallery** tab.
-   - Browse standard SVNIT templates (Permission Letter, Approval Note, Bill Certificate, Bill Summary, Prize Money Receipt, MoM).
-   - Click **Fork Template** to create a club-specific editable variant.
-2. **Interactive Visual Template Editor**:
-   - Open any custom template in the **Template Editor**.
-   - Customize letterhead headers, clause paragraphs, dynamic tables, and 2x2 signature grids.
-   - Test live rendering against mock sample data.
-3. **Describe-by-Text (AI-Assisted Template Drafting)**:
-   - In the Template Gallery, click **"Draft with AI"**.
-   - Enter your requirements in natural language: e.g., *"Create an equipment gate pass letter to the Chief Security Officer requesting to take 4 laptops outside campus for a robotics competition."*
-   - The engine automatically drafts the schema fields, Jinja2 template body, and signatory blocks for your review and approval.
-
----
-
-## 📦 How to Generate a Document Package
-
-1. Navigate to the **Events** tab.
-2. **Describe Your Event**: Type a single natural-language sentence into the box:
-   > *"We are conducting a two-day Web Development Workshop on 14-15 October in Seminar Hall for around 120 students."*
-3. Click **Analyze & Recommend Documents**.
-4. **Review Recommended Package**: The system automatically recommends the required documents based on event stage (e.g. Permission Letter + Event Approval Note).
-5. **Complete Missing Parameters**: Enter shared fields once in the **Grouped Missing Information** panel (e.g. daily timings, submitted-to authority). Accept any AI-drafted text explicitly.
-6. **Confirm Serial Numbers & Academic Year**: Verify the suggested serial numbers and confirm the inferred academic year.
-7. **Generate Selected Documents**: Click generate. The engine atomically reserves unique serial numbers, compiles DOCX files, renders official PDFs via LibreOffice, logs the audit trail, and packages everything into a downloadable ZIP archive.
-
----
-
-## 🚫 What the System Never Does (Institutional Integrity Guarantees)
-
-SVNIT ClubDocs is designed strictly around official institutional document governance rules:
-
-1. **Never Invents Official Details**:
-   The engine **never** fabricates event timings, participant figures, financial amounts, bill numbers, dates, or venues. If a required field is not provided, the batch is rejected with `400 MISSING_REQUIRED_FIELDS` and a grouped list.
-2. **Never Fabricates Approval Signatories**:
-   The system never invents names, designations, or authority signatures. Signatories are pulled strictly from the verified club roster and campus faculty directory.
-3. **Never Silently Emits AI Drafts into Official PDFs**:
-   Any AI-suggested text (e.g. description or objectives) remains marked as `[AI-drafted, review]`. Batch generation is strictly blocked until a human club officer explicitly edits or accepts the draft. The tag is never stripped silently.
-4. **Never Re-numbers Historical Documents**:
-   Updating a numbering series format applies **only to future documents**. Historical documents permanently retain their originally allocated dispatch numbers in the audit registry.
-5. **Never Consumes Serial Numbers on Failed Jobs**:
-   Serial number reservation and document rendering are executed within an atomic transaction. If rendering fails, the reservation is cleanly rolled back with zero consumed numbers and no serial number gaps.
-
----
-
-## 🧪 Testing & Verification
-
-The reproducible offline check is:
-
-```bash
-make test
+```powershell
+cd web
+copy .env.example .env          # VITE_GOOGLE_CLIENT_ID
+npm install
+npm run dev
 ```
 
-It compiles the backend and runs the locked frontend build. It does not require
-network access or external AI credentials. For the full Python test suite (when
-the development dependencies are installed), run:
+Open http://localhost:5173. Demo accounts for local testing are listed in [docs/DEMO_ACCOUNTS.md](docs/DEMO_ACCOUNTS.md).
 
-Run the comprehensive test suite in PowerShell (foreground, isolated SQLite test DB):
+## Tests
 
 ```powershell
 python -m pytest -q --timeout=300 -p no:cacheprovider
+cd web; npm run build
 ```
 
-All tests execute strictly against an isolated database; `data/clubdocs.db` remains pristine and untouched.
+Tests use their own temporary database and storage folder; your local data is never touched.
+Close the local backend while the tests run, since the suite checks that the dev database stays unchanged.
 
----
+## Deploy
 
-## 📦 How to Share Your Project
+Free setup on Vercel (website), Render (backend) and Supabase (database and files):
+see **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
-To generate a clean, safe distribution zip that strictly excludes all secrets (`.env`), virtual environments (`.venv`), databases (`data/*.db*`), storage files, sample forms, and large dependencies (`node_modules`), run:
+## Roles
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/make_share_zip.ps1
+| Role | Can |
+|---|---|
+| Platform admin | Everything, in every club |
+| Owner | Everything in the club, including ownership and deleting the club |
+| Admin | Members, invites, letterhead, numbering, venues; approve documents |
+| Editor | Create and edit templates and documents; send documents for review |
+| Viewer | View documents |
+
+## Ground rules the app follows
+
+- It does not invent official details (dates, amounts, venues, signatories). Anything missing is asked for or left blank to fill in.
+- AI-written text is marked for review before it goes into an official template.
+- Reference numbers are reserved atomically, and changing a numbering format only affects new documents.
+
+## Project layout
+
+```
+server/      FastAPI app (api/, core/, models/), Alembic migrations, admin scripts
+docgen/      Document engine: extraction, rendering, numbering, letterhead
+web/         React website
+templates/   Built-in Word templates and their schemas
+assets/      Fonts, college crest
+tests/       pytest suite
+scripts/     Build and developer tools
+docs/        Guides
 ```
 
-This generates `clubdocs_share.zip` in the root directory (typically under 10 MB) safe for public transfer and code reviews.
+## Guides
 
----
+- [Deployment](docs/DEPLOYMENT.md)
+- [User guide](docs/USER_GUIDE.md)
+- [Templates (editor and Word templates)](docs/TEMPLATES.md)
+- [AI setup](docs/AI_SETUP.md)
+- [Numbering rules](docs/NUMBERING_SPEC.md)
+- [Database schema](docs/DB_SCHEMA.md)
 
-## 🔑 Google Sign-In Setup
-
-SVNIT ClubDocs supports institutional "Sign in with Google", restricted exclusively to SVNIT email accounts (`@svnit.ac.in` and approved departmental sub-domains).
-
-### Required Environment Variables
-
-1. **Backend / API Service (Render / Docker / Local)**:
-   - `GOOGLE_CLIENT_ID`: Public OAuth 2.0 Client ID (e.g. `344292307873-ck6rrqp176c72qo5cnm8m9m86n0avj3g.apps.googleusercontent.com`).
-   - `ALLOWED_EMAIL_DOMAIN`: Institutional domain restriction (`svnit.ac.in`).
-
-2. **Frontend SPA (Vercel / Web build)**:
-   - `VITE_GOOGLE_CLIENT_ID`: The same public Google Client ID exposed to Vite.
-
-### Google Cloud Console Configuration
-- In Google Cloud Console under **APIs & Services > Credentials > OAuth 2.0 Client IDs**:
-  - Add `http://localhost:5173` and `http://localhost` to **Authorised JavaScript origins** for local development.
-  - Add your production Vercel deployment URL (e.g. `https://clubdocs.vercel.app` or custom domain `https://clubdocs.svnit.ac.in`) to **Authorised JavaScript origins**.
-- Note: The platform uses Google Identity Services token verification on the backend and does not require or use a client secret.
-
----
-
-## 📚 Documentation Links
-
-- [Template Editor & Design Studio Guide](docs/TEMPLATE_EDITOR_GUIDE.md)
-- [AI Setup & Gemini Configuration Guide](docs/AI_SETUP.md)
-- [Non-Technical Club Member User Guide](docs/USER_GUIDE.md)
-- [Official Numbering Specification](docs/NUMBERING_SPEC.md)
-- [Deployment Guide (Vercel + Supabase + Container)](docs/DEPLOYMENT.md)
-- [Known Issues & Troubleshooting](docs/KNOWN_ISSUES.md)
+To share the code safely as a zip (no secrets, databases or dependencies):
+`powershell -ExecutionPolicy Bypass -File scripts/make_share_zip.ps1`

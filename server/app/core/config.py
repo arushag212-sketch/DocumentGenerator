@@ -81,6 +81,8 @@ class Settings(BaseModel):
     # Google OAuth & Email Domain Policy
     GOOGLE_CLIENT_ID: str = ""
     ALLOWED_EMAIL_DOMAIN: str = ""
+    # Google-verified emails that become platform admins on sign-in (comma-separated env var)
+    PLATFORM_ADMIN_EMAILS: list[str] = []
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -144,6 +146,15 @@ class Settings(BaseModel):
 
         # Google OAuth Client ID
         self.GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+
+        self.PLATFORM_ADMIN_EMAILS = [
+            e.strip().lower() for e in os.environ.get("PLATFORM_ADMIN_EMAILS", "").split(",") if e.strip()
+        ]
+
+        # Allowed browser origins, comma-separated (e.g. the Vercel site). Replaces the local defaults.
+        cors_env = os.environ.get("CORS_ORIGINS", "").strip()
+        if cors_env:
+            self.CORS_ORIGINS = [o.strip().rstrip("/") for o in cors_env.split(",") if o.strip()]
 
 
 settings = Settings()

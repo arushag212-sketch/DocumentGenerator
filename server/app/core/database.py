@@ -17,15 +17,30 @@ if DATABASE_URL.startswith("sqlite:///"):
     sqlite_path = DATABASE_URL.replace("sqlite:///", "")
     Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
 
+# Hosting dashboards often hand out "postgres://", which SQLAlchemy no longer accepts
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
+
 connect_args = {}
+engine_kwargs: dict = {}
 if DATABASE_URL.startswith("sqlite"):
     # Wait for a writer (e.g. a batch rendering PDFs) instead of failing with "database is locked"
     connect_args = {"check_same_thread": False, "timeout": 30}
+else:
+    # Hosted Postgres (e.g. Supabase's pooler) closes idle connections and caps how many
+    # a free project may hold, so check each connection before use and keep the pool small.
+    engine_kwargs = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": int(os.environ.get("DB_POOL_SIZE", "5")),
+        "max_overflow": int(os.environ.get("DB_MAX_OVERFLOW", "5")),
+    }
 
 engine = create_engine(
     DATABASE_URL,
     connect_args=connect_args,
     echo=os.environ.get("SQL_ECHO", "false").lower() in ("true", "1"),
+    **engine_kwargs,
 )
 
 # Enable foreign keys and WAL mode for SQLite
@@ -39,6 +54,12 @@ if DATABASE_URL.startswith("sqlite"):
         cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Mirror saved template/document/logo files to remote storage after each commit (no-op on local
+# storage). Registered on the Session class so every process and test-rebound factory gets it.
+from server.app.core.storage import register_persistence_hooks  # noqa: E402
+
+register_persistence_hooks(Session)
 
 
 class Base(DeclarativeBase):

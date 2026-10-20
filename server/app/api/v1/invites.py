@@ -30,9 +30,9 @@ def get_invite_preview(code: str, request: Request, db: Session = Depends(get_db
     client_ip = request.client.host if request and request.client else "127.0.0.1"
     clean_code = code.strip()
 
-    # Rate limiting: 10 per minute per IP and per code
-    check_rate_limit(f"invite_preview:ip:{client_ip}", max_requests=10, window_seconds=60, db=db)
-    check_rate_limit(f"invite_preview:code:{clean_code}", max_requests=10, window_seconds=60, db=db)
+    # Rate limiting: 60 per minute per IP and per code (a whole campus can share one IP)
+    check_rate_limit(f"invite_preview:ip:{client_ip}", max_requests=60, window_seconds=60, db=db)
+    check_rate_limit(f"invite_preview:code:{clean_code}", max_requests=60, window_seconds=60, db=db)
 
     target_hash = hashlib.sha256(clean_code.encode("utf-8")).hexdigest()
     invite = (
@@ -108,9 +108,9 @@ def accept_invite(
     client_ip = request.client.host if request and request.client else "127.0.0.1"
     clean_code = code.strip()
 
-    # Rate limiting: 10 per minute per IP and per code
-    check_rate_limit(f"invite_accept:ip:{client_ip}", max_requests=10, window_seconds=60, db=db)
-    check_rate_limit(f"invite_accept:code:{clean_code}", max_requests=10, window_seconds=60, db=db)
+    # Rate limiting: 60 per minute per IP and per code (a whole campus can share one IP)
+    check_rate_limit(f"invite_accept:ip:{client_ip}", max_requests=60, window_seconds=60, db=db)
+    check_rate_limit(f"invite_accept:code:{clean_code}", max_requests=60, window_seconds=60, db=db)
 
     target_hash = hashlib.sha256(clean_code.encode("utf-8")).hexdigest()
     invite = (

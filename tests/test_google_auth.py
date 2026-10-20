@@ -311,6 +311,24 @@ def test_google_auth_idempotent_and_existing_user_linking(client: TestClient, mo
     db.refresh(existing_user)
     assert existing_user.google_sub == link_sub
 
+    # A different Google identity for an already-linked address is refused
+    monkeypatch.setattr(
+        google.oauth2.id_token,
+        "verify_oauth2_token",
+        lambda credential, req, audience, clock_skew_in_seconds: {
+            "iss": "https://accounts.google.com",
+            "email_verified": True,
+            "email": link_email,
+            "sub": f"sub_other_{uuid.uuid4().hex[:6]}",
+            "name": "Someone Else",
+        },
+    )
+    res_other = client.post("/api/v1/auth/google", json={"credential": "mock4"})
+    assert res_other.status_code == 403
+    assert res_other.json()["detail"]["code"] == "GOOGLE_ACCOUNT_MISMATCH"
+    db.refresh(existing_user)
+    assert existing_user.google_sub == link_sub
+
 
 def test_google_auth_with_invite_code(client: TestClient, monkeypatch, db: Session, test_club_and_invite):
     """First Google sign-in with invite_code creates membership with assigned role."""
@@ -427,3 +445,26 @@ def test_forgot_password_does_not_send_to_google_only_or_non_svnit(client: TestC
     res2 = client.post("/api/v1/auth/forgot-password", json={"email": "nonexistent@gmail.com"})
     assert res2.status_code == 200
     assert "password reset instructions have been sent" in res2.json()["message"]
+
+
+def test_platform_admin_emails_grants_admin_on_google_sign_in(client: TestClient, monkeypatch, db: Session):
+    monkeypatch.setattr(settings, "ALLOWED_EMAIL_DOMAIN", "svnit.ac.in")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "test-google-client-id")
+    admin_email = f"admin_{uuid.uuid4().hex[:6]}@svnit.ac.in"
+    monkeypatch.setattr(settings, "PLATFORM_ADMIN_EMAILS", [admin_email])
+
+    import google.oauth2.id_token
+    monkeypatch.setattr(
+        google.oauth2.id_token,
+        "verify_oauth2_token",
+        lambda credential, req, audience, clock_skew_in_seconds: {
+            "iss": "https://accounts.google.com",
+            "email_verified": True,
+            "email": admin_email,
+            "sub": f"sub_{uuid.uuid4().hex[:10]}",
+            "name": "First Admin",
+        },
+    )
+    res = client.post("/api/v1/auth/google", json={"credential": "mock"})
+    assert res.status_code == 200
+    assert res.json()["user"]["is_platform_admin"] is True

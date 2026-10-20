@@ -20,6 +20,7 @@ Checklist:
 
 from __future__ import annotations
 
+import tempfile
 import os
 
 import io
@@ -574,7 +575,7 @@ def test_w4b_sponsorship_request_letter_end_to_end(client, auth_setup):
     pdf_bytes = pdf_res.content
 
     # Save artifact for evidence
-    evidence_dir = Path("docs/evidence")
+    evidence_dir = Path(tempfile.gettempdir()) / "clubdocs_test_evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
     pdf_evidence_path = evidence_dir / "w4b_sponsorship_request_letter.pdf"
     pdf_evidence_path.write_bytes(pdf_bytes)

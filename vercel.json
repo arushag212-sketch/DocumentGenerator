@@ -7,15 +7,15 @@
   "rewrites": [
     {
       "source": "/api/:match*",
-      "destination": "https://api.clubdocs.svnit.ac.in/api/:match*"
+      "destination": "https://clubdocs-api.onrender.com/api/:match*"
     },
     {
       "source": "/health/:match*",
-      "destination": "https://api.clubdocs.svnit.ac.in/health/:match*"
+      "destination": "https://clubdocs-api.onrender.com/health/:match*"
     },
     {
       "source": "/health",
-      "destination": "https://api.clubdocs.svnit.ac.in/health"
+      "destination": "https://clubdocs-api.onrender.com/health"
     },
     {
       "source": "/(.*)",

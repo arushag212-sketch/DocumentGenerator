@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -20,6 +21,10 @@ from docgen.config import ClubConfig, load_config
 from docgen.functions import get_function
 from docgen.models import EventRecord
 from docgen.schema import TemplateSchema, load_schema
+
+# Each LibreOffice run needs ~200 MB; cap how many run at once in this process so a burst of
+# previews or a batch cannot exhaust a small server's memory (set PDF_CONVERT_SLOTS=1 on 512 MB).
+_PDF_SLOTS = threading.BoundedSemaphore(max(1, int(os.environ.get("PDF_CONVERT_SLOTS", "2"))))
 
 BLANK_LINE: str = "____________________"
 
@@ -837,7 +842,7 @@ class Renderer:
         soffice = self._find_soffice()
         if soffice:
             try:
-                with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as user_dir:
+                with _PDF_SLOTS, tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as user_dir:
                     user_url = Path(user_dir).as_uri()
                     env_flag = f"-env:UserInstallation={user_url}"
                     result = subprocess.run(

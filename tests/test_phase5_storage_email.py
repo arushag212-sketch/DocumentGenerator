@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from server.app.core.email import ConsoleEmailSender, SMTPEmailSender, get_email_sender, set_email_sender
-from server.app.core.storage import LocalDiskStorage, S3Storage, get_storage, set_storage
+from server.app.core.storage import LocalDiskStorage, S3Storage, SyncedDiskStorage, get_storage, set_storage
 
 
 def test_console_email_sender():
@@ -110,7 +110,9 @@ def test_storage_factory_env(monkeypatch, tmp_path):
     monkeypatch.setenv("STORAGE_BACKEND", "s3")
     monkeypatch.setenv("S3_BUCKET", "test-bucket")
     s_s3 = get_storage()
-    assert isinstance(s_s3, S3Storage)
+    # S3 mirrors a local working copy, because rendering needs files on disk
+    assert isinstance(s_s3, SyncedDiskStorage)
+    assert isinstance(s_s3.remote, S3Storage)
     set_storage(None)
 
 

@@ -19,11 +19,13 @@ import server.app.models  # noqa: F401
 target_metadata = Base.metadata
 
 import os
-env_url = os.environ.get("DATABASE_URL")
+# Read the variable now (callers such as the migration tests change it after import). Hosts often
+# give "postgres://", which SQLAlchemy rejects, and ConfigParser treats "%" as interpolation.
+env_url = os.environ.get("DATABASE_URL") or (None if config.get_main_option("sqlalchemy.url") else DATABASE_URL)
 if env_url:
-    config.set_main_option("sqlalchemy.url", env_url)
-elif not config.get_main_option("sqlalchemy.url") and DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    if env_url.startswith("postgres://"):
+        env_url = "postgresql://" + env_url[len("postgres://"):]
+    config.set_main_option("sqlalchemy.url", env_url.replace("%", "%%"))
 
 
 # other values from the config, defined by the needs of env.py,

@@ -27,6 +27,7 @@ from server.app.core.input_validation import (
     validate_input_fields,
 )
 from server.app.core.permissions import ClubContext, Role, require_club_access
+from server.app.core.rate_limit import check_rate_limit
 from server.app.core.scoped_repo import ScopedRepository
 from server.app.models import Club, Document, Event, NumberingSeries, Person, RoleHeld, Template, TemplateVersion, Venue
 
@@ -144,7 +145,7 @@ def _clean_jargon(text: str) -> str:
     ]
     cleaned = text
     for old, new in replacements:
-        cleaned = re.sub(re.escape(old), new, cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(rf"{re.escape(old)}", new, cleaned, flags=re.IGNORECASE)
     return cleaned
 
 
@@ -168,6 +169,25 @@ def _get_suggested_ref_no(
         ay = club.academic_year_default or "2026-27"
         ref_no = f"{club.short_name or club.slug.upper()}/{compute_short_year(ay)}/{series_key}/001"
     return f"{ref_no} will be used"
+
+
+def _page_images(club_id: str, doc_id: str, version: Any, version_no: int) -> list[str]:
+    """Page preview URLs for a generated document (one per PDF page)."""
+    page_count = 1
+    if version and version.pdf_key:
+        try:
+            import pymupdf
+            from server.app.core.storage import require_local_storage
+            pdf_p = require_local_storage().local_path(version.pdf_key)
+            if pdf_p.exists():
+                with pymupdf.open(str(pdf_p)) as pdoc:
+                    page_count = max(1, len(pdoc))
+        except Exception:
+            page_count = 1
+    return [
+        f"/api/v1/clubs/{club_id}/documents/{doc_id}/pages/{p}?v={version_no}"
+        for p in range(1, page_count + 1)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -723,22 +743,7 @@ def create_documents_endpoint(
         latest_ver = workflow.latest_version(db, doc_record) if doc_record else None
         ver_no = latest_ver.version_no if latest_ver else doc_info.get("version_no", 1)
         ef = workflow.editable_fields(db, doc_record) if doc_record else []
-        page_count = 1
-        if latest_ver and latest_ver.pdf_key:
-            try:
-                import pymupdf
-                from server.app.core.storage import require_local_storage
-                pdf_p = require_local_storage().local_path(latest_ver.pdf_key)
-                if pdf_p.exists():
-                    pdoc = pymupdf.open(str(pdf_p))
-                    page_count = len(pdoc)
-                    pdoc.close()
-            except Exception:
-                page_count = 1
-        page_images = [
-            f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/pages/{p}?v={ver_no}"
-            for p in range(1, page_count + 1)
-        ]
+        page_images = _page_images(ctx.club.id, doc_id, latest_ver, ver_no)
         docs_out.append({
             "id": doc_id,
             "template_slug": doc_info.get("template_slug", "document"),
@@ -831,22 +836,7 @@ def apply_all_endpoint(
         db.refresh(doc)
         latest_ver = workflow.latest_version(db, doc)
         ef = workflow.editable_fields(db, doc)
-        page_count = 1
-        if latest_ver and latest_ver.pdf_key:
-            try:
-                import pymupdf
-                from server.app.core.storage import require_local_storage
-                pdf_p = require_local_storage().local_path(latest_ver.pdf_key)
-                if pdf_p.exists():
-                    pdoc = pymupdf.open(str(pdf_p))
-                    page_count = len(pdoc)
-                    pdoc.close()
-            except Exception:
-                page_count = 1
-        page_images = [
-            f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/pages/{p}?v={latest_ver.version_no}"
-            for p in range(1, page_count + 1)
-        ]
+        page_images = _page_images(ctx.club.id, doc.id, latest_ver, latest_ver.version_no)
         tmpl = db.query(Template).filter(Template.id == doc.template_id).first()
         updated_docs.append({
             "id": doc.id,
@@ -899,27 +889,16 @@ def add_document_endpoint(
         db=db,
     )
 
-    created_info = batch_result.get("documents", [])[0]
-    doc_id = created_info.get("id") or created_info.get("document_id")
+    created = batch_result.get("documents") or []
+    if not created:
+        raise HTTPException(status_code=422, detail="This document could not be created. Please try another template.")
+    doc_id = created[0].get("id") or created[0].get("document_id")
     doc = doc_repo.get(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="The new document could not be found.")
     latest_ver = workflow.latest_version(db, doc)
     ef = workflow.editable_fields(db, doc)
-    page_count = 1
-    if latest_ver and latest_ver.pdf_key:
-        try:
-            import pymupdf
-            from server.app.core.storage import require_local_storage
-            pdf_p = require_local_storage().local_path(latest_ver.pdf_key)
-            if pdf_p.exists():
-                pdoc = pymupdf.open(str(pdf_p))
-                page_count = len(pdoc)
-                pdoc.close()
-        except Exception:
-            page_count = 1
-    page_images = [
-        f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/pages/{p}?v={latest_ver.version_no}"
-        for p in range(1, page_count + 1)
-    ]
+    page_images = _page_images(ctx.club.id, doc.id, latest_ver, latest_ver.version_no)
     tmpl = db.query(Template).filter(Template.id == doc.template_id).first()
     return {
         "document": {
@@ -947,8 +926,9 @@ def ai_instruct_endpoint(
     import json
     from docgen.llm import get_llm_client
 
+    check_rate_limit(f"ai_user:{ctx.user.id}", max_requests=10, window_seconds=60, db=db)
     llm = get_llm_client()
-    fields_summary = {f["key"]: f.get("label", f["key"]) for f in payload.available_fields}
+    fields_summary = {f["key"]: f.get("label", f["key"]) for f in payload.available_fields if f.get("key")}
     schema = {
         "type": "object",
         "description": "JSON dictionary of field keys and their updated values",
@@ -966,6 +946,8 @@ def ai_instruct_endpoint(
         changes = llm.generate_json(prompt, schema)
         if not isinstance(changes, dict):
             changes = {}
+        # The model may name fields that do not exist; only offer real ones
+        changes = {k: v for k, v in changes.items() if k in fields_summary}
     except Exception:
         raise HTTPException(
             status_code=503,

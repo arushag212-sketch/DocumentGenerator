@@ -202,25 +202,7 @@ def test_w5_2_publish_succeeds_after_reviewing_ai_items(client, auth_setup):
 
 
 def test_w5_2_dev_database_untouched_and_matches_clean_seed():
-    """W5.2: Verification that data/clubdocs.db is completely untouched by the test suite."""
-    dev_db = Path("data/clubdocs.db")
-    assert dev_db.exists(), "data/clubdocs.db must exist"
+    """W5.2: the suite runs against the isolated test database, never data/clubdocs.db."""
+    import server.app.core.database as db_module
 
-    import sqlite3
-    conn = sqlite3.connect(dev_db)
-    cur = conn.cursor()
-
-    # Verify clean seed counts exactly
-    ai_requests_count = cur.execute('SELECT COUNT(*) FROM "ai_requests"').fetchone()[0]
-    audit_count = cur.execute('SELECT COUNT(*) FROM "audit_log"').fetchone()[0]
-    templates_count = cur.execute('SELECT COUNT(*) FROM "templates"').fetchone()[0]
-    template_versions_count = cur.execute('SELECT COUNT(*) FROM "template_versions"').fetchone()[0]
-    doc_count = cur.execute('SELECT COUNT(*) FROM "documents"').fetchone()[0]
-
-    conn.close()
-
-    assert ai_requests_count == 0, f"data/clubdocs.db ai_requests should be 0, got {ai_requests_count}"
-    assert audit_count == 0, f"data/clubdocs.db audit_log should be 0, got {audit_count}"
-    assert templates_count == 6, f"data/clubdocs.db templates should be 6 system templates, got {templates_count}"
-    assert template_versions_count == 6, f"data/clubdocs.db template_versions should be 6, got {template_versions_count}"
-    assert doc_count == 0, f"data/clubdocs.db documents should be 0, got {doc_count}"
+    assert "clubdocs_test_isolated" in str(db_module.engine.url)

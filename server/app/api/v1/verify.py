@@ -36,7 +36,7 @@ class VerificationOut(BaseModel):
 
 def _lookup(db: Session, code: str, request: Request) -> tuple[DocumentReview, Document, Club]:
     client = request.client.host if request.client else "unknown"
-    check_rate_limit(f"verify:{client}", max_requests=60, window_seconds=600)
+    check_rate_limit(f"verify:{client}", max_requests=60, window_seconds=600, db=db)
     review = (
         db.query(DocumentReview)
         .filter(DocumentReview.verification_code == code.strip().upper(), DocumentReview.action == "approved")

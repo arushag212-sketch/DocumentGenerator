@@ -1129,6 +1129,14 @@ def update_member_role(
                 detail={"code": "FORBIDDEN", "message": "Only the club owner can assign or modify the owner role"},
             )
 
+    if membership.role == Role.OWNER and payload.role != Role.OWNER:
+        other_owners = membership_repo.count(Membership.role == Role.OWNER, Membership.user_id != user_id)
+        if other_owners == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "SOLE_OWNER", "message": "A club needs at least one owner. Make someone else owner first."},
+            )
+
     old_role = membership.role
     membership_repo.update(membership.id, role=payload.role)
 
@@ -1788,7 +1796,8 @@ async def upload_club_logo(
     from server.app.models import Asset, Letterhead
     from server.app.core.template_compiler import normalize_logo_image
 
-    content = await file.read()
+    # Read at most one byte past the limit so a huge upload cannot exhaust memory
+    content = await file.read(2 * 1024 * 1024 + 1)
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 

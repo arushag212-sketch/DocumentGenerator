@@ -1,0 +1,22 @@
+# Keep the image small and free of secrets and local data
+.git
+.venv
+venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+.pytest_cache
+web/dist
+data
+storage
+outputs
+sample docs
+docs
+tests
+scratch_*.py
+*.log
+*.zip
+.env
+**/.env
+.claude
+config/club_config.yaml

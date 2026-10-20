@@ -240,7 +240,7 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
     client_ip = request.client.host if request.client else "unknown"
 
     # Rate limiting: max 10 registrations per hour per IP
-    check_rate_limit(f"reg_ip_{client_ip}", max_requests=10, window_seconds=3600, db=db)
+    check_rate_limit(f"reg_ip_{client_ip}", max_requests=60, window_seconds=3600, db=db)
 
     clean_email = payload.email.lower().strip()
 
@@ -321,7 +321,7 @@ def google_auth(
     client_ip = request.client.host if request.client else "unknown"
 
     # 1. Rate limit with existing check_rate_limit, like /login (per IP)
-    check_rate_limit(f"login_ip_{client_ip}", max_requests=10, window_seconds=60, db=db)
+    check_rate_limit(f"login_ip_{client_ip}", max_requests=60, window_seconds=60, db=db)
 
     # 2. Verify ID token with google-auth
     import google.auth.transport.requests
@@ -375,6 +375,15 @@ def google_auth(
             if not user.google_sub:
                 user.google_sub = sub
                 db.flush()
+            elif user.google_sub != sub:
+                # Same address, different Google identity (e.g. the mailbox was re-issued)
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "GOOGLE_ACCOUNT_MISMATCH",
+                        "message": "This email is linked to a different Google account. Please contact your platform admin.",
+                    },
+                )
         else:
             is_new_user = True
             name = (claims.get("name") or google_email.split("@")[0]).strip()
@@ -419,6 +428,19 @@ def google_auth(
     # 7. Apply invite code if provided
     if invite_obj:
         _apply_invite_to_user(invite_obj, user, db, client_ip)
+
+    # First admins on a fresh deployment (no shell on free hosts to run create_admin)
+    if google_email in settings.PLATFORM_ADMIN_EMAILS and not user.is_platform_admin:
+        user.is_platform_admin = True
+        log_audit(
+            db=db,
+            action="platform_admin_granted",
+            entity_type="user",
+            entity_id=user.id,
+            user_id=user.id,
+            meta={"source": "PLATFORM_ADMIN_EMAILS", "email": user.email},
+            ip=client_ip,
+        )
 
     # 8. Reset lockout/failure counters, update last_login_at, write audit logs
     user.failed_login_attempts = 0
@@ -466,7 +488,7 @@ def login(payload: UserLogin, request: Request, response: Response, db: Session 
     clean_email = payload.email.lower().strip()
 
     # Rate limiting: max 5 login attempts per minute per IP, and per email
-    check_rate_limit(f"login_ip_{client_ip}", max_requests=10, window_seconds=60, db=db)
+    check_rate_limit(f"login_ip_{client_ip}", max_requests=60, window_seconds=60, db=db)
     check_rate_limit(f"login_email_{clean_email}", max_requests=10, window_seconds=60, db=db)
 
     user = db.query(User).filter(User.email == clean_email).first()

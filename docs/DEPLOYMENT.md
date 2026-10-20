@@ -1,144 +1,109 @@
-# SVNIT ClubDocs Production Deployment Guide
+# Deploying ClubDocs for free
 
-This document describes the operational architecture, deployment models, configuration parameters, and disaster recovery procedures for SVNIT ClubDocs.
+| Part | Service | Free plan limits to know |
+|---|---|---|
+| Website | **Vercel** | Plenty for this app |
+| Backend (Python + LibreOffice) | **Render** (Docker, free) | 512 MB memory; sleeps after ~15 min idle (first visit then waits ~1 min); disk is wiped on restart |
+| Database | **Supabase** Postgres | 500 MB; pauses after ~7 days without activity (click **Restore** in Supabase) |
+| Files (logos, templates, documents) | **Supabase Storage** | 1 GB |
+| Sign-in | **Google** | Free |
+| AI | **Gemini** free tier | Limited requests per minute and day |
 
----
+Free plans change; check the limits when you sign up.
 
-## 1. Architecture Overview
+How it fits together:
 
-ClubDocs supports two production deployment topologies:
-
-1. **Self-Hosted Single VM (Recommended for Campus Intranet)**:
-   - Orchestrated with Docker Compose.
-   - Runs the multi-stage single-URL ClubDocs container (FastAPI + Vite-built React SPA + LibreOffice + Indian Fonts) alongside PostgreSQL 16 and Redis 7.
-2. **Serverless / Managed Cloud**:
-   - Frontend hosted on Vercel (`vercel.json` rewrites).
-   - Backend API hosted on Render or Fly.io with Docker runtime (for LibreOffice headless PDF generation).
-   - Database on Supabase Managed PostgreSQL.
-   - Binary asset storage on AWS S3 or Cloudflare R2.
-
----
-
-## 2. Deployment Model A: Self-Hosted Single VM (Docker Compose)
-
-### Prerequisites
-- Ubuntu 22.04 LTS or 24.04 LTS (minimum 2 vCPUs, 4 GB RAM, 20 GB SSD).
-- Docker Engine (v24+) and Docker Compose (v2.20+).
-- Inbound ports `80` and `443` open.
-
-### Setup Instructions
-
-1. **Clone the repository on the target server:**
-   ```bash
-   git clone https://github.com/svnit-clubdocs/clubdocs.git /opt/clubdocs
-   cd /opt/clubdocs
-   ```
-
-2. **Configure production environment:**
-   ```bash
-   cp .env.example .env
-   chmod 600 .env
-   # Edit .env to set your secure secret keys, domain name, and GEMINI_API_KEY
-   ```
-
-3. **Build and launch the stack:**
-   ```bash
-   docker compose build --pull
-   docker compose up -d
-   ```
-
-4. **Verify container health:**
-   ```bash
-   docker compose ps
-   docker compose logs -f app
-   curl -f http://localhost:8000/health/readiness
-   ```
-
-5. **Configure reverse proxy (Nginx / Caddy):**
-   Point your domain (e.g. `clubdocs.svnit.ac.in`) with HTTPS certificates to `http://127.0.0.1:8000`.
-
----
-
-## 3. Deployment Model B: Managed Multi-Cloud (Vercel + Render + Supabase)
-
-### Backend (Render / Fly.io)
-1. Deploy using the repository's `Dockerfile`.
-2. Set Environment Variables in the provider dashboard:
-   - `DATABASE_URL`: Your Supabase connection string (`postgresql://postgres.[project-ref]:[db-password]@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require`).
-   - `STORAGE_BACKEND`: `s3`
-   - `S3_BUCKET`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`.
-   - `GEMINI_API_KEY`: API key for Gemini template drafting and extraction.
-   - `SECRET_KEY`: High-entropy 64-character random string.
-   - `APP_ENV`: `production`
-
-### Frontend (Vercel)
-1. Connect the repository to Vercel.
-2. Set Framework Preset to **Vite**.
-3. Vercel automatically detects `vercel.json` and proxies `/api/*` and `/health/*` requests to your managed backend URL.
-
----
-
-## 4. Environment Variables Reference
-
-| Variable | Required | Default | Description |
-| :--- | :---: | :--- | :--- |
-| `ENVIRONMENT` / `APP_ENV` | Yes | `production` | Environment mode (`development`, `test`, `production`). In production, non-ephemeral keys are strictly required. |
-| `JWT_SECRET_KEY` / `SECRET_KEY` | Yes | - | Random 64-character hex key for HMAC signing of JWT session tokens and cryptographic hashes. |
-| `FIELD_ENCRYPTION_KEY` / `ENCRYPTION_KEY` | Yes | - | 32-byte URL-safe base64 string for AES-256-GCM / Fernet encryption of sensitive PII (e.g. phone numbers). |
-| `DATABASE_URL` | Yes | `sqlite:///data/clubdocs.db` | PostgreSQL (`postgresql://user:pass@host:5432/dbname`) or SQLite connection string. |
-| `HOST` | No | `127.0.0.1` | Network interface host IP for backend server binding. |
-| `PORT` | No | `8000` | Port number for HTTP service listener. |
-| `CORS_ORIGINS` | No | `http://localhost:3000,http://localhost:5173,http://127.0.0.1:8000` | Comma-delimited list of permitted CORS origins. |
-| `GEMINI_API_KEY` | Yes | - | Google Gemini API key for AI document drafting and unstructured event extraction. |
-| `GEMINI_MODEL` | No | Auto-discovered | Explicit Gemini model override (e.g. `gemini-3.8-flash`). Auto-discovers newest flash candidate if omitted. |
-| `STORAGE_BACKEND` | No | `local` | Binary document storage provider: `local` or `s3`. |
-| `STORAGE_LOCAL_ROOT`| No | `storage` | Local directory root when `STORAGE_BACKEND=local`. |
-| `S3_BUCKET` | Cond. | - | Bucket name when `STORAGE_BACKEND=s3`. |
-| `S3_ENDPOINT_URL` | No | - | S3 endpoint override for MinIO, Cloudflare R2, or Supabase Storage. |
-| `S3_ACCESS_KEY` | Cond. | - | Access key for S3 compatible object storage. |
-| `S3_SECRET_KEY` | Cond. | - | Secret key for S3 compatible object storage. |
-| `GOOGLE_CLIENT_ID` | Yes | - | Google OAuth Client ID for institutional sign-in. Set on Render/backend. |
-| `ALLOWED_EMAIL_DOMAIN` | Yes | `svnit.ac.in` | Institutional domain restriction. Set on Render/backend (`svnit.ac.in`). |
-| `VITE_GOOGLE_CLIENT_ID` | Yes | - | Google OAuth Client ID for frontend GIS button. Set in Vercel project settings. |
-| `SMTP_HOST` | No | - | SMTP hostname for outgoing emails (activation, password reset, invitations). If unset, defaults to Console fallback. |
-| `SMTP_PORT` | No | `587` | SMTP port (587 for STARTTLS, 465 for TLS). |
-| `SMTP_USER` | No | - | SMTP authentication username. |
-| `SMTP_PASSWORD` | No | - | SMTP authentication password. |
-| `FROM_EMAIL` | No | `noreply@svnit.ac.in` | Sender email address for system emails. |
-
----
-
-## 5. Backup and Disaster Recovery
-
-### PostgreSQL Backup & Restore
-To perform an atomic, consistent database backup:
-```bash
-# Backup
-docker compose exec -T postgres pg_dump -U clubdocs_user -d clubdocs -F c -b -v -f /var/lib/postgresql/data/backup_$(date +%Y%m%d_%H%M%S).dump
-
-# Restore
-docker compose exec -T postgres pg_restore -U clubdocs_user -d clubdocs --clean --if-exists /var/lib/postgresql/data/backup_20261019_000000.dump
+```
+Browser ──► Vercel (website, and /api is forwarded) ──► Render (backend) ──► Supabase (database + files)
+                                                              └──► Gemini (AI)
 ```
 
-### SQLite Backup & Restore (Local / Dev)
-To safely backup an active SQLite database without lock contention:
+Do the steps in this order. Keep every key and password in a password manager, never in git.
+
+---
+
+## 1. Supabase: database and file storage
+
+1. Create a project at supabase.com. Choose a strong database password and the **Mumbai (ap-south-1)** region.
+2. **Database link:** click **Connect**, copy the **Session pooler** connection string, put your password in it,
+   and add `?sslmode=require` at the end. This is `DATABASE_URL`.
+   Do not create any tables: the backend creates and updates them itself on every start.
+3. **File bucket:** **Storage → New bucket**, name it `clubdocs`, keep it **private**.
+4. **Storage keys:** **Project Settings → Storage → S3 Connection**:
+   - copy the **Endpoint** (`https://PROJECT.supabase.co/storage/v1/s3`) → `S3_ENDPOINT_URL`
+   - copy the **Region** → `AWS_REGION`
+   - **New access key** → copy the **Access key ID** → `S3_ACCESS_KEY` and **Secret access key** → `S3_SECRET_KEY`
+
+## 2. Render: backend
+
+1. At render.com sign in with GitHub and choose **New → Blueprint**, then pick this repository.
+   Render reads `render.yaml` and creates the `clubdocs-api` service.
+2. Fill in the values it asks for:
+
+   | Setting | Value |
+   |---|---|
+   | `DATABASE_URL` | from Supabase step 2 |
+   | `S3_ENDPOINT_URL`, `AWS_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | from Supabase step 4 |
+   | `FIELD_ENCRYPTION_KEY` | run `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` once. **Never change it** later, or stored sensitive fields can no longer be read |
+   | `GOOGLE_CLIENT_ID` | your Google OAuth client ID |
+   | `PLATFORM_ADMIN_EMAILS` | your own SVNIT email; it becomes platform admin when you sign in with Google |
+   | `CORS_ORIGINS` | your Vercel address, e.g. `https://clubdocs.vercel.app` |
+   | `APP_BASE_URL` | the same Vercel address (used in password-reset emails) |
+   | `GEMINI_API_KEY` | from aistudio.google.com (optional; without it AI falls back to simple rules) |
+
+   `JWT_SECRET_KEY` is generated by Render. The memory settings (`WEB_CONCURRENCY=1`, `PDF_CONVERT_SLOTS=1`)
+   are already in `render.yaml`.
+3. Deploy. The first build takes several minutes (it installs LibreOffice and fonts).
+4. Open `https://YOUR-SERVICE.onrender.com/health`. It should answer `"status": "healthy"`.
+   Note the exact address: if `clubdocs-api` was taken, Render adds a suffix.
+
+## 3. Vercel: website
+
+1. If the Render address is not `https://clubdocs-api.onrender.com`, replace it in the three
+   `destination` lines of `vercel.json` and push.
+2. At vercel.com import the repository. `vercel.json` already sets the build.
+3. Under **Settings → Environment Variables** add `VITE_GOOGLE_CLIENT_ID` (the same Google client ID), then redeploy.
+4. Open the Vercel address. The first visit after a quiet period shows *"Waking up the server…"* for up to a minute.
+
+## 4. Google Cloud: allow the new address
+
+1. **Google Auth Platform → Clients → ClubDocs Web → Authorised JavaScript origins**: add the Vercel address.
+2. **Branding**: home page `https://YOUR-SITE.vercel.app`, privacy policy `/privacy`, terms `/terms`,
+   authorised domain `YOUR-SITE.vercel.app`. Save.
+3. **Audience → Publish app** so every SVNIT student can sign in (not just test users).
+
+## 5. Email (optional)
+
+Without email settings, emails (password resets, sending documents) are only written to the Render log.
+To send real email, add on Render: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`.
+Brevo's free plan (about 300 emails a day) works; so does a Gmail account with an App Password.
+
+---
+
+## After deploying
+
+- Sign in with Google using the email in `PLATFORM_ADMIN_EMAILS`, then create the clubs (each with its logo).
+- Updates: push to GitHub; Render and Vercel redeploy by themselves. Database changes apply automatically on start.
+- **Backups:** the free Supabase plan has no automatic backups. Occasionally export the database
+  (**Database → Backups**, or `pg_dump`) and download the `clubdocs` bucket.
+
+## Troubleshooting
+
+| What you see | Likely cause |
+|---|---|
+| "Waking up the server…" for a minute | Normal on the free plan after inactivity |
+| Error on every page, Render log mentions the database | Supabase project paused: open Supabase and click **Restore** |
+| Google button missing | `VITE_GOOGLE_CLIENT_ID` not set on Vercel (redeploy after adding it) |
+| Google says the origin is not allowed | Vercel address missing from Authorised JavaScript origins |
+| "Please sign in with your SVNIT email" | Working as intended: only `@svnit.ac.in` addresses can sign in |
+| Logos or documents missing after a restart | Storage settings wrong: check `STORAGE_BACKEND=s3` and the four S3 values |
+| Render restarts with "out of memory" | Keep `WEB_CONCURRENCY=1` and `PDF_CONVERT_SLOTS=1`; very large batches may need a paid instance |
+| Very large batches time out | The Vercel forwarding has a time limit; generate smaller batches |
+
+## Running the production image locally
+
 ```bash
-# Backup using online sqlite3 backup API
-python -c "
-import sqlite3, shutil, datetime
-src = sqlite3.connect('data/clubdocs.db')
-ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-dst = sqlite3.connect(f'data/backup_clubdocs_{ts}.db')
-with dst:
-    src.backup(dst)
-src.close()
-dst.close()
-print(f'Backup created: data/backup_clubdocs_{ts}.db')
-"
+docker compose up --build
 ```
 
-### Document Storage Assets Backup
-Binary assets (generated DOCX, PDF, and club letterheads) stored on local disk should be backed up using `rsync` or tar archives:
-```bash
-tar -czvf storage_backup_$(date +%Y%m%d).tar.gz storage/
-```
+This starts the backend with a local PostgreSQL at `http://localhost:8000`.

@@ -143,3 +143,33 @@ def test_template_preview_orientation_and_dimensions():
                 assert w > h, f"Landscape image must be wider than tall: got w={w}, h={h}"
             else:
                 assert h > w, f"Portrait image must be taller than wide: got w={w}, h={h}"
+
+
+def test_page_background_is_written_once():
+    """_configure_page runs twice (init and after build); the DOCX must keep one <w:background>."""
+    from docx.oxml.ns import qn
+
+    editor_json = {
+        "type": "doc",
+        "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Tinted page"}]}],
+    }
+    design = {"orientation": "portrait", "pageBg": "#FFF8E7"}
+    docx_bytes, _schema, _report = TemplateCompiler.compile(
+        editor_json=editor_json,
+        fields=[],
+        template_meta={"id": "test_bg", "name": "Test bg", "category": "Test", "description": ""},
+        club_slug="acm",
+        letterhead_cfg={"banner_placeholder": True},
+        design_settings=design,
+    )
+    doc = docx.Document(io.BytesIO(docx_bytes))
+    assert len(doc.element.findall(qn("w:background"))) == 1
+
+
+def test_dummy_values_match_whole_words():
+    from server.app.core.template_compiler import _realistic_dummy_value
+
+    assert _realistic_dummy_value("candidate_name") == "Sample Candidate Name"
+    assert _realistic_dummy_value("student_count", "", "int") == 100
+    assert _realistic_dummy_value("event_date", "", "date") == "15/10/2026"
+    assert _realistic_dummy_value("venue") == "Central Lawn, SVNIT"

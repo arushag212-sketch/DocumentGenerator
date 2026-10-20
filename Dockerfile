@@ -12,6 +12,9 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci
 
 COPY web/ ./
+# Public Google client ID for the sign-in button (Render passes service env vars as build args)
+ARG VITE_GOOGLE_CLIENT_ID=""
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 RUN npm run build
 
 # --- Stage 2: Production Runtime ---
@@ -26,7 +29,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install LibreOffice (writer), true-type Indian/Devanagari fonts, curl, dumb-init
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-writer \
-    libreoffice-nogpu \
     fonts-dejavu-core \
     fonts-liberation \
     fonts-noto-core \
@@ -72,7 +74,7 @@ USER clubdocs
 
 # Container Healthcheck
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:8000/health/liveness || exit 1
+    CMD curl -f http://localhost:${PORT}/health/liveness || exit 1
 
 EXPOSE 8000
 

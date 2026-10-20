@@ -7,7 +7,7 @@ import getpass
 import sys
 from passlib.context import CryptContext
 
-from server.app.core.database import SessionLocal, Base, engine
+from server.app.core.database import SessionLocal
 from server.app.models import User
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
@@ -49,8 +49,7 @@ def create_platform_admin(email: str, password: str, name: str = "Platform Admin
 
 
 def main():
-    Base.metadata.create_all(bind=engine)
-
+    # Tables come from Alembic migrations (python -m server.scripts.migrate), never create_all
     parser = argparse.ArgumentParser(description="Create or update Platform Admin")
     parser.add_argument("--email", help="Admin email address")
     parser.add_argument("--password", help="Admin password")
@@ -87,27 +86,6 @@ def main():
                 sys.exit(1)
 
     create_platform_admin(email=email, password=password, name=name)
-
-    pw_hash = hash_password(password)
-
-    user = db.query(User).filter(User.email == email).first()
-    if user:
-        user.password_hash = pw_hash
-        user.name = name
-        user.is_platform_admin = True
-        print(f"[OK] Updated existing user '{email}' as platform admin with Argon2 password.")
-    else:
-        user = User(
-            email=email,
-            password_hash=pw_hash,
-            name=name,
-            is_platform_admin=True,
-        )
-        db.add(user)
-        print(f"[OK] Created new platform admin '{email}' with Argon2 password.")
-
-    db.commit()
-    db.close()
 
 
 if __name__ == "__main__":

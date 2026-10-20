@@ -12,13 +12,16 @@ from fastapi.staticfiles import StaticFiles
 from server.app.api.v1 import api_router
 from server.app.core.config import settings
 
+# The interactive API docs are for development; production does not advertise every endpoint
+_show_api_docs = settings.ENVIRONMENT in ("development", "test", "dev")
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.PROJECT_VERSION,
     description="Official SVNIT Surat Smart Document Generator & Approval Platform",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    docs_url="/docs" if _show_api_docs else None,
+    redoc_url="/redoc" if _show_api_docs else None,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json" if _show_api_docs else None,
 )
 
 # 1. CORS Configuration - Tightened to configured origins
@@ -89,9 +92,6 @@ class MultiDirStaticFiles(StaticFiles):
 
 app.mount("/assets", MultiDirStaticFiles([dist_assets, assets_dir]), name="assets")
 
-if web_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(web_dir)), name="static")
-
 
 # 4. Include API v1 Routers
 app.include_router(api_router, prefix=settings.API_V1_STR)
@@ -142,6 +142,11 @@ async def health_readiness():
 async def spa_fallback(full_path: str):
     if full_path.startswith("api/") or full_path.startswith("assets/"):
         raise HTTPException(status_code=404, detail="Not Found")
+    # Files from web/public (crest, fonts) are copied to the root of the build
+    if full_path and dist_dir.is_dir():
+        candidate = (dist_dir / full_path).resolve()
+        if candidate.is_file() and dist_dir.resolve() in candidate.parents:
+            return FileResponse(candidate)
     if (dist_dir / "index.html").exists():
         return FileResponse(dist_dir / "index.html")
     index_file = web_dir / "index.html"
