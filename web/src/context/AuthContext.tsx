@@ -12,6 +12,8 @@ interface AuthContextType {
   loginWithGoogle: (credential: string, inviteCode?: string) => Promise<User>;
   logout: () => Promise<void>;
   refreshClubs: () => Promise<void>;
+  /** Replace the signed-in user after a profile change */
+  updateUser: (u: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -104,6 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle,
         logout,
         refreshClubs,
+        updateUser: setUser,
       }}
     >
       {children}

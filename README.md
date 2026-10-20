@@ -76,14 +76,26 @@ see **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 ## Project layout
 
 ```
-server/      FastAPI app (api/, core/, models/), Alembic migrations, admin scripts
-docgen/      Document engine: extraction, rendering, numbering, letterhead
-web/         React website
-templates/   Built-in Word templates and their schemas
-assets/      Fonts, college crest
-tests/       pytest suite
-scripts/     Build and developer tools
-docs/        Guides
+server/                 FastAPI backend
+  app/api/v1/           HTTP routes (auth, clubs, documents, home, events, invites, verify)
+  app/core/             Business logic: security, storage, template compiler, AI helpers
+  app/models/ schemas/  Database models and request/response shapes
+  alembic/              Database migrations
+  scripts/              Admin tools: seed, migrate, create_admin, doctor, storage clean-up
+docgen/                 Document engine: extraction, rendering, numbering, letterhead
+web/src/                React website
+  pages/                One file per screen (landing, sign-in, dashboard, profile, help, ...)
+  components/           Pieces used by the pages, by feature:
+    layout/             App frame and sidebar
+    create/             "Create" flow (describe -> drafts -> results)
+    documents/ templates/ settings/ assistant/ onboarding/ auth/ common/ brand/
+    TemplateEditor/     The visual template editor
+  api/ context/ hooks/ utils/
+templates/              Built-in Word templates and their schemas
+assets/                 College crest, fonts, placeholders (see assets/README.md)
+tests/                  pytest suite
+scripts/                Build and developer tools
+docs/                   Guides
 ```
 
 ## Guides

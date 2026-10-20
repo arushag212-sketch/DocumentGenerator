@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Person, ClubPermissions } from '../types';
-import { api } from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import { Person, ClubPermissions } from '../../types';
+import { api } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import { Eye, EyeOff, Plus, Pencil, Trash2, X, Info, PenLine } from 'lucide-react';
 
 interface PeopleTabProps {

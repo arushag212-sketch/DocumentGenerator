@@ -15,9 +15,9 @@ import {
   Table2,
   X,
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api } from '../../api/client';
 import { BatchRowsPanel, BatchRows } from './BatchRowsPanel';
-import { HomeCreateResponse, HomeGenerateResponse } from '../types';
+import { HomeCreateResponse, HomeGenerateResponse } from '../../types';
 
 interface HomePageProps {
   clubId: string | number;

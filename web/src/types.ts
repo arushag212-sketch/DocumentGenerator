@@ -1,9 +1,13 @@
 export interface User {
   id: string | number;
   email: string;
-  full_name: string;
+  name: string;
   is_platform_admin: boolean;
-  is_active: boolean;
+  created_at?: string;
+  memberships?: { club_id: string; club_name: string; club_short?: string | null; role: string; position?: string | null; status: string }[];
+  /** How the account can sign in (shown on the profile page) */
+  has_password?: boolean;
+  uses_google?: boolean;
 }
 
 export interface Club {
@@ -29,15 +33,12 @@ export type RoleName = 'owner' | 'admin' | 'lead' | 'co_lead' | 'treasurer' | 'f
 export interface ClubMember {
   id: string | number;
   user_id: string | number;
-  club_id: string | number;
+  email: string;
+  name: string;
   role: RoleName;
-  title: string | null;
-  created_at: string;
-  user?: {
-    id: string | number;
-    email: string;
-    full_name: string;
-  };
+  position?: string | null;
+  status: string;
+  joined_at: string;
 }
 
 export interface Person {

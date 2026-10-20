@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { markLetterheadSeen } from './onboarding/GettingStarted';
-import { ClubPermissions, Venue, NumberingSeries } from '../types';
-import { api } from '../api/client';
+import { markLetterheadSeen } from '../onboarding/GettingStarted';
+import { ClubPermissions, Venue, NumberingSeries } from '../../types';
+import { api } from '../../api/client';
 import {
   Building,
   Hash,

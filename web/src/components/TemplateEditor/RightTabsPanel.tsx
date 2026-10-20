@@ -4,7 +4,7 @@ import { EditorErrorBoundary } from './EditorErrorBoundary';
 import { FieldsPanel, TemplateField } from './FieldsPanel';
 import { DesignPanel, DesignSettings } from './DesignPanel';
 import { ChecksPanel } from './ChecksPanel';
-import { EditorChatPanel } from '../EditorChatPanel';
+import { EditorChatPanel } from '../assistant/EditorChatPanel';
 
 export type RightTabType = 'chat' | 'fields' | 'design' | 'checks';
 

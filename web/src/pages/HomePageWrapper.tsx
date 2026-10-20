@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { HomePage } from '../components/HomePage';
-import { ResultPage } from '../components/ResultPage';
-import { RequireCreateAccess } from '../components/RequireCreateAccess';
+import { HomePage } from '../components/create/HomePage';
+import { ResultPage } from '../components/create/ResultPage';
+import { RequireCreateAccess } from '../components/layout/RequireCreateAccess';
 import { HomeGenerateResponse, HomeCreateResponse } from '../types';
 import { Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';

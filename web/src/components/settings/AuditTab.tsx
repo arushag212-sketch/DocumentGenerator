@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AuditLog } from '../types';
-import { api } from '../api/client';
+import { AuditLog } from '../../types';
+import { api } from '../../api/client';
 import { ShieldAlert, RefreshCw } from 'lucide-react';
 
 interface AuditTabProps {

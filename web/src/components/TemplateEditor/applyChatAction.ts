@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import type { EditorAssistantAction } from '../editorAssistant';
+import type { EditorAssistantAction } from '../assistant/editorAssistant';
 import type { TemplateField } from './FieldsPanel';
 import type { DesignSettings } from './DesignPanel';
 import {

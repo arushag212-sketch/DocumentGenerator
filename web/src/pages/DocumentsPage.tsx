@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { DocumentsTab } from '../components/DocumentsTab';
+import { DocumentsTab } from '../components/documents/DocumentsTab';
 
 export const DocumentsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -25,6 +25,7 @@ export const DocumentsPage: React.FC = () => {
         }}
         onNavigateToEvents={() => navigate('/home')}
         reviewMode={searchParams.get('review') === '1'}
+        initialStatus={searchParams.get('status') || ''}
       />
     </div>
   );

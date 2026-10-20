@@ -1,31 +1,10 @@
-[build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
+# Project metadata and test settings. Dependencies are pinned in requirements.txt
+# (production) and requirements-dev.txt (tests); install with pip install -r.
 [project]
-name = "acm-docgen"
-version = "0.1.0"
-description = "Smart Document Generator for ACM SVNIT Surat"
+name = "clubdocs"
+version = "1.0.0"
+description = "SVNIT ClubDocs: official document generator for SVNIT student clubs"
 requires-python = ">=3.11"
-dependencies = [
-    "docxtpl>=0.16",
-    "python-docx>=1.1",
-    "dateparser>=1.2",
-    "pydantic>=2.0",
-    "PyYAML>=6.0",
-    "SQLAlchemy>=2.0",
-    "fastapi>=0.110",
-    "uvicorn>=0.29",
-    "streamlit>=1.33",
-    "PyMuPDF>=1.24",
-    "Pillow>=10.0",
-    "num2words>=0.5",
-    "python-jose[cryptography]>=3.3",
-    "passlib>=1.7.4",
-    "argon2-cffi>=23.1",
-    "httpx>=0.28.0",
-    "cryptography>=42.0",
-]
 
 [project.scripts]
 docgen = "docgen.cli:main"

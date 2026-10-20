@@ -12,7 +12,7 @@ import {
   PlayCircle,
   LifeBuoy,
 } from 'lucide-react';
-import { PageHeader } from '../components/AppShell';
+import { PageHeader } from '../components/layout/AppShell';
 import { openWelcomeTour } from '../components/onboarding/WelcomeTour';
 
 type Guide = { icon: React.ElementType; title: string; steps: React.ReactNode[]; link?: { to: string; label: string } };

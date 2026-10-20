@@ -1,8 +1,8 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import { AppShell } from './components/AppShell';
-import { AuthPage } from './components/AuthPage';
+import { AppShell } from './components/layout/AppShell';
+import { AuthPage } from './pages/AuthPage';
 import { LandingPage } from './pages/LandingPage';
 import { api } from './api/client';
 import { ClubPermissions } from './types';
@@ -26,6 +26,7 @@ const VerifyPage = page(() => import('./pages/VerifyPage'), 'VerifyPage');
 const PrivacyPage = page(() => import('./pages/PrivacyPage'), 'PrivacyPage');
 const TermsPage = page(() => import('./pages/TermsPage'), 'TermsPage');
 const HelpPage = page(() => import('./pages/HelpPage'), 'HelpPage');
+const ProfilePage = page(() => import('./pages/ProfilePage'), 'ProfilePage');
 
 const PageSpinner: React.FC = () => (
   <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -235,6 +236,16 @@ export const App: React.FC = () => {
           <RequireAuth>
             <AppLayout>
               <SettingsPage />
+            </AppLayout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <RequireAuth>
+            <AppLayout>
+              <ProfilePage />
             </AppLayout>
           </RequireAuth>
         }

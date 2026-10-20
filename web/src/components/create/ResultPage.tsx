@@ -19,14 +19,14 @@ import {
   X,
   Info,
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api } from '../../api/client';
 import {
   HomeGenerateResponse,
   HomeCreateResponse,
   HomeGeneratedDoc,
   EditableField,
   TableColumn,
-} from '../types';
+} from '../../types';
 
 interface ResultPageProps {
   clubId: string | number;

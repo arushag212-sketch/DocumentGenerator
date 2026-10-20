@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { notify } from './common/Toaster';
+import { notify } from '../common/Toaster';
 import {
   FileText,
   Search,
@@ -14,9 +14,9 @@ import {
   Tag,
   X,
 } from 'lucide-react';
-import { StatusBadge } from '../pages/DocumentDetailPage';
-import { api } from '../api/client';
-import { GeneratedDocument } from '../types';
+import { StatusBadge } from '../../pages/DocumentDetailPage';
+import { api } from '../../api/client';
+import { GeneratedDocument } from '../../types';
 
 interface DocumentsTabProps {
   clubId: string | number;
@@ -24,6 +24,8 @@ interface DocumentsTabProps {
   onNavigateToEvents?: () => void;
   /** Opened from "Send a document for review": list ready documents and open them at the review box */
   reviewMode?: boolean;
+  /** Status filter to start with, e.g. from /documents?status=submitted */
+  initialStatus?: string;
 }
 
 export const DocumentsTab: React.FC<DocumentsTabProps> = ({
@@ -31,6 +33,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
   onViewDocument,
   onNavigateToEvents,
   reviewMode = false,
+  initialStatus = '',
 }) => {
   const docLink = (id: string) => `/documents/${id}${reviewMode ? '?review=1' : ''}`;
   const [documents, setDocuments] = useState<any[]>([]);
@@ -48,7 +51,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState(reviewMode ? 'ready' : '');
+  const [selectedStatus, setSelectedStatus] = useState(reviewMode ? 'ready' : initialStatus);
   const [selectedEventId, setSelectedEventId] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');

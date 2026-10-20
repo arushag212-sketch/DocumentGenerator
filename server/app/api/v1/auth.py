@@ -32,11 +32,13 @@ from server.app.core.security import (
 from server.app.models import Club, Invite, Membership, User
 from server.app.schemas.auth import (
     ClubMembershipSummary,
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     GoogleAuthRequest,
     RefreshTokenRequest,
     ResetPasswordRequest,
     TokenResponse,
+    UpdateProfileRequest,
     UserLogin,
     UserOut,
     UserRegister,
@@ -76,6 +78,8 @@ def _build_user_out(user: User, db: Session) -> UserOut:
         email_verified_at=user.email_verified_at,
         created_at=user.created_at,
         memberships=summaries,
+        has_password=bool(user.password_hash),
+        uses_google=bool(user.google_sub),
     )
 
 
@@ -641,6 +645,112 @@ def refresh_session(
 def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get current authenticated user profile and club memberships."""
     return _build_user_out(current_user, db)
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    payload: UpdateProfileRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Change the display name shown in the app and on audit entries."""
+    name = " ".join(payload.name.split())
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": "NAME_REQUIRED", "message": "Enter your name."})
+    old_name = current_user.name
+    current_user.name = name
+    db.flush()
+    log_audit(
+        db=db,
+        action="profile_updated",
+        entity_type="user",
+        entity_id=current_user.id,
+        user_id=current_user.id,
+        meta={"old_name": old_name, "new_name": name},
+        ip=request.client.host if request.client else None,
+    )
+    return _build_user_out(current_user, db)
+
+
+@router.post("/change-password", response_model=TokenResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Change (or, for Google-only accounts, set) the password.
+
+    Signs out every other session; this browser gets fresh tokens and stays signed in.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    check_rate_limit(f"change_password_{current_user.id}", max_requests=5, window_seconds=900, db=db)
+
+    if current_user.password_hash:
+        if not payload.current_password or not verify_password(payload.current_password, current_user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "WRONG_PASSWORD", "message": "Your current password is not correct."},
+            )
+        if verify_password(payload.new_password, current_user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "SAME_PASSWORD", "message": "Choose a password different from the current one."},
+            )
+    try:
+        validate_password_policy(payload.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": "WEAK_PASSWORD", "message": str(e)})
+
+    had_password = bool(current_user.password_hash)
+    current_user.password_hash = get_password_hash(payload.new_password)
+    current_user.token_version += 1
+    db.flush()
+    log_audit(
+        db=db,
+        action="password_changed" if had_password else "password_set",
+        entity_type="user",
+        entity_id=current_user.id,
+        user_id=current_user.id,
+        ip=client_ip,
+    )
+
+    access_token, refresh_token, csrf_token = _set_auth_cookies(response, current_user)
+    return TokenResponse(
+        user=_build_user_out(current_user, db),
+        csrf_token=csrf_token,
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+@router.post("/sign-out-others", response_model=TokenResponse)
+def sign_out_other_devices(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """End every other session (lost phone, shared lab computer); this browser stays signed in."""
+    current_user.token_version += 1
+    db.flush()
+    log_audit(
+        db=db,
+        action="sessions_revoked",
+        entity_type="user",
+        entity_id=current_user.id,
+        user_id=current_user.id,
+        ip=request.client.host if request.client else None,
+    )
+    access_token, refresh_token, csrf_token = _set_auth_cookies(response, current_user)
+    return TokenResponse(
+        user=_build_user_out(current_user, db),
+        csrf_token=csrf_token,
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
 
 
 @router.post("/logout")

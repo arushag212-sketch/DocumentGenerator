@@ -18,10 +18,10 @@ import {
   Upload,
   Eye,
 } from 'lucide-react';
-import { api } from '../api/client';
-import { TemplateGalleryItem, ClubPermissions } from '../types';
+import { api } from '../../api/client';
+import { TemplateGalleryItem, ClubPermissions } from '../../types';
 import { TemplateWizardModal } from './TemplateWizardModal';
-import { rememberTemplatePrompt } from '../utils/templatePrompt';
+import { rememberTemplatePrompt } from '../../utils/templatePrompt';
 import { TemplateImportModal } from './TemplateImportModal';
 import { TemplatePreviewModal } from './TemplatePreviewModal';
 

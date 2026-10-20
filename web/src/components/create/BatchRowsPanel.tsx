@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Table2, Upload, Link2, X } from 'lucide-react';
-import { api } from '../api/client';
+import { api } from '../../api/client';
 
 export interface BatchRows {
   templateKey: string;

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, PlusCircle, Copy, FileText, ZoomIn, ZoomOut, AlertCircle } from 'lucide-react';
-import { api } from '../api/client';
-import { TemplateGalleryItem } from '../types';
+import { api } from '../../api/client';
+import { TemplateGalleryItem } from '../../types';
 
 /**
  * Full-page look at a template before using or editing it: every page filled with sample

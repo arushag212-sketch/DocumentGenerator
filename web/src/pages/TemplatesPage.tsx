@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { markTemplatesVisited } from '../components/onboarding/GettingStarted';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { TemplateGalleryTab } from '../components/TemplateGalleryTab';
+import { TemplateGalleryTab } from '../components/templates/TemplateGalleryTab';
 import { useClubPermissions } from '../hooks/useClubPermissions';
 import { documentNewUrl } from '../utils/templatePrompt';
 

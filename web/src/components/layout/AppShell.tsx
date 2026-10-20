@@ -16,9 +16,9 @@ import {
   Plus,
   LifeBuoy,
 } from 'lucide-react';
-import { WelcomeTour } from './onboarding/WelcomeTour';
-import { useAuth } from '../context/AuthContext';
-import { api } from '../api/client';
+import { WelcomeTour } from '../onboarding/WelcomeTour';
+import { useAuth } from '../../context/AuthContext';
+import { api } from '../../api/client';
 
 type NavItem = { to: string; label: string; icon: React.ElementType; badge?: number; match?: string[] };
 
@@ -168,21 +168,41 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const isActive = (item: NavItem) =>
     (item.match || [item.to]).some((m) => location.pathname === m || (m !== '/home' && location.pathname.startsWith(m + '/')));
 
+  const initials = (user?.name || user?.email || '?')
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  const canCreate = Boolean(user?.is_platform_admin || (activeClub?.my_role && activeClub.my_role !== 'viewer'));
+
   const sidebar = (
     <div className="flex flex-col h-full">
-      <div className="px-3 pt-4 pb-3">
-        <Link to="/dashboard" className="flex items-center gap-2 px-2 mb-4">
-          <img src="/brand/svnit_crest.png" alt="" className="w-7 h-7 object-contain" />
-          <span className="text-sm font-semibold text-slate-900">ClubDocs</span>
-          <span className="text-xs text-slate-400">SVNIT</span>
+      <div className="px-3 pt-4 pb-3 space-y-3">
+        <Link to="/dashboard" className="flex items-center gap-2.5 px-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 ring-1 ring-slate-200">
+            <img src="/brand/svnit_crest.png" alt="" className="h-full w-full object-contain" />
+          </span>
+          <span className="leading-tight">
+            <span className="block text-sm font-semibold text-slate-900">ClubDocs</span>
+            <span className="block text-[11px] text-slate-400">SVNIT Surat</span>
+          </span>
         </Link>
-        <ClubSwitcher />
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-1">
+          <ClubSwitcher />
+        </div>
+        {hasClubAccess && canCreate && (
+          <Link to="/home" className="btn-primary w-full justify-center">
+            <FilePlus2 className="w-4 h-4" />
+            New document
+          </Link>
+        )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 space-y-5" aria-label="Main">
+      <nav className="flex-1 overflow-y-auto px-3 pb-3 space-y-5" aria-label="Main">
         {groups.map((group, gi) => (
           <div key={gi}>
-            {group.label && <p className="px-2 mb-1 text-xs font-medium text-slate-400">{group.label}</p>}
+            {group.label && <p className="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group.label}</p>}
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const active = isActive(item);
@@ -192,11 +212,13 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                     <NavLink
                       to={item.to}
                       aria-current={active ? 'page' : undefined}
-                      className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors ${
-                        active ? 'bg-brand-50 text-brand-800 font-semibold' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors ${
+                        active
+                          ? 'bg-brand-50 text-brand-800 font-semibold shadow-[inset_3px_0_0_#1b365d]'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${active ? 'text-brand-700' : 'text-slate-400'}`} />
+                      <Icon className={`w-4 h-4 transition-colors ${active ? 'text-brand-700' : 'text-slate-400 group-hover:text-slate-600'}`} />
                       <span className="flex-1">{item.label}</span>
                       {!!item.badge && (
                         <span className="min-w-[1.25rem] px-1.5 text-center text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
@@ -213,15 +235,23 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       </nav>
 
       <div className="border-t border-slate-200 p-3">
-        <div className="flex items-center gap-2.5 px-2">
-          <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center">
-            {(user?.full_name || user?.email || '?').slice(0, 1).toUpperCase()}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium text-slate-800 truncate">{user?.full_name}</span>
-            <span className="block text-xs text-slate-500 truncate">{user?.email}</span>
-          </span>
-          <button type="button" onClick={logout} className="btn-ghost !p-1.5" title="Sign out" aria-label="Sign out">
+        <div className="flex items-center gap-1">
+          <NavLink
+            to="/profile"
+            title="Your profile"
+            className={({ isActive: onProfile }) =>
+              `flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${onProfile ? 'bg-brand-50' : 'hover:bg-slate-100'}`
+            }
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-xs font-semibold text-white">
+              {initials}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-slate-800 truncate">{user?.name}</span>
+              <span className="block text-xs text-slate-500 truncate">View profile</span>
+            </span>
+          </NavLink>
+          <button type="button" onClick={logout} className="btn-ghost !p-2" title="Sign out" aria-label="Sign out">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
@@ -232,7 +262,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   return (
     <div className="min-h-screen flex bg-slate-50">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:block w-60 flex-shrink-0 border-r border-slate-200 bg-white sticky top-0 h-screen">
+      <aside className="hidden lg:block w-64 flex-shrink-0 border-r border-slate-200 bg-white sticky top-0 h-screen">
         {sidebar}
       </aside>
 
@@ -240,7 +270,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-slate-900/30" onClick={() => setMobileOpen(false)} />
-          <aside className="relative w-64 bg-white h-full shadow-xl">
+          <aside className="relative w-72 bg-white h-full shadow-xl">
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
@@ -255,11 +285,18 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       )}
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="lg:hidden sticky top-0 z-40 flex items-center gap-3 h-14 px-4 bg-white border-b border-slate-200">
+        <header className="lg:hidden sticky top-0 z-40 flex items-center gap-3 h-14 px-4 bg-white/95 backdrop-blur border-b border-slate-200">
           <button type="button" onClick={() => setMobileOpen(true)} className="btn-ghost !p-1.5" aria-label="Open menu">
             <Menu className="w-5 h-5" />
           </button>
-          <span className="text-sm font-semibold text-slate-900 truncate">{activeClub?.name || 'ClubDocs'}</span>
+          <span className="flex-1 text-sm font-semibold text-slate-900 truncate">{activeClub?.name || 'ClubDocs'}</span>
+          <Link
+            to="/profile"
+            aria-label="Your profile"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-xs font-semibold text-white"
+          >
+            {initials}
+          </Link>
         </header>
         <main className="flex-1">{children}</main>
       </div>

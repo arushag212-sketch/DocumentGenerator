@@ -1,19 +1,13 @@
-# Document Assets Specification
+# Assets
 
-This directory stores visual image assets required for document generation:
+Files used when documents are generated (the website has its own copies in `web/public/`).
 
-### Required Assets:
-1. `svnit_crest_color.png`
-   - **Usage**: Letterhead in `Permission_public.docx`
-   - **Properties**: Full color circular emblem, 300 DPI, transparent background
-   - **Display Dimensions**: ~1.0 inch height (~72 pt)
+| Path | Used for |
+|---|---|
+| `svnit_crest.png` | College crest on every club letterhead and the "College logo" block |
+| `club_banner_placeholder.png` | Placeholder in template headers, swapped for the club's generated letterhead |
+| `club_logo_placeholder.png` | Placeholder for the "Club logo" block, swapped for the club's uploaded logo |
+| `fonts/` | Fonts embedded in generated PDFs (licences in `fonts/FONTS_LICENSES.md`) |
+| `clubs/` | Logos for the demo clubs in `demo/clubs.json` (development only) |
 
-2. `acm_logo_blue.png`
-   - **Usage**: Right letterhead logo in `Permission_public.docx`
-   - **Properties**: Blue diamond badge with white 'acm', 300 DPI, transparent background
-   - **Display Dimensions**: ~0.9 inch height (~65 pt)
-
-3. `svnit_crest_mono.png`
-   - **Usage**: Letterhead in `Prize Money Format 2026.docx`, `ACM_Sample_Submitted.docx`, and `Bill Certificate_public.docx`
-   - **Properties**: High contrast grayscale/monochrome SVNIT crest, 300 DPI, transparent or white background
-   - **Display Dimensions**: ~0.95 inch height (~68 pt)
+Club logos uploaded in the app are stored in file storage, not here.

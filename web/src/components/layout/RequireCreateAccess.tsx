@@ -1,8 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Eye, FileText } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { useClubPermissions } from '../hooks/useClubPermissions';
+import { useAuth } from '../../context/AuthContext';
+import { useClubPermissions } from '../../hooks/useClubPermissions';
 
 /**
  * Renders children only for members allowed to create documents (editor and above).

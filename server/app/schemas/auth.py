@@ -57,6 +57,9 @@ class UserOut(BaseModel):
     email_verified_at: Optional[datetime] = None
     created_at: datetime
     memberships: list[ClubMembershipSummary] = []
+    # How the account can sign in, for the profile page
+    has_password: bool = False
+    uses_google: bool = False
 
 
 class TokenResponse(BaseModel):
@@ -81,9 +84,13 @@ class ResetPasswordRequest(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    name: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=120)
+
+
+class ChangePasswordRequest(BaseModel):
+    # Not needed when the account has no password yet (Google-only sign-in)
     current_password: Optional[str] = None
-    new_password: Optional[str] = Field(None, min_length=10)
+    new_password: str = Field(..., min_length=10, max_length=256)
 
 
 class SensitiveFieldOut(BaseModel):

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Upload, FileText, Check, AlertTriangle, ArrowRight, X, Loader2, Tag, Wand2 } from 'lucide-react';
-import { api } from '../api/client';
+import { api } from '../../api/client';
 
 interface TemplateImportModalProps {
   clubId: string | number;

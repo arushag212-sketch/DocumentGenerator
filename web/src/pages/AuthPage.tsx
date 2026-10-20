@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { GoogleSignInButton } from './auth/GoogleSignInButton';
+import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { Lock, Mail, User, KeyRound, ShieldAlert, CheckCircle2, ArrowRight, Sparkles, FileCheck2, ShieldCheck } from 'lucide-react';
-import { DocPreviewArt } from './brand/DocPreviewArt';
+import { DocPreviewArt } from '../components/brand/DocPreviewArt';
 const AuthInput: React.FC<{
   icon: any;
   label?: string;

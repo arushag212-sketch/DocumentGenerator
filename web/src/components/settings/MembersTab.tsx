@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { notify } from './common/Toaster';
+import { notify } from '../common/Toaster';
 import { Link } from 'react-router-dom';
-import { ClubMember, ClubPermissions, RoleName, Invite } from '../types';
-import { api } from '../api/client';
+import { ClubMember, ClubPermissions, RoleName, Invite } from '../../types';
+import { api } from '../../api/client';
 import {
   Users,
   UserPlus,
@@ -268,7 +268,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm text-slate-900 truncate">
-                          {m.user?.full_name || 'Member'}
+                          {m.name || 'Member'}
                         </span>
                         <span
                           className={`text-xs font-semibold uppercase px-2 py-0.5 rounded-full border ${
@@ -278,16 +278,16 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                           {m.role.replace('_', ' ')}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5 truncate">{m.user?.email}</p>
-                      {m.title && (
-                        <p className="text-xs text-slate-400 mt-0.5 italic">{m.title}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 truncate">{m.email}</p>
+                      {m.position && (
+                        <p className="text-xs text-slate-400 mt-0.5 italic">{m.position}</p>
                       )}
                     </div>
 
                     {canEdit && (
                       <button
                         type="button"
-                        onClick={() => handleRemoveMember(m.id, m.user?.full_name || m.user?.email || 'Member')}
+                        onClick={() => handleRemoveMember(m.user_id, m.name || m.email || 'Member')}
                         className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0"
                         title="Remove member"
                       >

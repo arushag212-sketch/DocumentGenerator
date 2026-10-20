@@ -154,6 +154,14 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
 export const api = {
   auth: {
     me: () => apiFetch<User>('/auth/me'),
+    updateProfile: (name: string) =>
+      apiFetch<User>('/auth/me', { method: 'PATCH', body: JSON.stringify({ name }) }),
+    changePassword: (newPassword: string, currentPassword?: string) =>
+      apiFetch<{ user: User }>('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: currentPassword || null, new_password: newPassword }),
+      }),
+    signOutOthers: () => apiFetch<{ user: User }>('/auth/sign-out-others', { method: 'POST' }),
     google: async (credential: string, invite_code?: string) => {
       const res = await apiFetch<{ message: string; user: User; access_token?: string; refresh_token?: string; csrf_token?: string }>('/auth/google', {
         method: 'POST',

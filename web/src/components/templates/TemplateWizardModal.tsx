@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Wand2, ArrowRight, Check, X, Loader2 } from 'lucide-react';
-import { api } from '../api/client';
+import { api } from '../../api/client';
 
 interface TemplateWizardModalProps {
   clubId: string | number;

@@ -3,10 +3,10 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { ClubMember, ClubPermissions } from '../types';
-import { AdminTab } from '../components/AdminTab';
-import { MembersTab } from '../components/MembersTab';
-import { PeopleTab } from '../components/PeopleTab';
-import { AuditTab } from '../components/AuditTab';
+import { AdminTab } from '../components/settings/AdminTab';
+import { MembersTab } from '../components/settings/MembersTab';
+import { PeopleTab } from '../components/settings/PeopleTab';
+import { AuditTab } from '../components/settings/AuditTab';
 import { Settings, Users, UserCheck, ShieldAlert } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {

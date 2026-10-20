@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { HomePage } from '../components/HomePage';
-import { ResultPage } from '../components/ResultPage';
-import { RequireCreateAccess } from '../components/RequireCreateAccess';
+import { HomePage } from '../components/create/HomePage';
+import { ResultPage } from '../components/create/ResultPage';
+import { RequireCreateAccess } from '../components/layout/RequireCreateAccess';
 import { HomeGenerateResponse } from '../types';
 
 export const DocumentNewPage: React.FC = () => {
