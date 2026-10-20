@@ -13,8 +13,7 @@ import {
   CopyPlus,
   Trash2,
 } from 'lucide-react';
-import { FONT_OPTIONS } from './themes';
-import { FONT_SIZES, applyBlockStyle, currentBlockStyle } from './blockStyle';
+import { FontControls } from './FontControls';
 
 type MenuState = { x: number; y: number } | null;
 
@@ -50,8 +49,8 @@ export const EditorContextMenu: React.FC<{ editor: Editor | null; containerRef: 
       const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
       if (at && (at.pos < from || at.pos > to)) editor.chain().focus().setTextSelection(at.pos).run();
       else editor.commands.focus();
-      const width = 230;
-      const height = 380;
+      const width = 236;
+      const height = 320;
       setNotice(null);
       setMenu({
         x: Math.min(e.clientX, window.innerWidth - width - 8),
@@ -84,7 +83,6 @@ export const EditorContextMenu: React.FC<{ editor: Editor | null; containerRef: 
   if (!menu || !editor) return null;
 
   const hasSelection = !editor.state.selection.empty;
-  const style = currentBlockStyle(editor);
   const run = (fn: () => void) => () => {
     fn();
     setMenu(null);
@@ -114,7 +112,7 @@ export const EditorContextMenu: React.FC<{ editor: Editor | null; containerRef: 
       role="menu"
       aria-label="Editor actions"
       style={{ top: menu.y, left: menu.x }}
-      className="fixed z-[60] w-[230px] rounded-lg border border-slate-200 bg-white p-1 shadow-xl"
+      className="fixed z-[60] w-[236px] rounded-lg border border-slate-200 bg-white p-1 shadow-xl"
       onContextMenu={(e) => e.preventDefault()}
     >
       <button role="menuitem" className={item} disabled={!hasSelection} onClick={() => clipboard('cut')}>
@@ -151,40 +149,7 @@ export const EditorContextMenu: React.FC<{ editor: Editor | null; containerRef: 
       </div>
 
       <div className="my-1 h-px bg-slate-100" />
-      <div className="grid grid-cols-[1fr_64px] gap-1 px-1 pb-1">
-        <label className="sr-only" htmlFor="ctx-font">Font</label>
-        <select
-          id="ctx-font"
-          className="rounded-md border border-slate-200 px-1.5 py-1 text-xs"
-          value={style.fontFamily}
-          onChange={(e) => {
-            applyBlockStyle(editor, { fontFamily: e.target.value || null });
-            setMenu(null);
-          }}
-        >
-          <option value="">Template font</option>
-          {FONT_OPTIONS.map((f) => (
-            <option key={f.id} value={f.id} style={{ fontFamily: f.family }}>
-              {f.name}
-            </option>
-          ))}
-        </select>
-        <label className="sr-only" htmlFor="ctx-size">Size</label>
-        <select
-          id="ctx-size"
-          className="rounded-md border border-slate-200 px-1 py-1 text-xs"
-          value={style.fontSize}
-          onChange={(e) => {
-            applyBlockStyle(editor, { fontSize: e.target.value ? `${e.target.value}pt` : null });
-            setMenu(null);
-          }}
-        >
-          <option value="">Size</option>
-          {FONT_SIZES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-      </div>
+      <FontControls variant="menu" editor={editor} onApplied={() => setMenu(null)} />
 
       <div className="my-1 h-px bg-slate-100" />
       <button

@@ -8,7 +8,10 @@ export function applyBlockStyle(editor: Editor, attrs: Record<string, string | n
 }
 
 /** The style attributes of the text block holding the cursor. */
-export function currentBlockStyle(editor: Editor): { fontFamily: string; fontSize: string } {
+export function currentBlockStyle(editor: Editor | null | undefined): { fontFamily: string; fontSize: string } {
+  if (!editor || !editor.state || !editor.state.selection) {
+    return { fontFamily: '', fontSize: '' };
+  }
   const { $from } = editor.state.selection;
   for (let d = $from.depth; d > 0; d--) {
     const node = $from.node(d);

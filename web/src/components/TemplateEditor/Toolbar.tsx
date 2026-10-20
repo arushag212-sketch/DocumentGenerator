@@ -30,8 +30,7 @@ import {
   Languages,
 } from 'lucide-react';
 import { SaveStatus } from './useEditorAutosave';
-import { FONT_OPTIONS } from './themes';
-import { FONT_SIZES, applyBlockStyle, currentBlockStyle } from './blockStyle';
+import { FontControls } from './FontControls';
 import { insertInfoTable, insertSignatureGrid, insertImageBlock, safeInsertBlock } from './extensions';
 
 interface ToolbarProps {
@@ -91,8 +90,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const handleZoomOut = () => {
     if (zoom > 0.6) onZoomChange(Math.max(0.6, Math.round((zoom - 0.1) * 10) / 10));
   };
-
-  const blockStyle = editor ? currentBlockStyle(editor) : { fontFamily: '', fontSize: '' };
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-1.5 flex items-center justify-between shadow-xs select-none">
@@ -193,36 +190,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <div className="w-px h-4 bg-slate-200 mx-0.5 shrink-0" />
 
         {/* Group 3: Font Family + Size */}
-        <div className="hidden md:flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
-          <label className="sr-only" htmlFor="toolbar-font">Font family</label>
-          <select
-            id="toolbar-font"
-            title="Font family"
-            value={blockStyle.fontFamily}
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => editor && applyBlockStyle(editor, { fontFamily: e.target.value || null })}
-            className="bg-transparent text-slate-700 text-xs font-medium rounded px-1.5 py-1 max-w-[100px] border-none focus:ring-1 focus:ring-brand-500 focus:outline-none cursor-pointer"
-          >
-            <option value="">Default Font</option>
-            {FONT_OPTIONS.map((f) => (
-              <option key={f.id} value={f.id}>{f.name}</option>
-            ))}
-          </select>
-
-          <label className="sr-only" htmlFor="toolbar-size">Font size (pt)</label>
-          <select
-            id="toolbar-size"
-            title="Font size (pt)"
-            value={blockStyle.fontSize}
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => editor && applyBlockStyle(editor, { fontSize: e.target.value ? `${e.target.value}pt` : null })}
-            className="bg-transparent text-slate-700 text-xs font-medium rounded px-1 py-1 w-12 border-none focus:ring-1 focus:ring-brand-500 focus:outline-none cursor-pointer"
-          >
-            <option value="">Size</option>
-            {FONT_SIZES.map((sz) => (
-              <option key={sz} value={sz}>{sz} pt</option>
-            ))}
-          </select>
+        <div className="hidden md:flex items-center">
+          <FontControls variant="toolbar" editor={editor} />
         </div>
 
         <div className="w-px h-4 bg-slate-200 mx-0.5 shrink-0" />

@@ -20,9 +20,8 @@ import {
   Tag,
   Lock,
 } from 'lucide-react';
-import { FONT_OPTIONS } from './themes';
 import { EditorContextMenu } from './EditorContextMenu';
-import { FONT_SIZES, applyBlockStyle, currentBlockStyle } from './blockStyle';
+import { FontControls } from './FontControls';
 import { A4Page } from './A4Page';
 import { ChipPopover } from './ChipPopover';
 import { TableControls } from './TableControls';
@@ -343,35 +342,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
           <div className="w-px h-3.5 bg-slate-700 mx-0.5" />
 
-          <label className="sr-only" htmlFor="bubble-font">Font</label>
-          <select
-            id="bubble-font"
-            title="Font"
-            value={currentBlockStyle(editor).fontFamily}
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => applyBlockStyle(editor, { fontFamily: e.target.value || null })}
-            className="bg-transparent text-white text-xs rounded px-1 py-0.5 max-w-[90px] border-none focus:outline-none cursor-pointer"
-          >
-            <option value="" className="bg-slate-900 text-white">Default</option>
-            {FONT_OPTIONS.map((f) => (
-              <option key={f.id} value={f.id} className="bg-slate-900 text-white">{f.name}</option>
-            ))}
-          </select>
-
-          <label className="sr-only" htmlFor="bubble-size">Size</label>
-          <select
-            id="bubble-size"
-            title="Size"
-            value={currentBlockStyle(editor).fontSize}
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => applyBlockStyle(editor, { fontSize: e.target.value ? `${e.target.value}pt` : null })}
-            className="bg-transparent text-white text-xs rounded px-1 py-0.5 w-12 border-none focus:outline-none cursor-pointer"
-          >
-            <option value="" className="bg-slate-900 text-white">Size</option>
-            {FONT_SIZES.map((sz) => (
-              <option key={sz} value={sz} className="bg-slate-900 text-white">{sz}</option>
-            ))}
-          </select>
+          <FontControls variant="bubble" editor={editor} />
 
           <div className="w-px h-3.5 bg-slate-700 mx-0.5" />
 
