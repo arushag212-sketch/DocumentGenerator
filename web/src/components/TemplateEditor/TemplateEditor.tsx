@@ -471,7 +471,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             bubblePos={bubblePos}
             chipPopover={chipPopover}
             onCloseChipPopover={() => setChipPopover(null)}
-            onUpdateChip={updateChip}
+            onUpdateChip={(updates: any) => {
+              updateChip(updates);
+              if (typeof updates?.label === 'string' && chipPopover?.fieldName) {
+                setFields((prev) => prev.map((f) => (f.key === chipPopover.fieldName ? { ...f, label: updates.label } : f)));
+              }
+            }}
             onToggleChipRequired={toggleChipRequired}
             onToggleChipSensitive={toggleChipSensitive}
             onDeleteChip={deleteChip}

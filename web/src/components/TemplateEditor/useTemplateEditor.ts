@@ -22,6 +22,16 @@ interface UseTemplateEditorOptions {
   clubId?: string;
 }
 
+/** Position of the field chip at (or right next to) `pos`, preferring the one with `fieldName`. */
+function findChipPos(doc: any, pos: number, fieldName?: string): number | null {
+  for (const p of [pos, pos - 1, pos + 1]) {
+    if (p < 0 || p > doc.content.size) continue;
+    const n = doc.nodeAt(p);
+    if (n && n.type.name === 'fieldChip' && (!fieldName || n.attrs.fieldName === fieldName)) return p;
+  }
+  return null;
+}
+
 export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOptions = {}) {
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -84,6 +94,9 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
         const fieldTarget = target.closest('.field-chip');
         if (fieldTarget) {
           const rect = fieldTarget.getBoundingClientRect();
+          // The click position can be just after the chip; use the chip's own position
+          const domName = fieldTarget.getAttribute('data-field-name') || '';
+          pos = findChipPos(view.state.doc, pos, domName) ?? pos;
           const node = view.state.doc.nodeAt(pos);
           const attrs = node?.type.name === 'fieldChip' ? node.attrs : {};
           const fieldName = attrs.fieldName || fieldTarget.getAttribute('data-field-name') || '';
@@ -145,7 +158,9 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
         setBubblePos(null);
       }
     },
-    onBlur: () => {
+    onBlur: ({ event }: any) => {
+      const next = event?.relatedTarget as HTMLElement | null;
+      if (next && next.closest('[data-editor-bubble]')) return;
       setBubblePos(null);
     },
     onUpdate: ({ editor: currentEditor, transaction }: any) => {
@@ -184,38 +199,23 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
     },
   });
 
-  const updateChip = (updates: any) => {
+  // Change some of a field chip's attributes. setNodeMarkup replaces *all* attributes, so the
+  // chip's current ones are merged in; the popover state follows so its inputs stay in sync.
+  const patchChip = (updates: Record<string, any>) => {
     if (!chipPopover || !editor) return;
-    editor.commands.command(({ tr }: any) => {
-      tr.setNodeMarkup(chipPopover.position, undefined, updates);
-      return true;
-    });
+    const pos = findChipPos(editor.state.doc, chipPopover.position, chipPopover.fieldName);
+    if (pos === null) return;
+    const node = editor.state.doc.nodeAt(pos)!;
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...updates }));
+    setChipPopover((prev: any) => (prev ? { ...prev, ...updates } : prev));
     if (onDocChange) onDocChange();
   };
 
-  const toggleChipRequired = (req: boolean) => {
-    if (!chipPopover || !editor) return;
-    const imp = req ? 'essential' : 'optional';
-    editor.commands.command(({ tr }: any) => {
-      tr.setNodeMarkup(chipPopover.position, undefined, {
-        importance: imp,
-        required: req,
-      });
-      return true;
-    });
-    setChipPopover((prev: any) => ({ ...prev, required: req, importance: imp }));
-    if (onDocChange) onDocChange();
-  };
+  const updateChip = (updates: any) => patchChip(updates);
 
-  const toggleChipSensitive = (sens: boolean) => {
-    if (!chipPopover || !editor) return;
-    editor.commands.command(({ tr }: any) => {
-      tr.setNodeMarkup(chipPopover.position, undefined, { sensitive: sens });
-      return true;
-    });
-    setChipPopover((prev: any) => ({ ...prev, sensitive: sens }));
-    if (onDocChange) onDocChange();
-  };
+  const toggleChipRequired = (req: boolean) => patchChip({ importance: req ? 'essential' : 'optional', required: req });
+
+  const toggleChipSensitive = (sens: boolean) => patchChip({ sensitive: sens });
 
   const deleteChip = () => {
     if (!chipPopover || !editor) return;

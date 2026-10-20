@@ -154,59 +154,46 @@ def run_doc_case(api: Api, case: DocCase) -> dict[str, Any]:
     started = time.time()
     result: dict[str, Any] = {"club": case.club, "text": case.text, "errors": []}
 
-    _, und = api.call("POST", f"/clubs/{cid}/home/understand", email, json={"text": case.text})
-    recommended = [d["name"] for d in und["recommended_documents"] if d["recommended"]]
+    # New flow: 1 action create
+    payload: dict[str, Any] = {"text": case.text}
+    if case.rows:
+        payload["rows"] = case.rows
+
+    status, created = api.call("POST", f"/clubs/{cid}/home/create", email, json=payload)
+    if status != 200:
+        result["errors"].append(f"create {status}: {json.dumps(created)[:300]}")
+        return result
+
+    recommended = [d["name"] for d in created.get("recommended_templates", []) if d["recommended"]]
     result["recommended"] = recommended
     result["recommend_ok"] = sorted(recommended) == sorted(case.expect_docs)
-    selected = [d["template_id"] for d in und["recommended_documents"] if d["name"] in case.expect_docs]
-    if not selected:
-        result["errors"].append("expected documents not available")
-        return result
+    result["auto_filled"] = sorted(k for k, v in created.get("fields", {}).items() if v and k != "raw")
+    result["asked"] = [q["key"] for q in created.get("missing_fields", [])]
 
-    # Re-understand for the selected documents to get their questions
-    _, und = api.call("POST", f"/clubs/{cid}/home/understand", email, json={"text": case.text, "selected_template_ids": selected})
-    understood = und["understood"]
-    questions = [q for q in und["missing_questions"] if q["key"] not in ("dates_confirmation",)]
-    result["auto_filled"] = sorted(k for k, v in understood.items() if v and k != "raw")
-    result["asked"] = [q["key"] for q in questions]
+    # Review step: if member provides additional answers, apply them across documents
+    if case.answers:
+        status, applied = api.call("POST", f"/clubs/{cid}/home/apply-all", email, json={
+            "event_id": created["event_id"],
+            "changes": case.answers,
+        })
+        if status != 200:
+            result["errors"].append(f"apply-all {status}: {json.dumps(applied)[:300]}")
+            return result
+        docs = applied.get("documents", [])
+    else:
+        docs = created.get("documents", [])
 
-    event_data = dict(understood.get("raw") or {})
-    for k in ("event_name", "venue", "date_start", "date_end", "time_start", "time_end", "participants", "description", "objectives"):
-        if understood.get(k):
-            event_data[k] = understood[k]
-    for q in questions:  # prefilled values the member accepts
-        if q.get("current_value") not in (None, ""):
-            event_data[q["key"]] = q["current_value"]
-    event_data.update(case.answers)
-    for k in ("description", "objectives"):  # the member accepts or edits AI drafts explicitly
-        if isinstance(event_data.get(k), str):
-            event_data[k] = event_data[k].replace("[AI-drafted, review]", "").strip()
-    if understood.get("date_start") and understood.get("date_end"):
-        event_data["dates_confirmed"] = True
-    elif understood.get("dates"):
-        event_data["dates"] = understood["dates"]
-        event_data["dates_confirmed"] = True
-    if case.rows:
-        event_data["rows"] = case.rows
-
-    status, gen = api.call("POST", f"/clubs/{cid}/home/generate", email, json={
-        "selected_template_ids": selected, "event_data": event_data, "ref_numbers_accepted": True,
-        "event_title": understood.get("event_name") or "Evaluation",
-    })
     result["seconds"] = round(time.time() - started, 1)
-    if status != 200:
-        result["errors"].append(f"generate {status}: {json.dumps(gen)[:300]}")
-        return result
 
     texts, pages = [], []
-    for d in gen["documents"]:
+    for d in docs:
         s, pdf = api.call("GET", d["pdf_url"].replace("/api/v1", ""), email)
         doc = pymupdf.open(stream=pdf, filetype="pdf")
         texts.append("".join(p.get_text() for p in doc))
         pages.append(len(doc))
     all_text = "\n".join(texts)
-    result["documents"] = [d["title"] for d in gen["documents"]]
-    result["ref_nos"] = [d["ref_no"] for d in gen["documents"]]
+    result["documents"] = [d["title"] for d in docs]
+    result["ref_nos"] = [d["ref_no"] for d in docs]
     result["pages"] = pages
     result["missing_facts"] = [f for f in case.must_contain if f not in all_text]
     result["fabricated"] = [f for f in case.must_not_contain if f in all_text]

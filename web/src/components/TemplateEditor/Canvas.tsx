@@ -16,6 +16,9 @@ import {
   Heading2,
   Wand2,
 } from 'lucide-react';
+import { FONT_OPTIONS } from './themes';
+import { EditorContextMenu } from './EditorContextMenu';
+import { FONT_SIZES, applyBlockStyle, currentBlockStyle } from './blockStyle';
 import { A4Page } from './A4Page';
 import { ChipPopover } from './ChipPopover';
 import { TableControls } from './TableControls';
@@ -225,6 +228,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       {/* Floating Selection Bubble Menu */}
       {bubblePos && editor && (
         <div
+          data-editor-bubble
           style={{ top: `${bubblePos.top}px`, left: `${bubblePos.left}px` }}
           className="fixed z-40 flex items-center gap-0.5 bg-slate-900/95 backdrop-blur text-white px-1.5 py-1 rounded-lg shadow-xl border border-slate-700 animate-in fade-in zoom-in-95 duration-100"
         >
@@ -249,6 +253,37 @@ export const Canvas: React.FC<CanvasProps> = ({
           >
             <UnderlineIcon className="w-3.5 h-3.5" />
           </button>
+
+          <div className="w-px h-3.5 bg-slate-700 mx-0.5" />
+
+          <label className="sr-only" htmlFor="bubble-font">Font</label>
+          <select
+            id="bubble-font"
+            title="Font"
+            value={currentBlockStyle(editor).fontFamily}
+            onMouseDown={(e) => e.stopPropagation()}
+            onChange={(e) => applyBlockStyle(editor, { fontFamily: e.target.value || null })}
+            className="bg-slate-800 text-slate-100 text-[11px] rounded px-1 py-0.5 max-w-[110px] border border-slate-700"
+          >
+            <option value="">Template font</option>
+            {FONT_OPTIONS.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+          <label className="sr-only" htmlFor="bubble-size">Size</label>
+          <select
+            id="bubble-size"
+            title="Font size (pt)"
+            value={currentBlockStyle(editor).fontSize}
+            onMouseDown={(e) => e.stopPropagation()}
+            onChange={(e) => applyBlockStyle(editor, { fontSize: e.target.value ? `${e.target.value}pt` : null })}
+            className="bg-slate-800 text-slate-100 text-[11px] rounded px-1 py-0.5 w-12 border border-slate-700"
+          >
+            <option value="">Size</option>
+            {FONT_SIZES.map((sz) => (
+              <option key={sz} value={sz}>{sz}</option>
+            ))}
+          </select>
 
           <div className="w-px h-3.5 bg-slate-700 mx-0.5" />
 
@@ -303,6 +338,9 @@ export const Canvas: React.FC<CanvasProps> = ({
           </div>
         </div>
       )}
+
+      {/* Right-click menu (replaces the browser's) */}
+      <EditorContextMenu editor={editor} containerRef={containerRef as React.RefObject<HTMLElement>} />
 
       {/* Field Chip Edit Popover */}
       <ChipPopover

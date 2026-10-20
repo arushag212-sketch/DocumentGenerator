@@ -159,39 +159,55 @@ class BatchGenerator:
                 except Exception:
                     pass
 
-        # ---------------- 1. STRICT AI DRAFT GUARD ----------------
-        # Do NOT strip '[AI-drafted, review]'. Reject any unconfirmed AI-draft values.
-        for k, v in event_data.items():
-            if isinstance(v, str) and "[AI-drafted" in v:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={
-                        "code": "UNCONFIRMED_AI_DRAFT",
-                        "message": f"Field '{k}' contains unconfirmed AI draft. Please accept or edit before generating.",
-                    },
-                )
-        for idx, w in enumerate(event_data.get("winners") or []):
-            if isinstance(w, dict):
-                for wk, wv in w.items():
-                    if isinstance(wv, str) and "[AI-drafted" in wv:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail={
-                                "code": "UNCONFIRMED_AI_DRAFT",
-                                "message": f"Winner #{idx+1} '{wk}' contains unconfirmed AI draft. Please accept or edit before generating.",
-                            },
-                        )
-        for idx, b in enumerate(event_data.get("bills") or []):
-            if isinstance(b, dict):
-                for bk, bv in b.items():
-                    if isinstance(bv, str) and "[AI-drafted" in bv:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail={
-                                "code": "UNCONFIRMED_AI_DRAFT",
-                                "message": f"Bill #{idx+1} '{bk}' contains unconfirmed AI draft. Please accept or edit before generating.",
-                            },
-                        )
+        # ---------------- 1. STRICT AI DRAFT GUARD / DIRECT USAGE IN ALLOW_BLANKS ----------------
+        if allow_blanks:
+            # In allow_blanks / review-first flow: strip the marker so the AI draft is used directly in document
+            for k, v in list(event_data.items()):
+                if isinstance(v, str) and "[AI-drafted" in v:
+                    event_data[k] = re.sub(r"^\[AI-drafted(?:,\s*review)?\]\s*", "", v).strip()
+            for w in event_data.get("winners") or []:
+                if isinstance(w, dict):
+                    for wk, wv in list(w.items()):
+                        if isinstance(wv, str) and "[AI-drafted" in wv:
+                            w[wk] = re.sub(r"^\[AI-drafted(?:,\s*review)?\]\s*", "", wv).strip()
+            for b in event_data.get("bills") or []:
+                if isinstance(b, dict):
+                    for bk, bv in list(b.items()):
+                        if isinstance(bv, str) and "[AI-drafted" in bv:
+                            b[bk] = re.sub(r"^\[AI-drafted(?:,\s*review)?\]\s*", "", bv).strip()
+        else:
+            # Do NOT strip '[AI-drafted, review]'. Reject any unconfirmed AI-draft values.
+            for k, v in event_data.items():
+                if isinstance(v, str) and "[AI-drafted" in v:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail={
+                            "code": "UNCONFIRMED_AI_DRAFT",
+                            "message": f"Field '{k}' contains unconfirmed AI draft. Please accept or edit before generating.",
+                        },
+                    )
+            for idx, w in enumerate(event_data.get("winners") or []):
+                if isinstance(w, dict):
+                    for wk, wv in w.items():
+                        if isinstance(wv, str) and "[AI-drafted" in wv:
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail={
+                                    "code": "UNCONFIRMED_AI_DRAFT",
+                                    "message": f"Winner #{idx+1} '{wk}' contains unconfirmed AI draft. Please accept or edit before generating.",
+                                },
+                            )
+            for idx, b in enumerate(event_data.get("bills") or []):
+                if isinstance(b, dict):
+                    for bk, bv in b.items():
+                        if isinstance(bv, str) and "[AI-drafted" in bv:
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail={
+                                    "code": "UNCONFIRMED_AI_DRAFT",
+                                    "message": f"Bill #{idx+1} '{bk}' contains unconfirmed AI draft. Please accept or edit before generating.",
+                                },
+                            )
 
         # ---------------- 2. FETCH SELECTED TEMPLATES & SCHEMAS ----------------
         templates_to_render: list[tuple[Template, TemplateVersion, dict[str, Any]]] = []

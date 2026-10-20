@@ -586,6 +586,10 @@ class Renderer:
                     line_tot = fn_line_total(qty, unit_cost)
                     bill_subtotal += line_tot
                     enriched_it = dict(it)
+                    if "name" not in enriched_it and "item" in enriched_it:
+                        enriched_it["name"] = enriched_it["item"]
+                    elif "item" not in enriched_it and "name" in enriched_it:
+                        enriched_it["item"] = enriched_it["name"]
                     enriched_it["line_total"] = line_tot
                     enriched_items.append(enriched_it)
                 else:
@@ -606,7 +610,7 @@ class Renderer:
             ctx["bill_total_with_tax"] = fn_total_with_tax(bill_subtotal, tax_dec)
         else:
             if "bill_items" not in ctx:
-                ctx["bill_items"] = [{"item": BLANK_LINE, "qty": "1", "unit_cost": BLANK_LINE, "line_total": BLANK_LINE}] if allow_blanks else []
+                ctx["bill_items"] = [{"item": BLANK_LINE, "name": BLANK_LINE, "qty": "1", "unit_cost": BLANK_LINE, "line_total": BLANK_LINE}] if allow_blanks else []
             ctx["bill_total"] = BLANK_LINE if allow_blanks else Decimal("0")
             ctx["tax_amount"] = BLANK_LINE if allow_blanks else Decimal("0")
             ctx["bill_total_with_tax"] = BLANK_LINE if allow_blanks else Decimal("0")
@@ -625,6 +629,8 @@ class Renderer:
         else:
             ctx["budget_total"] = BLANK_LINE if allow_blanks else Decimal("0")
             ctx["budget_total_inr"] = BLANK_LINE if allow_blanks else "₹0.00"
+        ctx["total_budget"] = ctx["budget_total_inr"]
+        ctx["total_budget_items_amount"] = ctx["budget_total_inr"]
 
         # Compute bill summary totals: winners (prize money) + other reimbursements
         prize_tot = Decimal("0")

@@ -4,61 +4,269 @@
   "stage": "pre_event",
   "description": "Proposal to the faculty advisor / department to conduct an event, with schedule, objectives and optional budget.",
   "numbering_series": "EP",
-  "triggers": ["proposal", "event proposal"],
+  "triggers": [
+    "proposal",
+    "event proposal"
+  ],
   "recommend": {
-    "keywords": ["proposal", "event proposal"],
+    "keywords": [
+      "proposal",
+      "event proposal"
+    ],
     "general_event": true,
-    "suppress_when": ["bills", "meeting", "winners"],
+    "suppress_when": [
+      "bills",
+      "meeting",
+      "winners",
+      "certificate"
+    ],
     "reason": "A proposal describing the event for approval before it is conducted.",
     "reason_not": "Used when planning a new event."
   },
   "fields": [
-    {"key": "submitted_to", "type": "text", "required": true, "label": "Submitted To", "ask": "Who is this proposal addressed to? (e.g. Head of Department, Computer Science & Engineering)"},
-    {"key": "event_name", "type": "text", "required": true, "label": "Event Name", "ask": "What is the name of the event?"},
-    {"key": "dates", "type": "date_range", "required": true, "label": "Event Dates", "ask": "On which date(s) will the event be held?"},
-    {"key": "time_start", "type": "text", "required": false, "label": "Start Time", "ask": "Start time"},
-    {"key": "time_end", "type": "text", "required": false, "label": "End Time", "ask": "End time"},
-    {"key": "venue", "type": "text", "required": true, "label": "Venue", "ask": "Where will the event be held?"},
-    {"key": "expected_participants", "type": "int", "required": true, "label": "Expected Participants", "ask": "How many participants are expected?"},
-    {"key": "target_audience", "type": "text", "required": false, "label": "Target Audience", "ask": "Who is the event for?"},
-    {"key": "description", "type": "longtext", "required": true, "label": "About the Event", "ask": "Briefly describe the event."},
-    {"key": "objectives", "type": "longtext", "required": true, "label": "Objectives", "ask": "What are the objectives of the event?"},
-    {"key": "resource_persons", "type": "longtext", "required": false, "label": "Resource Persons", "ask": "Speakers or resource persons, if any"},
-    {"key": "budget_items", "type": "table", "required": false, "label": "Estimated Budget", "ask": "Estimated budget items and amounts, if any",
-     "columns": [{"key": "item", "label": "Item", "align": "left"}, {"key": "amount", "label": "Amount (INR)", "align": "right"}]}
+    {
+      "key": "submitted_to",
+      "type": "text",
+      "required": true,
+      "label": "Submitted To",
+      "ask": "Who is this proposal addressed to? (e.g. Head of Department, Computer Science & Engineering)"
+    },
+    {
+      "key": "event_name",
+      "type": "text",
+      "required": true,
+      "label": "Event Name",
+      "ask": "What is the name of the event?"
+    },
+    {
+      "key": "dates",
+      "type": "date_range",
+      "required": true,
+      "label": "Event Dates",
+      "ask": "On which date(s) will the event be held?"
+    },
+    {
+      "key": "time_start",
+      "type": "text",
+      "required": false,
+      "label": "Start Time",
+      "ask": "Start time"
+    },
+    {
+      "key": "time_end",
+      "type": "text",
+      "required": false,
+      "label": "End Time",
+      "ask": "End time"
+    },
+    {
+      "key": "venue",
+      "type": "text",
+      "required": true,
+      "label": "Venue",
+      "ask": "Where will the event be held?"
+    },
+    {
+      "key": "expected_participants",
+      "type": "int",
+      "required": true,
+      "label": "Expected Participants",
+      "ask": "How many participants are expected?"
+    },
+    {
+      "key": "target_audience",
+      "type": "text",
+      "required": false,
+      "label": "Target Audience",
+      "ask": "Who is the event for?"
+    },
+    {
+      "key": "description",
+      "type": "longtext",
+      "required": true,
+      "label": "About the Event",
+      "ask": "Briefly describe the event."
+    },
+    {
+      "key": "objectives",
+      "type": "longtext",
+      "required": true,
+      "label": "Objectives",
+      "ask": "What are the objectives of the event?"
+    },
+    {
+      "key": "resource_persons",
+      "type": "longtext",
+      "required": false,
+      "label": "Resource Persons",
+      "ask": "Speakers or resource persons, if any"
+    },
+    {
+      "key": "budget_items",
+      "type": "table",
+      "required": false,
+      "label": "Estimated Budget",
+      "ask": "Estimated budget items and amounts, if any",
+      "columns": [
+        {
+          "key": "item",
+          "label": "Item",
+          "align": "left"
+        },
+        {
+          "key": "amount",
+          "label": "Amount (INR)",
+          "align": "right"
+        }
+      ]
+    }
   ],
   "blocks": [
-    {"type": "heading", "level": 1, "align": "center", "text": "EVENT PROPOSAL"},
-    {"type": "paragraph", "text": "Ref. No.: {{ref_no}}"},
-    {"type": "paragraph", "text": "Date: {{document_date}}"},
-    {"type": "paragraph", "text": "To,"},
-    {"type": "paragraph", "text": "{{submitted_to}}"},
-    {"type": "paragraph", "text": "Subject: Proposal to conduct {{event_name}}"},
-    {"type": "paragraph", "align": "justify", "text": "{{club_name}} proposes to conduct {{event_name}} on {{dates}} at {{venue}} for about {{expected_participants}} participants. The details of the event are given below for your kind consideration and approval."},
-    {"type": "infoTable", "rows": [
-      {"label": "Event", "field": "event_name"},
-      {"label": "Date(s)", "field": "dates"},
-      {"label": "Start Time", "field": "time_start"},
-      {"label": "End Time", "field": "time_end"},
-      {"label": "Venue", "field": "venue"},
-      {"label": "Expected Participants", "field": "expected_participants"},
-      {"label": "Target Audience", "field": "target_audience"}
-    ]},
-    {"type": "heading", "level": 2, "text": "About the Event"},
-    {"type": "paragraph", "align": "justify", "text": "{{description}}"},
-    {"type": "heading", "level": 2, "text": "Objectives"},
-    {"type": "paragraph", "align": "justify", "text": "{{objectives}}"},
-    {"type": "heading", "level": 2, "showIf": "resource_persons", "text": "Resource Persons"},
-    {"type": "paragraph", "showIf": "resource_persons", "text": "{{resource_persons}}"},
-    {"type": "heading", "level": 2, "showIf": "budget_items", "text": "Estimated Budget"},
-    {"type": "repeatingTable", "showIf": "budget_items", "listVariable": "budget_items", "itemAlias": "b",
-     "columns": [{"key": "item", "label": "Item", "align": "left"}, {"key": "amount", "label": "Amount (INR)", "align": "right"}],
-     "hasTotal": true, "totalLabel": "Total", "totalField": "amount", "totalVarName": "total_budget"},
-    {"type": "paragraph", "align": "justify", "text": "We request you to kindly approve the proposal and permit the club to conduct the event."},
-    {"type": "signatureGrid", "columns": 3, "signatures": [
-      {"label": "Student Coordinator", "designation": ""},
-      {"label": "Faculty Advisor", "designation": ""},
-      {"label": "Head of Department", "designation": ""}
-    ]}
+    {
+      "type": "heading",
+      "level": 1,
+      "align": "center",
+      "text": "EVENT PROPOSAL"
+    },
+    {
+      "type": "paragraph",
+      "text": "Ref. No.: {{ref_no}}"
+    },
+    {
+      "type": "paragraph",
+      "text": "Date: {{document_date}}"
+    },
+    {
+      "type": "paragraph",
+      "text": "To,"
+    },
+    {
+      "type": "paragraph",
+      "text": "{{submitted_to}}"
+    },
+    {
+      "type": "paragraph",
+      "text": "Subject: Proposal to conduct {{event_name}}"
+    },
+    {
+      "type": "paragraph",
+      "align": "justify",
+      "text": "{{club_name}} proposes to conduct {{event_name}} on {{dates}} at {{venue}} for about {{expected_participants}} participants. The details of the event are given below for your kind consideration and approval."
+    },
+    {
+      "type": "infoTable",
+      "rows": [
+        {
+          "label": "Event",
+          "field": "event_name"
+        },
+        {
+          "label": "Date(s)",
+          "field": "dates"
+        },
+        {
+          "label": "Start Time",
+          "field": "time_start"
+        },
+        {
+          "label": "End Time",
+          "field": "time_end"
+        },
+        {
+          "label": "Venue",
+          "field": "venue"
+        },
+        {
+          "label": "Expected Participants",
+          "field": "expected_participants"
+        },
+        {
+          "label": "Target Audience",
+          "field": "target_audience"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "About the Event"
+    },
+    {
+      "type": "paragraph",
+      "align": "justify",
+      "text": "{{description}}"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "Objectives"
+    },
+    {
+      "type": "paragraph",
+      "align": "justify",
+      "text": "{{objectives}}"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "showIf": "resource_persons",
+      "text": "Resource Persons"
+    },
+    {
+      "type": "paragraph",
+      "showIf": "resource_persons",
+      "text": "{{resource_persons}}"
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "showIf": "budget_items",
+      "text": "Estimated Budget"
+    },
+    {
+      "type": "repeatingTable",
+      "showIf": "budget_items",
+      "listVariable": "budget_items",
+      "itemAlias": "b",
+      "columns": [
+        {
+          "key": "item",
+          "label": "Item",
+          "align": "left"
+        },
+        {
+          "key": "amount",
+          "label": "Amount (INR)",
+          "align": "right"
+        }
+      ],
+      "hasTotal": true,
+      "totalLabel": "Total",
+      "totalField": "amount",
+      "totalVarName": "total_budget"
+    },
+    {
+      "type": "paragraph",
+      "align": "justify",
+      "text": "We request you to kindly approve the proposal and permit the club to conduct the event."
+    },
+    {
+      "type": "signatureGrid",
+      "columns": 3,
+      "signatures": [
+        {
+          "label": "Student Coordinator",
+          "designation": ""
+        },
+        {
+          "label": "Faculty Advisor",
+          "designation": ""
+        },
+        {
+          "label": "Head of Department",
+          "designation": ""
+        }
+      ]
+    }
   ]
 }

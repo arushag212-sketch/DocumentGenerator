@@ -24,7 +24,41 @@ from sqlalchemy.orm import Session
 from server.app.core.storage import require_local_storage
 from server.app.models import Document, DocumentReview, DocumentVersion, TemplateVersion, User
 
-EDITABLE_TYPES = {"text", "longtext", "int", "money", "date", "date_range", "time_range", "enum"}
+EDITABLE_TYPES = {"text", "longtext", "int", "money", "date", "date_range", "time_range", "enum", "table", "list"}
+
+TABLE_DEFAULTS = {
+    "budget_items": [
+        {"key": "item", "label": "Particulars", "type": "text"},
+        {"key": "amount", "label": "Amount (Rs.)", "type": "money"},
+    ],
+    "agenda_items": [
+        {"key": "topic", "label": "Topic", "type": "text"},
+        {"key": "discussion", "label": "Discussion", "type": "longtext"},
+        {"key": "decision", "label": "Decision", "type": "text"},
+    ],
+    "action_items": [
+        {"key": "task", "label": "Task", "type": "text"},
+        {"key": "owner", "label": "Owner", "type": "text"},
+        {"key": "deadline", "label": "Deadline", "type": "date"},
+    ],
+    "winners": [
+        {"key": "name", "label": "Winner Name", "type": "text"},
+        {"key": "roll_no", "label": "Roll No", "type": "text"},
+        {"key": "position", "label": "Position", "type": "text"},
+        {"key": "amount", "label": "Prize (Rs.)", "type": "money"},
+    ],
+    "attendees": [
+        {"key": "name", "label": "Attendee Name", "type": "text"},
+    ],
+    "absentees": [
+        {"key": "name", "label": "Absentee Name", "type": "text"},
+    ],
+    "bill_items": [
+        {"key": "item", "label": "Item Description", "type": "text"},
+        {"key": "qty", "label": "Quantity", "type": "int"},
+        {"key": "unit_cost", "label": "Unit Cost (Rs.)", "type": "money"},
+    ],
+}
 IST = timezone(timedelta(hours=5, minutes=30))
 
 
@@ -62,12 +96,14 @@ def editable_fields(db: Session, doc: Document) -> list[dict[str, Any]]:
         value = snapshot.get(f["key"])
         if isinstance(value, dict) and "value" in value:
             value = value["value"]
+        cols = f.get("columns") or TABLE_DEFAULTS.get(f["key"])
         out.append({
             "key": f["key"],
             "label": f.get("label") or f["key"].replace("_", " ").title(),
             "type": f_type,
             "required": bool(f.get("required")),
-            "value": "" if value is None else value,
+            "value": [] if f_type in ("table", "list") and value is None else ("" if value is None else value),
+            "columns": cols,
         })
     return out
 
@@ -104,10 +140,26 @@ def revise_document(db: Session, doc: Document, user: User, changes: dict[str, A
         old = snapshot.get(key)
         if isinstance(old, dict) and "value" in old:
             old = old["value"]
-        if str(old or "") == str(new or ""):
+        if old == new or (old is None and new == "") or (isinstance(old, (int, float)) and str(old) == str(new)):
             continue
+        # Sanitize single-column string tables like attendees
+        if key in ("attendees", "absentees") and isinstance(new, list):
+            new = [
+                r.get("name") if isinstance(r, dict) and "name" in r
+                else r.get("value") if isinstance(r, dict) and "value" in r
+                else str(r)
+                for r in new
+            ]
+        elif key == "budget_items" and isinstance(new, list):
+            from docgen.models import coerce_to_budget_items
+            b_list = coerce_to_budget_items(new)
+            new = [b.model_dump() for b in b_list]
+
         snapshot[key] = new
-        diffs.append(f"{key}: “{old or ''}” → “{new or ''}”")
+        if isinstance(new, list):
+            diffs.append(f"{key}: {len(old or [])} row(s) → {len(new)} row(s)")
+        else:
+            diffs.append(f"{key}: “{old or ''}” → “{new or ''}”")
     if not diffs:
         raise HTTPException(status_code=400, detail={"code": "NO_CHANGES", "message": "Nothing was changed."})
 

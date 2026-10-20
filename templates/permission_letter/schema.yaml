@@ -7,7 +7,7 @@ recommend:
   keywords: [permission, permission letter, book, booking, reserve, reservation, use the hall, use the lab]
   auto_when: [venue_request]
   general_event: true
-  suppress_when: [bills, meeting, winners]
+  suppress_when: [bills, meeting, winners, certificate]
   reason: "Official permission is needed to use the venue and conduct the event on campus."
   reason_not: "Only needed when booking a venue or conducting an event."
 letterhead: club

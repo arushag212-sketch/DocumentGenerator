@@ -163,6 +163,7 @@ def regenerate_document_version(
         output_dir=out_dir,
         version=version_no,
         convert_pdf=True,
+        allow_blanks=True,
     )
 
     ver.template_version_id = tmpl_ver.id if tmpl_ver else template_version_id

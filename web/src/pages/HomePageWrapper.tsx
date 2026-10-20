@@ -3,13 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { HomePage } from '../components/HomePage';
 import { ResultPage } from '../components/ResultPage';
 import { RequireCreateAccess } from '../components/RequireCreateAccess';
-import { HomeGenerateResponse } from '../types';
+import { HomeGenerateResponse, HomeCreateResponse } from '../types';
 import { Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const HomePageWrapper: React.FC = () => {
   const { activeClub } = useAuth();
-  const [homeResult, setHomeResult] = useState<HomeGenerateResponse | null>(null);
+  const [homeResult, setHomeResult] = useState<HomeCreateResponse | HomeGenerateResponse | null>(null);
 
   if (!activeClub) {
     return (

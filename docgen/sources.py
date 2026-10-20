@@ -102,7 +102,9 @@ class DatabaseTemplateSource:
         if template_id not in self.data_store:
             raise FileNotFoundError(f"Template '{template_id}' not found in database source")
         schema_yaml_str, _ = self.data_store[template_id]
-        data = yaml.safe_load(schema_yaml_str)
+        data = yaml.safe_load(schema_yaml_str) or {}
+        if not data.get("id"):
+            data["id"] = template_id
         return TemplateSchema(**data)
 
 

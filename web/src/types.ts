@@ -114,12 +114,21 @@ export interface DocumentVersionInfo {
   change_summary?: string | null;
 }
 
+export interface TableColumn {
+  key: string;
+  label: string;
+  type?: string;
+}
+
 export interface EditableField {
   key: string;
   label: string;
   type: string;
   required: boolean;
   value: any;
+  columns?: TableColumn[];
+  importance?: string;
+  ask?: string;
 }
 
 export interface DocumentActivity {
@@ -370,6 +379,11 @@ export interface HomeGeneratedDoc {
   docx_url: string;
   preview_url: string;
   version_no: number;
+  page_count?: number;
+  page_images?: string[];
+  missing_fields?: string[];
+  editable_fields?: EditableField[];
+  record_snapshot?: Record<string, any>;
 }
 
 export interface HomeGenerateResponse {
@@ -379,5 +393,14 @@ export interface HomeGenerateResponse {
   documents_count: number;
   zip_url: string;
   documents: HomeGeneratedDoc[];
+  assumptions?: string[];
+  notice?: string | null;
+  extracted_facts?: Record<string, any>;
+  missing_fields_summary?: Record<string, string[]>;
+}
+
+export interface HomeCreateResponse extends HomeGenerateResponse {
+  assumptions: string[];
+  notice?: string | null;
 }
 

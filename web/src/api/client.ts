@@ -1,4 +1,4 @@
-import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse, ClubAnalytics, VerificationResult } from '../types';
+import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse, HomeCreateResponse, HomeGeneratedDoc, ClubAnalytics, VerificationResult } from '../types';
 
 function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`;
@@ -662,6 +662,59 @@ export const api = {
     },
   },
   home: {
+    create: (
+      clubId: string | number,
+      payload: {
+        text: string;
+        selected_template_id?: string | null;
+      }
+    ) =>
+      apiFetch<HomeCreateResponse>(`/clubs/${clubId}/home/create`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    applyAll: (
+      clubId: string | number,
+      payload: {
+        event_id: string;
+        updates: Record<string, any>;
+      }
+    ) =>
+      apiFetch<{
+        event_id: string;
+        updated_documents_count: number;
+        documents: HomeGeneratedDoc[];
+      }>(`/clubs/${clubId}/home/apply-all`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    addDocument: (
+      clubId: string | number,
+      payload: {
+        event_id: string;
+        template_id: string;
+      }
+    ) =>
+      apiFetch<HomeGeneratedDoc>(`/clubs/${clubId}/home/add-document`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    aiInstruct: (
+      clubId: string | number,
+      payload: {
+        instruction: string;
+        current_data: Record<string, any>;
+        template_slug?: string;
+      }
+    ) =>
+      apiFetch<{
+        proposed_updates: Record<string, any>;
+        explanation: string;
+      }>(`/clubs/${clubId}/home/ai-instruct`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+
     understand: (
       clubId: string | number,
       payload: {

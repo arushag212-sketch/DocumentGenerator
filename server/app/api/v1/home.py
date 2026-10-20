@@ -28,7 +28,7 @@ from server.app.core.input_validation import (
 )
 from server.app.core.permissions import ClubContext, Role, require_club_access
 from server.app.core.scoped_repo import ScopedRepository
-from server.app.models import Club, NumberingSeries, Person, RoleHeld, Template, TemplateVersion
+from server.app.models import Club, Document, Event, NumberingSeries, Person, RoleHeld, Template, TemplateVersion, Venue
 
 
 router = APIRouter(prefix="/clubs/{club_id}/home", tags=["home"])
@@ -506,3 +506,469 @@ def generate_user_need(
         zip_url=batch_result.get("zip_url"),
         documents=docs_out,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase: Describe -> AI Drafts -> Review & Edit (New Flow)
+# ---------------------------------------------------------------------------
+
+class HomeCreateRequest(BaseModel):
+    text: str = Field(..., min_length=2)
+    selected_template_id: Optional[str] = None
+    explicit_data: Optional[dict[str, Any]] = None
+    rows: Optional[list[dict[str, Any]]] = None
+
+
+class HomeApplyAllRequest(BaseModel):
+    event_id: str
+    changes: dict[str, Any]
+
+
+class HomeAddDocumentRequest(BaseModel):
+    event_id: str
+    template_id: str
+    event_data: Optional[dict[str, Any]] = None
+
+
+class HomeAiInstructRequest(BaseModel):
+    instruction: str
+    current_fields: dict[str, Any]
+    available_fields: list[dict[str, Any]]
+
+
+class HomeCreateResponse(BaseModel):
+    batch_id: str
+    event_id: str
+    event_title: str
+    documents_count: int
+    zip_url: str
+    documents: list[dict[str, Any]]
+    fields: dict[str, Any]
+    missing_fields: list[dict[str, Any]]
+    ai_drafted_fields: list[str]
+    assumptions: list[str]
+    recommended_templates: list[HomeRecommendedDoc]
+    available_templates: list[dict[str, Any]]
+    notice: Optional[str] = None
+
+
+@router.post("/create", response_model=HomeCreateResponse)
+def create_documents_endpoint(
+    payload: HomeCreateRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Single action create: extract details, decide documents, build shared event, generate with blanks."""
+    from collections import defaultdict
+    from datetime import date
+    from server.app.core.club_identity import club_department, default_addressee
+    import server.app.core.document_workflow as workflow
+
+    # 1. Recommendation & Extraction
+    rec = EventRecommender.recommend(
+        text=payload.text,
+        club_id=ctx.club.id,
+        db=db,
+        explicit_data=payload.explicit_data,
+    )
+    extracted = dict(rec.extracted_data or {})
+    notice = None
+
+    # Check which templates to generate
+    if payload.selected_template_id:
+        selected_ids = [payload.selected_template_id]
+    else:
+        selected_ids = [t.template_id for t in rec.templates if t.recommended]
+        if not selected_ids:
+            all_t = rec.templates + rec.other_templates
+            if all_t:
+                selected_ids = [all_t[0].template_id]
+
+    assumptions: list[str] = []
+
+    # 2. Defaults instead of questions
+    # Venue and Addressee
+    venue_name = extracted.get("venue")
+    venue_obj = None
+    if venue_name:
+        venue_obj = (
+            db.query(Venue)
+            .filter(
+                (Venue.club_id == ctx.club.id) | (Venue.club_id.is_(None)),
+                (Venue.name.ilike(f"%{venue_name}%")) | (Venue.short_name.ilike(f"%{venue_name}%")),
+            )
+            .first()
+        )
+    if venue_obj and venue_obj.addressee_default:
+        extracted["submitted_to"] = venue_obj.addressee_default
+        assumptions.append(f"Addressee: {venue_obj.addressee_default} (from {venue_obj.name})")
+    elif not extracted.get("submitted_to"):
+        def_add = default_addressee(ctx.club)
+        extracted["submitted_to"] = def_add
+        assumptions.append(f"Addressee: {def_add} (from club settings)")
+
+    # Organiser defaults to member's club
+    for org_k in (
+        "organiser", "organizer", "organised_by", "organized_by", "organising_club",
+        "organizing_club", "club", "club_name", "issuing_club", "hosted_by", "host_club"
+    ):
+        if not extracted.get(org_k):
+            extracted[org_k] = ctx.club.name
+    assumptions.append(f"Organiser: {ctx.club.name}")
+
+    # Document date defaults to today
+    today_str = date.today().strftime("%d/%m/%Y")
+    if not extracted.get("document_date"):
+        extracted["document_date"] = today_str
+    assumptions.append(f"Document date: {today_str} (today)")
+
+    # Dates and Times
+    has_picker_dates = bool(
+        extracted.get("date_start")
+        and extracted.get("date_end")
+        and re.match(r"^\d{4}-\d{2}-\d{2}$", str(extracted.get("date_start")))
+        and re.match(r"^\d{4}-\d{2}-\d{2}$", str(extracted.get("date_end")))
+    )
+    if has_picker_dates:
+        extracted["dates_confirmed"] = True
+        if not extracted.get("dates"):
+            from docgen.functions import fn_format_date_range
+            extracted["dates"] = fn_format_date_range(extracted["date_start"], extracted["date_end"])
+    elif extracted.get("dates"):
+        extracted["dates_confirmed"] = True
+
+    if extracted.get("time_start"):
+        assumptions.append(f"Start time: {extracted['time_start']}")
+    if extracted.get("time_end"):
+        assumptions.append(f"End time: {extracted['time_end']}")
+
+    # Signatories from club's active role holders
+    if ctx.club.academic_year_default:
+        active_role_holders = (
+            db.query(RoleHeld)
+            .filter(
+                RoleHeld.club_id == ctx.club.id,
+                RoleHeld.academic_year == ctx.club.academic_year_default,
+                RoleHeld.valid_to.is_(None),
+            )
+            .all()
+        )
+        holders_by_role = defaultdict(list)
+        for rh in active_role_holders:
+            holders_by_role[rh.role_key].append(rh)
+
+        person_repo = ScopedRepository(db, Person, club_id=ctx.club.id)
+        for r_key, r_holders in holders_by_role.items():
+            if r_holders:
+                chosen_rh = r_holders[0]
+                chosen_p = person_repo.get(chosen_rh.person_id)
+                if chosen_p and r_key not in extracted:
+                    extracted[r_key] = {
+                        "name": chosen_p.full_name,
+                        "admission_no": chosen_p.roll_no or "",
+                        "branch": chosen_p.branch or "",
+                        "mobile": chosen_p.mobile or "",
+                        "email": chosen_p.email or "",
+                        "designation": chosen_rh.designation_label,
+                    }
+                    extracted[f"signatory_{r_key}"] = chosen_p.full_name
+                    display_role = r_key.replace("_", " ").title()
+                    assumptions.append(f"Signatory for {display_role}: {chosen_p.full_name}")
+
+    # Track AI-drafted fields (and clean marker so it is NEVER printed in document)
+    ai_drafted_fields: list[str] = []
+    for k, v in list(extracted.items()):
+        if isinstance(v, str) and "[AI-drafted" in v:
+            ai_drafted_fields.append(k)
+            extracted[k] = re.sub(r"^\[AI-drafted(?:,\s*review)?\]\s*", "", v).strip()
+
+    if "description" in ai_drafted_fields:
+        assumptions.append("Description: drafted by AI from your request")
+    if "objectives" in ai_drafted_fields:
+        assumptions.append("Objectives: drafted by AI from your request")
+
+    if payload.rows:
+        extracted["rows"] = payload.rows
+
+    # 3. Batch generate documents with allow_blanks=True
+    batch_result = BatchGenerator.generate_batch(
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        selected_template_ids=selected_ids,
+        event_data=extracted,
+        event_title=extracted.get("event_name") or "Event",
+        allow_blanks=True,
+        db=db,
+    )
+
+    # 4. Detect missing fields (fields in schemas left blank)
+    missing_fields: list[dict[str, Any]] = []
+    for mf in rec.grouped_missing_fields:
+        val = extracted.get(mf.key)
+        if val is None or str(val).strip() in ("", "None", "null", "____________________"):
+            missing_fields.append({
+                "key": mf.key,
+                "label": _clean_jargon(mf.label),
+                "type": mf.type,
+                "needed_by": [_clean_jargon(n) for n in mf.needed_by],
+                "ask": _clean_jargon(mf.ask),
+            })
+
+    # 5. Enrich generated documents with editable_fields and page_images
+    docs_out: list[dict[str, Any]] = []
+    doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
+    for doc_info in batch_result.get("documents", []):
+        doc_id = doc_info.get("id") or doc_info.get("document_id")
+        doc_record = doc_repo.get(doc_id) if doc_id else None
+        latest_ver = workflow.latest_version(db, doc_record) if doc_record else None
+        ver_no = latest_ver.version_no if latest_ver else doc_info.get("version_no", 1)
+        ef = workflow.editable_fields(db, doc_record) if doc_record else []
+        page_count = 1
+        if latest_ver and latest_ver.pdf_key:
+            try:
+                import pymupdf
+                from server.app.core.storage import require_local_storage
+                pdf_p = require_local_storage().local_path(latest_ver.pdf_key)
+                if pdf_p.exists():
+                    pdoc = pymupdf.open(str(pdf_p))
+                    page_count = len(pdoc)
+                    pdoc.close()
+            except Exception:
+                page_count = 1
+        page_images = [
+            f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/pages/{p}?v={ver_no}"
+            for p in range(1, page_count + 1)
+        ]
+        docs_out.append({
+            "id": doc_id,
+            "template_slug": doc_info.get("template_slug", "document"),
+            "title": doc_info.get("title", "Generated Document"),
+            "ref_no": doc_info.get("ref_no", ""),
+            "pdf_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/pdf",
+            "docx_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/docx",
+            "preview_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/preview",
+            "version_no": ver_no,
+            "editable_fields": ef,
+            "page_images": page_images,
+        })
+
+    # Recommended docs info
+    all_recs = rec.templates + rec.other_templates
+    event_code = derive_event_code(extracted.get("event_name")) if extracted.get("event_name") else None
+    recommended_docs: list[HomeRecommendedDoc] = []
+    for t in all_recs:
+        series_key = t.numbering_series or ("ROOM" if t.slug == "permission_letter" else "EVT")
+        suggested_ref = _get_suggested_ref_no(ctx.club, series_key, db, event_code, t.numbering_format)
+        recommended_docs.append(
+            HomeRecommendedDoc(
+                template_id=t.template_id,
+                name=t.name,
+                slug=t.slug,
+                reason=_clean_jargon(t.reason),
+                recommended=t.recommended,
+                suggested_ref_no=suggested_ref,
+            )
+        )
+
+    # Available templates for "+ Add document"
+    all_club_tmpls = (
+        db.query(Template)
+        .filter(
+            (Template.club_id == ctx.club.id) | (Template.is_system == True),
+            Template.status == "published",
+        )
+        .all()
+    )
+    available_templates = [
+        {"id": t.id, "name": t.name, "slug": t.slug}
+        for t in all_club_tmpls
+    ]
+
+    return HomeCreateResponse(
+        batch_id=batch_result.get("batch_id"),
+        event_id=batch_result.get("event_id"),
+        event_title=batch_result.get("event_title") or "Event",
+        documents_count=len(docs_out),
+        zip_url=batch_result.get("zip_url") or "",
+        documents=docs_out,
+        fields=extracted,
+        missing_fields=missing_fields,
+        ai_drafted_fields=ai_drafted_fields,
+        assumptions=assumptions,
+        recommended_templates=recommended_docs,
+        available_templates=available_templates,
+        notice=notice,
+    )
+
+
+@router.post("/apply-all")
+def apply_all_endpoint(
+    payload: HomeApplyAllRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Apply field changes across all documents sharing an event record."""
+    import server.app.core.document_workflow as workflow
+
+    doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
+    docs = doc_repo.all(Document.event_id == payload.event_id)
+    if not docs:
+        raise HTTPException(status_code=404, detail="No documents found for this event.")
+
+    updated_docs = []
+    for doc in docs:
+        allowed = {f["key"] for f in workflow.editable_fields(db, doc)}
+        relevant_changes = {k: v for k, v in payload.changes.items() if k in allowed}
+        if relevant_changes:
+            try:
+                workflow.revise_document(db, doc, ctx.user, relevant_changes, note="Applied across event documents")
+            except HTTPException as exc:
+                if exc.detail and isinstance(exc.detail, dict) and exc.detail.get("code") == "NO_CHANGES":
+                    pass
+                else:
+                    raise
+
+        db.refresh(doc)
+        latest_ver = workflow.latest_version(db, doc)
+        ef = workflow.editable_fields(db, doc)
+        page_count = 1
+        if latest_ver and latest_ver.pdf_key:
+            try:
+                import pymupdf
+                from server.app.core.storage import require_local_storage
+                pdf_p = require_local_storage().local_path(latest_ver.pdf_key)
+                if pdf_p.exists():
+                    pdoc = pymupdf.open(str(pdf_p))
+                    page_count = len(pdoc)
+                    pdoc.close()
+            except Exception:
+                page_count = 1
+        page_images = [
+            f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/pages/{p}?v={latest_ver.version_no}"
+            for p in range(1, page_count + 1)
+        ]
+        tmpl = db.query(Template).filter(Template.id == doc.template_id).first()
+        updated_docs.append({
+            "id": doc.id,
+            "template_slug": tmpl.slug if tmpl else "document",
+            "title": doc.title,
+            "ref_no": doc.ref_no,
+            "pdf_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/pdf",
+            "docx_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/docx",
+            "preview_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/preview",
+            "version_no": latest_ver.version_no,
+            "editable_fields": ef,
+            "page_images": page_images,
+        })
+    return {"documents": updated_docs}
+
+
+@router.post("/add-document")
+def add_document_endpoint(
+    payload: HomeAddDocumentRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Generate an additional document for an existing event."""
+    from server.app.models import Event
+    import server.app.core.document_workflow as workflow
+
+    event_repo = ScopedRepository(db, Event, club_id=ctx.club.id)
+    doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
+
+    event = event_repo.get(payload.event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+
+    existing_doc = doc_repo.find_first(Document.event_id == event.id)
+    base_data = {}
+    if existing_doc:
+        ver = workflow.latest_version(db, existing_doc)
+        base_data = dict(ver.record_snapshot or {})
+    if payload.event_data:
+        base_data.update(payload.event_data)
+
+    batch_result = BatchGenerator.generate_batch(
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        selected_template_ids=[payload.template_id],
+        event_data=base_data,
+        event_id=event.id,
+        event_title=event.title,
+        allow_blanks=True,
+        db=db,
+    )
+
+    created_info = batch_result.get("documents", [])[0]
+    doc_id = created_info.get("id") or created_info.get("document_id")
+    doc = doc_repo.get(doc_id)
+    latest_ver = workflow.latest_version(db, doc)
+    ef = workflow.editable_fields(db, doc)
+    page_count = 1
+    if latest_ver and latest_ver.pdf_key:
+        try:
+            import pymupdf
+            from server.app.core.storage import require_local_storage
+            pdf_p = require_local_storage().local_path(latest_ver.pdf_key)
+            if pdf_p.exists():
+                pdoc = pymupdf.open(str(pdf_p))
+                page_count = len(pdoc)
+                pdoc.close()
+        except Exception:
+            page_count = 1
+    page_images = [
+        f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/pages/{p}?v={latest_ver.version_no}"
+        for p in range(1, page_count + 1)
+    ]
+    tmpl = db.query(Template).filter(Template.id == doc.template_id).first()
+    return {
+        "document": {
+            "id": doc.id,
+            "template_slug": tmpl.slug if tmpl else "document",
+            "title": doc.title,
+            "ref_no": doc.ref_no,
+            "pdf_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/pdf",
+            "docx_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/docx",
+            "preview_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/preview",
+            "version_no": latest_ver.version_no,
+            "editable_fields": ef,
+            "page_images": page_images,
+        }
+    }
+
+
+@router.post("/ai-instruct")
+def ai_instruct_endpoint(
+    payload: HomeAiInstructRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Translate plain language instruction (e.g. 'make the date 16 October') into field changes."""
+    import json
+    from docgen.llm import get_llm_client
+
+    llm = get_llm_client()
+    fields_summary = {f["key"]: f.get("label", f["key"]) for f in payload.available_fields}
+    schema = {
+        "type": "object",
+        "description": "JSON dictionary of field keys and their updated values",
+    }
+    prompt = (
+        f"You are helping a club member update document fields.\n"
+        f"Instruction: {payload.instruction}\n"
+        f"Current field values: {json.dumps(payload.current_fields, default=str)}\n"
+        f"Available fields: {json.dumps(fields_summary)}\n"
+        f"Return a JSON object containing ONLY the field keys that the user's instruction explicitly asks to change. "
+        f"Do not invent facts or modify fields not mentioned in the instruction. "
+        f"If a date is mentioned (e.g. 16 October), update both 'dates' and if relevant 'date_start' (YYYY-MM-DD)."
+    )
+    try:
+        changes = llm.generate_json(prompt, schema)
+        if not isinstance(changes, dict):
+            changes = {}
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="AI assistant is temporarily unavailable. You can edit the fields directly in the form below.",
+        )
+    return {"changes": changes}

@@ -41,6 +41,7 @@ VENUE_WORDS = re.compile(
 
 
 NEED_WORDS = re.compile(r"\b(need|needs|needed|want|require|requires|required|request|requesting|get|use|using)\b", re.IGNORECASE)
+CERTIFICATE_WORDS = re.compile(r"\bcertificates?\b", re.IGNORECASE)
 
 
 def compute_signals(text: str, has_budget: bool, has_winners: bool, has_bills: bool, is_meeting: bool) -> dict[str, bool]:
@@ -56,6 +57,7 @@ def compute_signals(text: str, has_budget: bool, has_winners: bool, has_bills: b
         "venue_request": bool(VENUE_WORDS.search(text) and NEED_WORDS.search(text)),
         "bundle": bool(BUNDLE_WORDS.search(text)),
         "event_description": describes_event,
+        "certificate": bool(CERTIFICATE_WORDS.search(text)),
     }
 
 
@@ -122,8 +124,8 @@ def evaluate(
     bundle = signals.get("bundle", False)
 
     requirement_met = not requires or any(signals.get(s) for s in requires)
-    suppressed = any(signals.get(s) for s in suppress) and not bundle
     asked = any(_phrase_in(text_lower, k) for k in keywords)
+    suppressed = any(signals.get(s) for s in suppress) and not bundle and not asked
     triggered = any(signals.get(s) for s in auto_when)
     general_match = general and (signals.get("event_description") or bundle)
     package_match = bundle and ("bundle" in requires or general)

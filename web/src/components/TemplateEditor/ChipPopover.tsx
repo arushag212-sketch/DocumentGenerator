@@ -23,7 +23,7 @@ export const ChipPopover: React.FC<ChipPopoverProps> = ({
   return (
     <div
       style={{ top: `${chipPopover.top}px`, left: `${chipPopover.left}px` }}
-      className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-2xl p-3.5 w-72 text-xs space-y-3 animate-in fade-in select-none"
+      className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-2xl p-3.5 w-72 text-xs space-y-3 animate-in fade-in"
     >
       <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
         <span className="font-bold text-slate-800 truncate">
