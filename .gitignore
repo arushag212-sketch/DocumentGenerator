@@ -15,13 +15,6 @@ docs/downloads/
 *.zip
 tests/visual/
 
-# Screenshots: keep only final and w8
-docs/screenshots/*
-!docs/screenshots/final/
-!docs/screenshots/final/**
-!docs/screenshots/w8/
-!docs/screenshots/w8/**
-
 # Python
 __pycache__/
 *.py[cod]
@@ -32,6 +25,9 @@ build/
 
 # Outputs
 outputs/
+
+# Tools
+.pytest_cache/
 
 # IDE
 .vscode/
