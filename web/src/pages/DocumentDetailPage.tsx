@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Download,
@@ -131,6 +131,11 @@ export const DocumentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { activeClub } = useAuth();
   const clubId = activeClub?.id;
+  // ?review=1 (from the dashboard's "Send a document for review" step) points at the review box
+  const [searchParams] = useSearchParams();
+  const guideToReview = searchParams.get('review') === '1';
+  const reviewRef = useRef<HTMLDivElement>(null);
+  const [highlightReview, setHighlightReview] = useState(false);
 
   const [doc, setDoc] = useState<GeneratedDocument | null>(null);
   const [loading, setLoading] = useState(true);
@@ -185,6 +190,14 @@ export const DocumentDetailPage: React.FC = () => {
       setBusy(null);
     }
   };
+
+  useEffect(() => {
+    if (!guideToReview || !doc || !reviewRef.current) return;
+    reviewRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightReview(true);
+    const t = window.setTimeout(() => setHighlightReview(false), 2500);
+    return () => window.clearTimeout(t);
+  }, [guideToReview, doc?.id]);
 
   if (loading) {
     return (
@@ -262,8 +275,17 @@ export const DocumentDetailPage: React.FC = () => {
 
         <aside className="space-y-4 lg:sticky lg:top-6">
           {/* Review */}
-          <div className="surface-card p-5">
+          <div
+            ref={reviewRef}
+            className={`surface-card p-5 scroll-mt-24 transition-shadow duration-500 ${highlightReview ? 'ring-2 ring-brand-500 ring-offset-2 shadow-lg' : ''}`}
+          >
             <h2 className="section-title mb-3">Review</h2>
+            {guideToReview && canSubmit && (
+              <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">
+                Check the document preview. When it looks right, add a note if you like and click <strong>Submit for review</strong>.
+                A club admin then approves it.
+              </p>
+            )}
             {doc.status === 'approved' && approvedEntry ? (
               <div className="space-y-2 text-sm">
                 <p className="flex items-center gap-2 text-emerald-700">

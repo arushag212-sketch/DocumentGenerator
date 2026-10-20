@@ -1,11 +1,12 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DocumentsTab } from '../components/DocumentsTab';
 
 export const DocumentsPage: React.FC = () => {
   const navigate = useNavigate();
   const { activeClub } = useAuth();
+  const [searchParams] = useSearchParams();
 
   if (!activeClub) {
     return (
@@ -23,6 +24,7 @@ export const DocumentsPage: React.FC = () => {
           navigate(`/documents/${doc.id}`);
         }}
         onNavigateToEvents={() => navigate('/home')}
+        reviewMode={searchParams.get('review') === '1'}
       />
     </div>
   );

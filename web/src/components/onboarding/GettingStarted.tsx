@@ -20,6 +20,25 @@ export function markTemplatesVisited() {
   }
 }
 
+const SEEN_LETTERHEAD_KEY = 'clubdocs.getting-started.seen-letterhead';
+
+/** Called when the letterhead settings are opened, so checking it counts even if the default is kept. */
+export function markLetterheadSeen() {
+  try {
+    window.localStorage.setItem(SEEN_LETTERHEAD_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+function seenLetterhead(): boolean {
+  try {
+    return window.localStorage.getItem(SEEN_LETTERHEAD_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function visitedTemplates(): boolean {
   try {
     return window.localStorage.getItem(VISITED_TEMPLATES_KEY) === '1';
@@ -43,6 +62,8 @@ function isDismissed(clubId: string | number): boolean {
 export const GettingStarted: React.FC<{ stats: ClubAnalytics | null }> = ({ stats }) => {
   const { activeClub, user } = useAuth();
   const [memberCount, setMemberCount] = useState<number | null>(null);
+  // Whether any document can be submitted yet (otherwise the review step points to Create)
+  const [hasReadyDoc, setHasReadyDoc] = useState(false);
   const [hidden, setHidden] = useState(true);
 
   const isAdmin = Boolean(user?.is_platform_admin || activeClub?.my_role === 'owner' || activeClub?.my_role === 'admin');
@@ -51,6 +72,11 @@ export const GettingStarted: React.FC<{ stats: ClubAnalytics | null }> = ({ stat
     if (!activeClub) return;
     setHidden(isDismissed(activeClub.id));
     setMemberCount(null);
+    setHasReadyDoc(false);
+    api.documents
+      .list(activeClub.id, { status: 'ready', page: 1, page_size: 1 })
+      .then((res: any) => setHasReadyDoc((res.items || res || []).length > 0))
+      .catch(() => setHasReadyDoc(false));
     if (isAdmin) {
       api.clubs
         .getMembers(activeClub.id)
@@ -80,8 +106,10 @@ export const GettingStarted: React.FC<{ stats: ClubAnalytics | null }> = ({ stat
     {
       key: 'review',
       label: 'Send a document for review',
-      hint: 'An admin approves it, and the PDF gets a verification code.',
-      to: '/documents',
+      hint: hasReadyDoc
+        ? 'Pick one of your documents, then click “Submit for review”; an admin approves it.'
+        : 'Create a document first, then open it and click “Submit for review”.',
+      to: hasReadyDoc ? '/documents?review=1' : '/home',
       done: stats.awaiting_review + stats.approvals > 0,
     },
     ...(isAdmin
@@ -90,8 +118,8 @@ export const GettingStarted: React.FC<{ stats: ClubAnalytics | null }> = ({ stat
             key: 'letterhead',
             label: 'Check your letterhead',
             hint: 'Club name and subtitle printed at the top of every page.',
-            to: '/settings/club',
-            done: Boolean(settings.letterhead_title || settings.letterhead_subtitle),
+            to: '/settings/club?tab=letterheads',
+            done: seenLetterhead() || Boolean(settings.letterhead_title || settings.letterhead_subtitle),
           },
           {
             key: 'invite',

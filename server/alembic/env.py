@@ -12,7 +12,8 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep the web server's own loggers (uvicorn access, app warnings) working after migrations run in-process
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 from server.app.core.database import Base, DATABASE_URL
 import server.app.models  # noqa: F401

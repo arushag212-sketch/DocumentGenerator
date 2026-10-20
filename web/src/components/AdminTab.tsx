@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { markLetterheadSeen } from './onboarding/GettingStarted';
 import { ClubPermissions, Venue, NumberingSeries } from '../types';
 import { api } from '../api/client';
 import {
@@ -44,7 +45,11 @@ function parseApprovalChain(raw: unknown): { name: string; designation: string }
 }
 
 export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefreshMembers }) => {
-  const [subTab, setSubTab] = useState<'general' | 'venues' | 'numbering' | 'letterheads' | 'storage'>('general');
+  // ?tab=letterheads (e.g. from the dashboard checklist) opens that section directly
+  const [subTab, setSubTab] = useState<'general' | 'venues' | 'numbering' | 'letterheads' | 'storage'>(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    return t === 'venues' || t === 'numbering' || t === 'letterheads' || t === 'storage' ? t : 'general';
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -143,6 +148,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
         const data = await api.clubs.getNumberingSeries(clubId);
         setSeriesList(data);
       } else if (subTab === 'letterheads') {
+        markLetterheadSeen();
         const clubInfo: any = await api.clubs.get(clubId);
         const st = clubInfo.settings || {};
         setLetterheadText({
