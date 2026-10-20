@@ -1,4 +1,4 @@
-import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Letterhead, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse } from '../types';
+import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Letterhead, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse, ClubAnalytics, VerificationResult } from '../types';
 
 function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`;
@@ -451,6 +451,39 @@ export const api = {
     },
     get: (clubId: string | number, docId: string) =>
       apiFetch<GeneratedDocument>(`/clubs/${clubId}/documents/${docId}`),
+    revise: (clubId: string | number, docId: string, changes: Record<string, any>, note?: string) =>
+      apiFetch<{ version_no: number; status: string; change_summary: string }>(`/clubs/${clubId}/documents/${docId}/revise`, {
+        method: 'POST',
+        body: JSON.stringify({ changes, note }),
+      }),
+    review: (
+      clubId: string | number,
+      docId: string,
+      action: 'submit' | 'approve' | 'request-changes' | 'comments',
+      comment?: string
+    ) =>
+      apiFetch<{ status?: string; verification_code?: string }>(`/clubs/${clubId}/documents/${docId}/${action}`, {
+        method: 'POST',
+        body: JSON.stringify({ comment }),
+      }),
+    email: (clubId: string | number, docId: string, payload: { to: string[]; message?: string; attach: 'pdf' | 'docx' | 'both' }) =>
+      apiFetch<{ sent_to: string[] }>(`/clubs/${clubId}/documents/${docId}/email`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    parseRows: (clubId: string | number, templateId: string, source: { file?: File; sheetUrl?: string }) => {
+      const form = new FormData();
+      form.append('template_id', templateId);
+      if (source.file) form.append('file', source.file);
+      if (source.sheetUrl) form.append('sheet_url', source.sheetUrl);
+      return apiFetch<{
+        headers: string[];
+        rows: Record<string, string>[];
+        row_count: number;
+        fields: { key: string; label: string; required: boolean }[];
+        mapping: Record<string, string | null>;
+      }>(`/clubs/${clubId}/documents/rows/parse`, { method: 'POST', body: form });
+    },
     listTemplates: (clubId: string | number) =>
       apiFetch<any[]>(`/clubs/${clubId}/documents/templates`),
     forkTemplate: (clubId: string | number, templateId: string, payload?: { name?: string }) =>
@@ -618,6 +651,17 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(payload),
       }),
+  },
+  analytics: {
+    get: (clubId: string | number) => apiFetch<ClubAnalytics>(`/clubs/${clubId}/analytics`),
+  },
+  verify: {
+    get: (code: string) => apiFetch<VerificationResult>(`/verify/${encodeURIComponent(code)}`),
+    file: (code: string, file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return apiFetch<VerificationResult>(`/verify/${encodeURIComponent(code)}`, { method: 'POST', body: form });
+    },
   },
   home: {
     understand: (

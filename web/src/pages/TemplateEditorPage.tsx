@@ -11,7 +11,7 @@ export const TemplateEditorPage: React.FC = () => {
 
   if (!activeClub) {
     return (
-      <div className="max-w-md mx-auto my-16 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm">
+      <div className="max-w-md mx-auto my-16 bg-white border border-slate-200 rounded-xl p-8 text-center shadow-sm">
         <p className="text-sm text-slate-600">Please select a club to edit templates.</p>
       </div>
     );
@@ -19,7 +19,7 @@ export const TemplateEditorPage: React.FC = () => {
 
   if (!id) {
     return (
-      <div className="max-w-md mx-auto my-16 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm">
+      <div className="max-w-md mx-auto my-16 bg-white border border-slate-200 rounded-xl p-8 text-center shadow-sm">
         <p className="text-sm text-slate-600">Template ID is missing.</p>
       </div>
     );

@@ -15,8 +15,8 @@ import {
   PenLine,
   Eye,
   XCircle,
-  Sparkles,
   ShieldCheck,
+  Wand2,
 } from 'lucide-react';
 
 type AccessLevel = 'editor' | 'viewer';
@@ -137,7 +137,7 @@ export const OnboardingClubPage: React.FC = () => {
         if (latest.status === 'approved') {
           await refreshClubs();
           setActiveClubId(latest.club_id);
-          navigate('/home', { replace: true });
+          navigate('/dashboard', { replace: true });
           return;
         }
         setTrackedRequest(latest);
@@ -164,7 +164,7 @@ export const OnboardingClubPage: React.FC = () => {
     setJoinError(null);
     if (club.membership_role) {
       setActiveClubId(club.id);
-      navigate('/home');
+      navigate('/dashboard');
       return;
     }
     setSelectedClubId(String(club.id));
@@ -244,7 +244,7 @@ export const OnboardingClubPage: React.FC = () => {
       await api.clubs.uploadLogo(created.id, newClubLogo);
       await refreshClubs();
       setActiveClubId(created.id);
-      navigate('/home');
+      navigate('/dashboard');
     } catch (err: any) {
       setCreateError(err.message || 'Failed to create club.');
     } finally {
@@ -259,9 +259,9 @@ export const OnboardingClubPage: React.FC = () => {
     return (
       <div className="max-w-xl mx-auto my-12 px-4">
         <div className={`surface-card p-8 sm:p-10 text-center relative overflow-hidden ${isRejected ? 'border-red-200' : 'border-amber-200'}`}>
-          <div className={`absolute top-0 inset-x-0 h-1.5 ${isRejected ? 'bg-red-400' : 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 animate-pulse'}`} />
+          <div className={`absolute top-0 inset-x-0 h-1.5 ${isRejected ? 'bg-red-400' : 'bg-amber-400'}`} />
           <div
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 ${
+            className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-5 ${
               isRejected ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
             }`}
           >
@@ -285,7 +285,7 @@ export const OnboardingClubPage: React.FC = () => {
             )}
           </p>
 
-          <dl className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-left divide-y divide-slate-200/70">
+          <dl className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-left divide-y divide-slate-200/70">
             <div className="flex justify-between py-1.5">
               <dt className="font-medium text-slate-600">Reviewer</dt>
               <dd className="text-slate-800">{trackedRequest.admin_name || 'Club owner / admin'}</dd>
@@ -336,11 +336,11 @@ export const OnboardingClubPage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto my-8 px-4 sm:px-6">
       <div className="text-center max-w-2xl mx-auto mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#1b365d] text-xs font-semibold mb-3">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-50 border border-brand-200 text-brand-700 text-xs font-semibold mb-3">
           <Building2 className="w-3.5 h-3.5" />
           <span>Step 1 of 2 · Your club</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Which club do you work with?</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">Which club do you work with?</h1>
         <p className="text-sm text-slate-500 mt-2">
           Ask to join an existing club — an owner or admin approves you — or register a new club and become its owner.
         </p>
@@ -356,7 +356,7 @@ export const OnboardingClubPage: React.FC = () => {
               aria-selected={mode === m}
               onClick={() => setMode(m)}
               className={`px-4 sm:px-6 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
-                mode === m ? 'bg-white text-[#1b365d] shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                mode === m ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               {m === 'join' ? 'Join a club' : 'Register a new club'}
@@ -384,14 +384,14 @@ export const OnboardingClubPage: React.FC = () => {
             {clubsLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[0, 1, 2, 3].map((i) => (
-                  <div key={i} className="h-24 rounded-2xl bg-slate-100 animate-pulse" />
+                  <div key={i} className="h-24 rounded-xl bg-slate-100 animate-pulse" />
                 ))}
               </div>
             ) : filteredClubs.length === 0 ? (
               <div className="text-center py-12">
                 <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                 <p className="text-sm font-semibold text-slate-700">No club matches “{searchTerm}”</p>
-                <button type="button" onClick={() => setMode('create')} className="text-xs font-semibold text-[#1b365d] hover:underline mt-2">
+                <button type="button" onClick={() => setMode('create')} className="text-xs font-semibold text-brand-700 hover:underline mt-2">
                   Register it as a new club →
                 </button>
               </div>
@@ -405,32 +405,32 @@ export const OnboardingClubPage: React.FC = () => {
                         type="button"
                         onClick={() => handleSelectClub(club)}
                         aria-pressed={selected}
-                        className={`w-full text-left p-4 rounded-2xl border transition-all flex items-start gap-3 ${
+                        className={`w-full text-left p-4 rounded-xl border transition-all flex items-start gap-3 ${
                           selected
-                            ? 'border-[#1b365d] bg-blue-50/60 ring-2 ring-[#1b365d]/20'
+                            ? 'border-brand-700 bg-brand-50/60 ring-2 ring-brand-700/20'
                             : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                         }`}
                       >
-                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#1b365d] to-[#2c5282] text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                        <div className="w-11 h-11 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
                           {clubInitials(club)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-bold text-slate-900 truncate">{club.name}</p>
-                          <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 whitespace-nowrap">
+                          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1 whitespace-nowrap">
                             <Users className="w-3 h-3 flex-shrink-0" />
                             {club.members_count} member{club.members_count === 1 ? '' : 's'}
                           </p>
                           {club.admin_name && (
-                            <p className="text-[11px] text-slate-400 truncate">Admin: {club.admin_name}</p>
+                            <p className="text-xs text-slate-400 truncate">Admin: {club.admin_name}</p>
                           )}
                           <div className="mt-2">
                             <ClubStatusBadge club={club} />
                             {club.membership_role && (
-                              <span className="text-[11px] font-semibold text-[#1b365d] ml-2">Open →</span>
+                              <span className="text-xs font-semibold text-brand-700 ml-2">Open →</span>
                             )}
                           </div>
                         </div>
-                        {selected && <CheckCircle2 className="w-5 h-5 text-[#1b365d] flex-shrink-0" />}
+                        {selected && <CheckCircle2 className="w-5 h-5 text-brand-700 flex-shrink-0" />}
                       </button>
                     </li>
                   );
@@ -467,7 +467,7 @@ export const OnboardingClubPage: React.FC = () => {
                     <label
                       key={opt.value}
                       className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
-                        accessLevel === opt.value ? 'border-[#1b365d] bg-blue-50/50' : 'border-slate-200 hover:bg-slate-50'
+                        accessLevel === opt.value ? 'border-brand-700 bg-brand-50/50' : 'border-slate-200 hover:bg-slate-50'
                       }`}
                     >
                       <input
@@ -476,14 +476,14 @@ export const OnboardingClubPage: React.FC = () => {
                         value={opt.value}
                         checked={accessLevel === opt.value}
                         onChange={() => setAccessLevel(opt.value)}
-                        className="mt-1 accent-[#1b365d]"
+                        className="mt-1 accent-brand-700"
                       />
                       <span>
                         <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
                           {opt.icon}
                           {opt.title}
                         </span>
-                        <span className="block text-[11px] text-slate-500 mt-0.5 leading-snug">{opt.body}</span>
+                        <span className="block text-xs text-slate-500 mt-0.5 leading-snug">{opt.body}</span>
                       </span>
                     </label>
                   ))}
@@ -540,7 +540,7 @@ export const OnboardingClubPage: React.FC = () => {
                 {joinSubmitting ? 'Sending request…' : 'Send join request'}
                 <ArrowRight className="w-4 h-4" />
               </button>
-              <p className="text-[11px] text-slate-400 flex items-start gap-1.5">
+              <p className="text-xs text-slate-400 flex items-start gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
                 You’ll get access once a club owner or admin approves. They can grant a different access level.
               </p>
@@ -550,7 +550,7 @@ export const OnboardingClubPage: React.FC = () => {
       ) : (
         <section className="max-w-2xl mx-auto surface-card p-6 sm:p-8">
           <div className="flex items-center gap-3 mb-5">
-            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
               <PlusCircle className="w-6 h-6" />
             </div>
             <div>
@@ -618,7 +618,7 @@ export const OnboardingClubPage: React.FC = () => {
                 onChange={(e) => setNewClubLogo(e.target.files?.[0] || null)}
                 className="w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-emerald-700 hover:file:bg-emerald-100"
               />
-              <p className="text-[11px] text-slate-400 mt-1">PNG, JPEG or WebP, up to 2 MB. Used on the club letterhead.</p>
+              <p className="text-xs text-slate-400 mt-1">PNG, JPEG or WebP, up to 2 MB. Used on the club letterhead.</p>
             </div>
 
             <div>
@@ -639,7 +639,7 @@ export const OnboardingClubPage: React.FC = () => {
               className="btn-primary w-full !bg-emerald-600 hover:!bg-emerald-700"
             >
               {createSubmitting ? 'Registering club…' : 'Register club & start'}
-              <Sparkles className="w-4 h-4" />
+              <Wand2 className="w-4 h-4" />
             </button>
           </form>
         </section>

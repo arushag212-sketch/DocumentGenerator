@@ -39,7 +39,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
       <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
           <div className="flex items-center gap-2">
-            <Command className="w-5 h-5 text-indigo-600" />
+            <Command className="w-5 h-5 text-brand-600" />
             <h3 className="font-bold text-slate-800 text-sm">Keyboard Shortcuts Cheat Sheet</h3>
           </div>
           <button
@@ -53,7 +53,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
         <div className="p-5 max-h-[70vh] overflow-y-auto space-y-5">
           {shortcuts.map((group, idx) => (
             <div key={idx}>
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <h4 className="text-xs font-bold text-slate-400 mb-2">
                 {group.category}
               </h4>
               <div className="space-y-1.5">
@@ -63,7 +63,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
                     className="flex items-center justify-between text-xs py-1 px-2 rounded hover:bg-slate-50 transition"
                   >
                     <span className="text-slate-700">{item.label}</span>
-                    <kbd className="px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-300 rounded shadow-sm">
+                    <kbd className="px-2 py-0.5 font-mono text-xs font-semibold text-slate-600 bg-slate-100 border border-slate-300 rounded shadow-sm">
                       {item.key}
                     </kbd>
                   </div>

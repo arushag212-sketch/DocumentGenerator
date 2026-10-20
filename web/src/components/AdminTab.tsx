@@ -27,6 +27,22 @@ interface AdminTabProps {
   onRefreshMembers?: () => void;
 }
 
+const DEFAULT_APPROVAL_CHAIN = [
+  { name: '', designation: 'Chairman, F& SW' },
+  { name: '', designation: 'Associate Dean(SW)' },
+  { name: '', designation: 'Dean (Students Welfare)' },
+];
+
+function parseApprovalChain(raw: unknown): { name: string; designation: string }[] {
+  const entries = Array.isArray(raw) ? raw : [];
+  return DEFAULT_APPROVAL_CHAIN.map((fallback, i) => {
+    const value = entries[i];
+    if (typeof value !== 'string') return { ...fallback };
+    const [name, ...rest] = value.split('\n');
+    return { name: (name || '').trim(), designation: rest.join(' ').trim() || fallback.designation };
+  });
+}
+
 export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefreshMembers }) => {
   const [subTab, setSubTab] = useState<'general' | 'venues' | 'numbering' | 'letterheads' | 'storage'>('general');
   const [loading, setLoading] = useState(false);
@@ -44,6 +60,10 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
     chapter_code: string;
     head_of_account: string;
     department: string;
+    department_short: string;
+    brand_color: string;
+    footer_text: string;
+    approval_chain: { name: string; designation: string }[];
     academic_year_default: string;
     default_mode: string;
     default_purchase_order: string;
@@ -55,7 +75,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
     slug: '',
     chapter_code: '',
     head_of_account: '',
-    department: 'Computer Science & Engineering',
+    department: '',
+    department_short: '',
+    brand_color: '#1b365d',
+    footer_text: '',
+    approval_chain: DEFAULT_APPROVAL_CHAIN.map((a) => ({ ...a })),
     academic_year_default: '2026-27',
     default_mode: 'Offline',
     default_purchase_order: 'NiL',
@@ -102,7 +126,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
           slug: club.slug || '',
           chapter_code: club.chapter_code || '',
           head_of_account: club.head_of_account || '',
-          department: club.department || settings.department || 'Computer Science & Engineering',
+          department: club.department || settings.department || '',
+          department_short: settings.department_short || '',
+          brand_color: settings.brand_color || '#1b365d',
+          footer_text: settings.footer_text || '',
+          approval_chain: parseApprovalChain(settings.approval_chain),
           academic_year_default: club.academic_year_default || club.academic_year || settings.academic_year || '2026-27',
           default_mode: defaults.mode || 'Offline',
           default_purchase_order: defaults.purchase_order || 'NiL',
@@ -152,6 +180,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
         department: clubProfile.department.trim(),
         settings: {
           department: clubProfile.department.trim(),
+          department_short: clubProfile.department_short.trim(),
+          brand_color: clubProfile.brand_color,
+          footer_text: clubProfile.footer_text.trim(),
+          // Stored as "Name\nDesignation" in signing order (read by the approval note).
+          approval_chain: clubProfile.approval_chain.map((a) => `${a.name.trim()}\n${a.designation.trim()}`),
           academic_year: clubProfile.academic_year_default.trim(),
           defaults: {
             mode: clubProfile.default_mode,
@@ -295,7 +328,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <Building className="w-6 h-6 text-[#1b365d]" />
+            <Building className="w-6 h-6 text-brand-700" />
             <h2 className="text-lg sm:text-xl font-bold text-slate-900">Club Administration & Configuration</h2>
           </div>
           <p className="mt-1 text-xs text-slate-500">
@@ -337,7 +370,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
               }}
               className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
                 active
-                  ? 'border-[#1b365d] text-[#1b365d] bg-slate-50/60 rounded-t-md'
+                  ? 'border-brand-700 text-brand-700 bg-slate-50/60 rounded-t-md'
                   : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
@@ -370,7 +403,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Building className="w-5 h-5 text-[#1b365d]" /> Club Profile & Institutional Settings
+                  <Building className="w-5 h-5 text-brand-700" /> Club Profile & Institutional Settings
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
                   Core club identification, chapter details, institutional head of account, and default academic year.
@@ -381,7 +414,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                 <button
                   type="submit"
                   disabled={savingGeneral}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#1b365d] hover:bg-[#162a4a] disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-brand-700 hover:bg-[#162a4a] disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition-colors"
                 >
                   {savingGeneral ? (
                     <>
@@ -432,7 +465,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                   value={clubProfile.slug}
                   className="w-full border border-slate-200 bg-slate-100 rounded-lg p-2.5 font-mono text-slate-600"
                 />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Unique system identifier for document numbering.</span>
+                <span className="text-xs text-slate-400 mt-0.5 block">Unique system identifier for document numbering.</span>
               </div>
 
               <div>
@@ -460,6 +493,95 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
               </div>
 
               <div>
+                <label className="block font-semibold text-slate-700 mb-1">Department Short Name</label>
+                <input
+                  type="text"
+                  disabled={!isAdmin}
+                  value={clubProfile.department_short}
+                  onChange={(e) => setClubProfile({ ...clubProfile, department_short: e.target.value })}
+                  placeholder="e.g. CSE"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Printed in lines such as &quot;Signature of HoD (CSE)&quot;.</p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1" htmlFor="brand-color">Letterhead colour</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="brand-color"
+                    type="color"
+                    disabled={!isAdmin}
+                    value={clubProfile.brand_color}
+                    onChange={(e) => setClubProfile({ ...clubProfile, brand_color: e.target.value })}
+                    className="h-10 w-12 border border-slate-300 rounded-lg p-1 bg-white disabled:opacity-60"
+                  />
+                  <input
+                    type="text"
+                    disabled={!isAdmin}
+                    value={clubProfile.brand_color}
+                    onChange={(e) => setClubProfile({ ...clubProfile, brand_color: e.target.value })}
+                    pattern="#[0-9a-fA-F]{6}"
+                    aria-label="Letterhead colour hex code"
+                    className="w-28 border border-slate-300 rounded-lg p-2.5 font-mono disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Used for the club name on the generated letterhead.</p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1" htmlFor="footer-text">Document footer</label>
+                <input
+                  id="footer-text"
+                  type="text"
+                  disabled={!isAdmin}
+                  value={clubProfile.footer_text}
+                  onChange={(e) => setClubProfile({ ...clubProfile, footer_text: e.target.value })}
+                  placeholder="e.g. ACM Student Chapter · SVNIT Surat"
+                  maxLength={120}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Printed at the bottom of every page with the page number.</p>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block font-semibold text-slate-700 mb-1">Approval Signatories (Approval Note)</label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Officials who sign the approval note, in order. Leave a name blank to print only the designation.
+                </p>
+                <div className="space-y-2">
+                  {clubProfile.approval_chain.map((entry, idx) => (
+                    <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        disabled={!isAdmin}
+                        value={entry.name}
+                        aria-label={`Signatory ${idx + 1} name`}
+                        onChange={(e) => {
+                          const next = clubProfile.approval_chain.map((a, i) => (i === idx ? { ...a, name: e.target.value } : a));
+                          setClubProfile({ ...clubProfile, approval_chain: next });
+                        }}
+                        placeholder="Name (e.g. Dr. A. B. Sharma)"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
+                      />
+                      <input
+                        type="text"
+                        disabled={!isAdmin}
+                        value={entry.designation}
+                        aria-label={`Signatory ${idx + 1} designation`}
+                        onChange={(e) => {
+                          const next = clubProfile.approval_chain.map((a, i) => (i === idx ? { ...a, designation: e.target.value } : a));
+                          setClubProfile({ ...clubProfile, approval_chain: next });
+                        }}
+                        placeholder="Designation"
+                        className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <label className="block font-semibold text-slate-700 mb-1">Head of Account</label>
                 <input
                   type="text"
@@ -469,7 +591,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                   placeholder="e.g. Student Welfare Account"
                   className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
                 />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Account credited/debited on budget approvals.</span>
+                <span className="text-xs text-slate-400 mt-0.5 block">Account credited/debited on budget approvals.</span>
               </div>
 
               <div>
@@ -483,15 +605,15 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                   placeholder="e.g. 2026-27"
                   className="w-full border border-slate-300 rounded-lg p-2.5 font-bold disabled:bg-slate-50 disabled:text-slate-500"
                 />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Applied to newly drafted letters and series counters.</span>
+                <span className="text-xs text-slate-400 mt-0.5 block">Applied to newly drafted letters and series counters.</span>
               </div>
             </div>
 
             {/* Standing Defaults Section */}
             <div className="pt-6 border-t border-slate-200 space-y-4">
               <div>
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-[#1b365d]" /> Standing Form Defaults (Auto-fill)
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-brand-700" /> Standing Form Defaults (Auto-fill)
                 </h4>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Pre-configured defaults automatically populate event forms and financial document templates.
@@ -523,7 +645,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                     placeholder="e.g. NiL"
                     className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500 font-mono"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Bill certificate PO standing value.</span>
+                  <span className="text-xs text-slate-400 mt-0.5 block">Bill certificate PO standing value.</span>
                 </div>
 
                 <div>
@@ -536,7 +658,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                     placeholder="e.g. NiL"
                     className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500 font-mono"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Bill certificate advance value.</span>
+                  <span className="text-xs text-slate-400 mt-0.5 block">Bill certificate advance value.</span>
                 </div>
 
                 <div>
@@ -549,7 +671,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                     placeholder="e.g. Student Council"
                     className="w-full border border-slate-300 rounded-lg p-2.5 disabled:bg-slate-50 disabled:text-slate-500"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Default office or facility label.</span>
+                  <span className="text-xs text-slate-400 mt-0.5 block">Default office or facility label.</span>
                 </div>
               </div>
             </div>
@@ -570,7 +692,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-slate-900">Active Club Logo</h4>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Automatically centered and composited on official letterheads and templates.
                   </p>
                 </div>
@@ -578,7 +700,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
 
               {isAdmin && (
                 <label className="inline-flex items-center gap-1.5 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 text-xs font-semibold px-3 py-2 rounded-lg cursor-pointer transition-colors shadow-2xs">
-                  <Upload className="w-4 h-4 text-[#1b365d]" />
+                  <Upload className="w-4 h-4 text-brand-700" />
                   <span>{uploadingLogo ? 'Uploading...' : 'Replace Logo'}</span>
                   <input
                     type="file"
@@ -608,7 +730,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
               <button
                 type="button"
                 onClick={handleOpenAddVenue}
-                className="inline-flex items-center justify-center gap-1.5 bg-[#1b365d] hover:bg-[#162a4a] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors shadow-sm"
+                className="inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-[#162a4a] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors shadow-sm"
               >
                 <Plus className="w-4 h-4" />
                 Add Venue
@@ -630,7 +752,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                     <div className="flex items-start justify-between">
                       <div className="font-bold text-sm text-slate-900">{v.name}</div>
                       {v.capacity && (
-                        <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono font-semibold">
+                        <span className="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono font-semibold">
                           Cap: {v.capacity}
                         </span>
                       )}
@@ -660,7 +782,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                       <button
                         type="button"
                         onClick={() => handleOpenEditVenue(v)}
-                        className="inline-flex items-center gap-1 text-[#1b365d] hover:bg-blue-50 px-2 py-1 rounded font-semibold transition-colors"
+                        className="inline-flex items-center gap-1 text-brand-700 hover:bg-brand-50 px-2 py-1 rounded font-semibold transition-colors"
                       >
                         <Edit2 className="w-3.5 h-3.5" /> Edit
                       </button>
@@ -709,7 +831,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                 <div key={s.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between space-y-3">
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="font-mono font-bold text-sm bg-blue-50 text-[#1b365d] px-2.5 py-1 rounded border border-blue-200">
+                      <span className="font-mono font-bold text-sm bg-brand-50 text-brand-700 px-2.5 py-1 rounded border border-brand-200">
                         {s.series_key || (s as any).key}
                       </span>
                       <span className="text-xs font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
@@ -720,7 +842,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                     <div className="mt-3 space-y-1.5 text-xs">
                       <div>
                         <span className="text-slate-500 font-medium">Format Pattern:</span>
-                        <div className="font-mono text-[11px] bg-white p-1.5 rounded border border-slate-200 mt-0.5 text-slate-800 break-all">
+                        <div className="font-mono text-xs bg-white p-1.5 rounded border border-slate-200 mt-0.5 text-slate-800 break-all">
                           {s.format}
                         </div>
                       </div>
@@ -733,7 +855,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                       </div>
 
                       {s.description && (
-                        <div className="text-slate-600 text-[11px] pt-1">
+                        <div className="text-slate-600 text-xs pt-1">
                           {s.description}
                         </div>
                       )}
@@ -745,7 +867,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                       <button
                         type="button"
                         onClick={() => setSeriesForm(s)}
-                        className="inline-flex items-center gap-1 text-[#1b365d] hover:bg-blue-50 px-2 py-1 rounded font-semibold transition-colors"
+                        className="inline-flex items-center gap-1 text-brand-700 hover:bg-brand-50 px-2 py-1 rounded font-semibold transition-colors"
                       >
                         <Edit2 className="w-3.5 h-3.5" /> Edit Format
                       </button>
@@ -770,7 +892,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
             </div>
 
             {isAdmin && (
-              <label className="inline-flex items-center justify-center gap-1.5 bg-[#1b365d] hover:bg-[#162a4a] text-white text-xs font-semibold px-3 py-2 rounded-lg cursor-pointer transition-colors shadow-sm">
+              <label className="inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-[#162a4a] text-white text-xs font-semibold px-3 py-2 rounded-lg cursor-pointer transition-colors shadow-sm">
                 <Upload className="w-4 h-4" />
                 <span>{uploadingLogo ? 'Normalizing...' : 'Upload Club Logo'}</span>
                 <input
@@ -786,26 +908,26 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
 
           {/* Letterhead Preview */}
           <div className="border-2 border-slate-200 rounded-xl p-4 sm:p-6 bg-slate-50 space-y-4">
-            <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-[#1b365d]" />
+            <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-brand-700" />
               Official Letterhead Preview
             </div>
 
             <div className="bg-white border border-slate-300 rounded-lg p-6 shadow-sm max-w-2xl mx-auto space-y-4">
               {/* Header block with logos */}
-              <div className="flex items-center justify-between border-b-2 border-[#1b365d] pb-4">
+              <div className="flex items-center justify-between border-b-2 border-brand-700 pb-4">
                 <div className="h-16 w-16 flex items-center justify-center p-1 border border-slate-200 rounded bg-white">
                   <img src="/assets/svnit_crest.png" alt="SVNIT Crest" className="max-h-full max-w-full object-contain" />
                 </div>
 
                 <div className="text-center px-4 flex-1">
-                  <h4 className="font-serif font-bold text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
+                  <h4 className="font-serif font-bold text-xs sm:text-sm text-slate-900">
                     Sardar Vallabhbhai National Institute of Technology, Surat
                   </h4>
-                  <p className="text-[11px] font-bold text-[#1b365d] uppercase tracking-wider mt-0.5">
+                  <p className="text-xs font-bold text-brand-700 mt-0.5">
                     {previewLetterhead?.title_text || 'Student Chapter'}
                   </p>
-                  <p className="text-[10px] text-slate-500 italic mt-0.5">
+                  <p className="text-xs text-slate-500 italic mt-0.5">
                     Ichchhanath, Surat - 395007, Gujarat, India
                   </p>
                 </div>
@@ -830,7 +952,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
               </div>
 
               {/* Footer */}
-              <div className="border-t border-slate-200 pt-3 text-center text-[10px] text-slate-500">
+              <div className="border-t border-slate-200 pt-3 text-center text-xs text-slate-500">
                 {previewLetterhead?.subtitle_text || 'Website: www.svnit.ac.in | Official Student Portal'}
               </div>
             </div>
@@ -839,7 +961,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
           {/* Letterheads and Assets List */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-slate-800">
                 Configured Letterheads ({letterheads.length})
               </h4>
               <div className="space-y-2 text-xs">
@@ -849,26 +971,26 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                     onClick={() => setPreviewLetterhead(lh)}
                     className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                       previewLetterhead?.id === lh.id
-                        ? 'bg-blue-50 border-[#1b365d] text-[#1b365d]'
+                        ? 'bg-brand-50 border-brand-700 text-brand-700'
                         : 'bg-white border-slate-200 hover:border-slate-300'
                     }`}
                   >
                     <div className="font-bold flex items-center justify-between">
                       <span>{lh.name}</span>
                       {lh.is_default && (
-                        <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold">
+                        <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold">
                           Default
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-1">{lh.title_text}</div>
+                    <div className="text-xs text-slate-500 mt-1">{lh.title_text}</div>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-slate-800">
                 Club Logo Assets ({assets.length})
               </h4>
               <div className="space-y-2 text-xs">
@@ -876,9 +998,9 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                   <div key={ast.id} className="p-3 bg-white rounded-lg border border-slate-200 flex items-center justify-between">
                     <div>
                       <div className="font-semibold text-slate-900">{ast.filename}</div>
-                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">{ast.mime} • {ast.size ? `${Math.round(ast.size / 1024)} KB` : 'Normalized'}</div>
+                      <div className="text-xs text-slate-400 font-mono mt-0.5">{ast.mime} • {ast.size ? `${Math.round(ast.size / 1024)} KB` : 'Normalized'}</div>
                     </div>
-                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
                       {ast.kind}
                     </span>
                   </div>
@@ -970,7 +1092,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#1b365d] hover:bg-[#162a4a] text-white font-semibold rounded-lg shadow-sm"
+                  className="px-4 py-2 bg-brand-700 hover:bg-[#162a4a] text-white font-semibold rounded-lg shadow-sm"
                 >
                   Save Venue
                 </button>
@@ -1032,7 +1154,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#1b365d] hover:bg-[#162a4a] text-white font-semibold rounded-lg shadow-sm"
+                  className="px-4 py-2 bg-brand-700 hover:bg-[#162a4a] text-white font-semibold rounded-lg shadow-sm"
                 >
                   Save Format
                 </button>
@@ -1048,7 +1170,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
             <div>
               <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
-                <HardDrive className="w-5 h-5 text-[#1b365d]" /> Club Storage & Retention
+                <HardDrive className="w-5 h-5 text-brand-700" /> Club Storage & Retention
               </h3>
               <p className="text-xs text-slate-500 mt-1">
                 Monitor storage consumption for documents, previews, and templates, and perform safe garbage collection.
@@ -1070,7 +1192,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
           {/* Usage Metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Total Usage</span>
+              <span className="text-xs font-semibold text-slate-500 block">Total Usage</span>
               <span className="text-2xl font-black text-slate-900 mt-1 block">
                 {storageStats?.usage?.total_mb ?? 0} MB
               </span>
@@ -1080,7 +1202,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
             </div>
 
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Documents</span>
+              <span className="text-xs font-semibold text-slate-500 block">Documents</span>
               <span className="text-2xl font-black text-slate-900 mt-1 block">
                 {(((storageStats?.usage?.documents_bytes ?? 0) / (1024 * 1024))).toFixed(2)} MB
               </span>
@@ -1090,7 +1212,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
             </div>
 
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Previews Cache</span>
+              <span className="text-xs font-semibold text-slate-500 block">Previews Cache</span>
               <span className="text-2xl font-black text-slate-900 mt-1 block">
                 {(((storageStats?.usage?.previews_bytes ?? 0) / 1024)).toFixed(1)} KB
               </span>
@@ -1100,7 +1222,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
             </div>
 
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Templates</span>
+              <span className="text-xs font-semibold text-slate-500 block">Templates</span>
               <span className="text-2xl font-black text-slate-900 mt-1 block">
                 {(((storageStats?.usage?.templates_bytes ?? 0) / 1024)).toFixed(1)} KB
               </span>
@@ -1111,11 +1233,11 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
           </div>
 
           {/* Retention Policy in Plain Words */}
-          <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-4 text-xs sm:text-sm text-blue-950 space-y-2">
-            <h4 className="font-bold text-blue-900 flex items-center gap-1.5">
-              <Info className="w-4 h-4 text-blue-700" /> Storage Retention Policy
+          <div className="bg-brand-50/60 border border-brand-200 rounded-xl p-4 text-xs sm:text-sm text-brand-900 space-y-2">
+            <h4 className="font-bold text-brand-900 flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-brand-700" /> Storage Retention Policy
             </h4>
-            <ul className="list-disc list-inside space-y-1.5 text-blue-900/90 leading-relaxed">
+            <ul className="list-disc list-inside space-y-1.5 text-brand-900/90 leading-relaxed">
               <li>
                 <strong>Document Versions:</strong> Only the latest {storageStats?.retention_settings?.keep_version_files ?? 3} versions of each document maintain physical DOCX and PDF files on disk. Older version rows remain intact and can be re-created on-demand at any time from immutable template versions and snapshots.
               </li>

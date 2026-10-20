@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Optional, Protocol, Union
 
 import yaml
-from docgen.config import ClubConfig, LetterheadConfig, PersonConfig, VenueConfig, NumberingConfig
+from docgen.config import DEFAULT_APPROVAL_CHAIN, ClubConfig, LetterheadConfig, PersonConfig, VenueConfig, NumberingConfig
 from docgen.schema import TemplateSchema, load_schema
 
 
@@ -104,6 +104,70 @@ class DatabaseTemplateSource:
         schema_yaml_str, _ = self.data_store[template_id]
         data = yaml.safe_load(schema_yaml_str)
         return TemplateSchema(**data)
+
+
+def _resolve_banner_path(value: Optional[str]) -> Optional[str]:
+    """Banner paths in settings may be absolute or relative to the project root."""
+    if not value:
+        return None
+    path = Path(value)
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parent.parent / path
+    return str(path) if path.exists() else None
+
+
+def _club_logo_path(db_session: Any, club: Any) -> Optional[str]:
+    """Local file of the club's logo (from its default letterhead, else its newest logo asset)."""
+    from server.app.models import Asset, Letterhead
+
+    logo_asset_id = (club.settings or {}).get("logo_asset_id")
+    if logo_asset_id:
+        uploaded = db_session.query(Asset).filter(Asset.id == logo_asset_id, Asset.club_id == club.id).first()
+        if uploaded is not None:
+            path = _resolve_docx_key(uploaded.storage_key)
+            if path.exists():
+                return str(path)
+
+    logo_filename = ((club.settings or {}).get("logo_filename") or "").strip()
+    if logo_filename:
+        configured = (
+            db_session.query(Asset)
+            .filter(Asset.filename == logo_filename, (Asset.club_id == club.id) | (Asset.club_id.is_(None)))
+            .first()
+        )
+        if configured is not None:
+            path = _resolve_docx_key(configured.storage_key)
+            if path.exists():
+                return str(path)
+
+    asset_ids: list[str] = []
+    lh = None
+    if club.default_letterhead_id:
+        lh = db_session.query(Letterhead).filter(Letterhead.id == club.default_letterhead_id).first()
+    if lh is None:
+        lh = db_session.query(Letterhead).filter(Letterhead.club_id == club.id).first()
+    if lh is not None:
+        asset_ids = [a for a in (lh.right_logo_asset_id, lh.left_logo_asset_id) if a]
+    assets = [
+        db_session.query(Asset)
+        .filter(Asset.id == a, (Asset.club_id == club.id) | (Asset.club_id.is_(None)))
+        .first()
+        for a in asset_ids
+    ]
+    assets = [a for a in assets if a is not None]
+    if not assets:
+        assets = (
+            db_session.query(Asset)
+            .filter(Asset.club_id == club.id, Asset.kind == "logo")
+            .order_by(Asset.created_at.desc())
+            .limit(1)
+            .all()
+        )
+    for asset in assets:
+        path = _resolve_docx_key(asset.storage_key)
+        if path.exists():
+            return str(path)
+    return None
 
 
 def build_club_config_from_db(db_session: Any, club_slug: str) -> ClubConfig:
@@ -213,19 +277,24 @@ def build_club_config_from_db(db_session: Any, club_slug: str) -> ClubConfig:
     club_defaults = club.settings.get("defaults", {})
     defaults = {**std_defaults, **club_defaults}
 
-    approval_chain = club.settings.get("approval_chain", [
-        "Dr. Rakesh Maurya\nChairman F&SW",
-        "Dr. Manish K Rathod\nAssociate Dean SW",
-        "Dr. Sanjay R. Patel\nDean SW",
-    ])
+    settings = club.settings or {}
+    # Signatory names are club/institute data: an empty or missing chain leaves the name
+    # lines blank (designations only) rather than printing another institute's officials.
+    approval_chain = settings.get("approval_chain") or list(DEFAULT_APPROVAL_CHAIN)
 
     return ClubConfig(
         club_name=club.name,
         club_short=club.short_name,
         institute_name=club.settings.get("institute_name", "Sardar Vallabhbhai National Institute of Technology, Surat (SVNIT)"),
         institute_short=club.settings.get("institute_short", "SVNIT"),
-        chapter_code=club.chapter_code or "6/52",
-        head_of_account=club.head_of_account or "6/52",
+        chapter_code=club.chapter_code or "",
+        head_of_account=club.head_of_account or "",
+        department=settings.get("department") or "",
+        department_short=settings.get("department_short") or "",
+        letterhead_banner_path=_resolve_banner_path(settings.get("letterhead_banner_path")),
+        club_logo_path=_club_logo_path(db_session, club),
+        brand_color=settings.get("brand_color") or "#4F81BD",
+        footer_text=settings.get("footer_text") or "",
         academic_year=club.academic_year_default or "2026-27",
         letterheads=letterheads_map,
         student_head=student_head,

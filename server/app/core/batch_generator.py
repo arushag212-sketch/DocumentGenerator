@@ -72,6 +72,9 @@ def sanitize_filename(name: Any) -> str:
     return re.sub(r'\s+', '_', clean).strip('_') or "doc"
 
 
+MAX_BATCH_ROWS = 300
+
+
 class BatchGenerator:
     @staticmethod
     def generate_batch(
@@ -335,6 +338,38 @@ class BatchGenerator:
                 "required": True,
             })
 
+        # (d2) Required inputs of Studio/library templates (compiled from editor JSON). Values may
+        # come from the event data or, for per-row batches, from every row.
+        handled_elsewhere = {"dates", "date_start", "date_end", "time_start", "time_end", "description",
+                             "objectives", "submitted_to", "ref_no", "document_date"}
+        row_list = [r for r in (event_data.get("rows") or []) if isinstance(r, dict)]
+        if len(row_list) > MAX_BATCH_ROWS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "TOO_MANY_ROWS", "message": f"A batch can have at most {MAX_BATCH_ROWS} rows."},
+            )
+
+        def _present(v: Any) -> bool:
+            return v is not None and str(v).strip() not in ("", "None", "null")
+
+        for tmpl, tmpl_ver, s_dict in templates_to_render:
+            if not (tmpl_ver and tmpl_ver.editor_json):
+                continue  # legacy system forms keep their own checks above
+            for f in s_dict.get("fields", []) or []:
+                key = f.get("key")
+                if not key or not f.get("required") or f.get("computed") or key in handled_elsewhere:
+                    continue
+                if f.get("type") == "table":
+                    continue
+                if _present(event_data.get(key)) or (row_list and all(_present(r.get(key)) for r in row_list)):
+                    continue
+                missing_blockers.append({
+                    "key": key,
+                    "ask": f.get("ask") or f.get("label") or key.replace("_", " ").title(),
+                    "defer_ok": bool(f.get("defer_ok", False)),
+                    "required": True,
+                })
+
         # (e) Repeat Items validation (winners, bills)
         for tmpl, _, s_dict in templates_to_render:
             repeat_per = s_dict.get("repeat_per")
@@ -489,6 +524,18 @@ class BatchGenerator:
                         b_ctx["amount"] = b.get("amount")
                         doc_title = f"{tmpl.name} - Bill #{b_no}"
                         tasks_to_run.append((tmpl, tmpl_ver, doc_title, b_ctx))
+
+                elif row_list and event_data.get("rows_for") in (None, "", tmpl.id, tmpl.slug):
+                    # Batch from a spreadsheet: one document per row (e.g. a certificate per participant).
+                    # `rows_for` names the template the sheet was mapped to; other documents stay single.
+                    wanted = {f.get("key") for f in (schema_dict.get("fields") or []) if f.get("key")}
+                    for idx, row in enumerate(row_list, start=1):
+                        r_ctx = {k: v for k, v in event_data.items() if k not in ("rows", "rows_for")}
+                        r_ctx.update({k: v for k, v in row.items() if _present(v)})
+                        apply_field_aliases(r_ctx, wanted=wanted)
+                        label = next((str(row[k]) for k in ("recipient_name", "name", "participant_name") if _present(row.get(k))),
+                                     next((str(v) for v in row.values() if _present(v)), f"Row {idx}"))
+                        tasks_to_run.append((tmpl, tmpl_ver, f"{tmpl.name} - {label}", r_ctx))
 
                 else:
                     tasks_to_run.append((tmpl, tmpl_ver, f"{tmpl.name} - {final_title}", dict(event_data)))

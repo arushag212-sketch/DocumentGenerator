@@ -46,9 +46,10 @@ def test_w1_database_models_and_seeds(db_session):
     letterheads = db_session.query(Letterhead).all()
     assert len(letterheads) >= 2
 
-    # Check 6 System Templates
+    # The 6 institute forms plus the template library (templates/library/*.json)
+    from server.app.core.template_library import load_specs
     templates = db_session.query(Template).filter(Template.is_system == True).all()
-    assert len(templates) == 6
+    assert len(templates) == 6 + len(load_specs())
     template_slugs = {t.slug for t in templates}
     expected_slugs = {
         "permission_letter",

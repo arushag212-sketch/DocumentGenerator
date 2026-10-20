@@ -115,7 +115,7 @@ export const PeopleTab: React.FC<PeopleTabProps> = ({ clubId, permissions }) => 
       {/* Directory Table */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-slate-600">
             Official Directory ({people.length})
           </span>
           <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
@@ -131,7 +131,7 @@ export const PeopleTab: React.FC<PeopleTabProps> = ({ clubId, permissions }) => 
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100/60 text-slate-600 uppercase text-[10px] tracking-wider border-b border-slate-200">
+              <thead className="bg-slate-100/60 text-slate-600 uppercase text-xs tracking-wider border-b border-slate-200">
                 <tr>
                   <th className="py-3 px-6">Name</th>
                   <th className="py-3 px-6">Designation / Role</th>

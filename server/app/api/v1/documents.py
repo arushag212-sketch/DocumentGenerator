@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -19,12 +20,14 @@ from typing import Any, Optional
 import pymupdf
 import yaml
 from docxtpl import DocxTemplate
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from server.app.core import document_workflow as workflow
+from server.app.core.club_identity import default_addressee, default_signatures
 from server.app.core.template_compiler import TemplateCompiler, migrate_template_content
 from server.app.core.template_generator import (
     generate_draft_template,
@@ -314,6 +317,7 @@ class DocumentVersionOut(BaseModel):
     pdf_available: bool
     created_at: datetime
     created_by: Optional[str] = None
+    change_summary: Optional[str] = None
 
 
 class DocumentDetailOut(BaseModel):
@@ -331,6 +335,11 @@ class DocumentDetailOut(BaseModel):
     page_images: list[str]
     versions: list[DocumentVersionOut]
     record_snapshot: dict[str, Any]
+    editable_fields: list[dict[str, Any]] = []
+    activity: list[dict[str, Any]] = []
+    can_edit: bool = False
+    can_review: bool = False
+    template_name: Optional[str] = None
 
 
 # ---------------- HELPER FUNCTIONS ----------------
@@ -647,11 +656,7 @@ def fork_template(
             "type": "signatureGrid",
             "attrs": {
                 "columns": 3,
-                "signatures": [
-                    {"label": "Student Coordinator", "designation": "ACM Student Chapter"},
-                    {"label": "Faculty Advisor", "designation": "DoCSE, SVNIT"},
-                    {"label": "Head of Department", "designation": "DoCSE, SVNIT"},
-                ]
+                "signatures": default_signatures(ctx.club),
             }
         })
         forked_editor_json = {"type": "doc", "content": doc_content}
@@ -742,6 +747,7 @@ def update_template(
             db.query(Template)
             .filter(
                 Template.id != tmpl.id,
+                # Unique among the club's own templates and the built-in ones.
                 ((Template.club_id == ctx.club.id) | (Template.club_id.is_(None))),
                 Template.status != "archived",
             )
@@ -870,6 +876,7 @@ def create_blank_template(
     existing_templates = (
         db.query(Template)
         .filter(
+            # Unique among the club's own templates and the built-in ones.
             ((Template.club_id == ctx.club.id) | (Template.club_id.is_(None))),
             Template.status != "archived",
         )
@@ -903,11 +910,7 @@ def create_blank_template(
             ]},
             {"type": "signatureGrid", "attrs": {
                 "columns": 3,
-                "signatures": [
-                    {"label": "Student Coordinator", "designation": "ACM Student Chapter"},
-                    {"label": "Faculty Advisor", "designation": "DoCSE, SVNIT"},
-                    {"label": "Head of Department", "designation": "DoCSE, SVNIT"}
-                ]
+                "signatures": default_signatures(ctx.club)
             }}
         ]
     }
@@ -1229,6 +1232,7 @@ def save_template_draft(
             db.query(Template)
             .filter(
                 Template.id != tmpl.id,
+                # Unique among the club's own templates and the built-in ones.
                 ((Template.club_id == ctx.club.id) | (Template.club_id.is_(None))),
                 Template.status != "archived",
             )
@@ -1572,6 +1576,22 @@ def preview_template(
             schema_obj = TemplateSchema(**schema_dict)
             from server.app.core.template_compiler import _build_editor_dummy_context, safe_render_docx
             dummy_ctx = _build_editor_dummy_context(schema_obj, fields, editor_json)
+            # Show the viewing club's own identity (name, footer, banner) in the preview.
+            try:
+                club_cfg = build_club_config_from_db(db, ctx.club.slug)
+                inst = (club_cfg.institute_name or "").split("(")[0].strip()
+                dummy_ctx.update({
+                    "club_name": club_cfg.club_name,
+                    "club_short": club_cfg.club_short,
+                    "institute_name": club_cfg.institute_name,
+                    "institute_short": club_cfg.institute_short,
+                    "department": club_cfg.department,
+                    "department_short": club_cfg.department_short or club_cfg.department,
+                    "club_footer": club_cfg.footer_text or " · ".join(x for x in (club_cfg.club_name, inst) if x),
+                })
+                Renderer(config=club_cfg)._apply_club_banner(doc)
+            except Exception:
+                pass
 
             doc = DocxTemplate(str(tmpl_docx))
             safe_render_docx(doc, dummy_ctx, timeout=30.0, strict=False)
@@ -1949,7 +1969,7 @@ def get_template_schema_and_defaults(
         {
             "name": v.name,
             "short_name": v.short_name,
-            "addressee": v.addressee_default or "Head of Department, Computer Science & Engineering",
+            "addressee": v.addressee_default or default_addressee(ctx.club),
         }
         for v in venues
     ]
@@ -1965,7 +1985,7 @@ def get_template_schema_and_defaults(
         "mode": "Offline",
         "venues": venue_list,
         "default_venue": venue_list[0]["name"] if venue_list else "Seminar Hall",
-        "default_addressee": venue_list[0]["addressee"] if venue_list else "Head of Department, Computer Science & Engineering",
+        "default_addressee": venue_list[0]["addressee"] if venue_list else default_addressee(ctx.club),
         "academic_year": ctx.club.academic_year_default,
     }
 
@@ -1995,7 +2015,7 @@ def get_template_schema_and_defaults(
                 if first_v:
                     val = getattr(first_v, "default_addressee", None) or getattr(first_v, "addressee", None) or (first_v.get("addressee") if isinstance(first_v, dict) else None)
                 if not val:
-                    val = defaults.get("default_addressee", "Head of Department, Computer Science & Engineering")
+                    val = defaults.get("default_addressee") or default_addressee(ctx.club)
 
             if val is not None and not isinstance(val, (dict, list)):
                 default_val = str(val)
@@ -2892,6 +2912,8 @@ def get_document_details(
 
     tmpl = db.query(Template).filter(Template.id == doc_record.template_id).first()
     tmpl_slug = tmpl.slug if tmpl else "document"
+    author_ids = {v.created_by for v in versions if v.created_by}
+    authors = {u.id: u.name for u in db.query(User).filter(User.id.in_(author_ids)).all()} if author_ids else {}
 
     return DocumentDetailOut(
         id=doc_record.id,
@@ -2913,11 +2935,17 @@ def get_document_details(
                 docx_available=bool(v.docx_key and local_storage.local_path(v.docx_key).exists()),
                 pdf_available=bool(v.pdf_key and local_storage.local_path(v.pdf_key).exists()),
                 created_at=v.created_at,
-                created_by="Author",
+                created_by=(authors.get(v.created_by) if v.created_by else None) or "Generated",
+                change_summary=v.diff_summary,
             )
             for v in versions
         ],
         record_snapshot=latest_ver.record_snapshot,
+        editable_fields=workflow.editable_fields(db, doc_record),
+        activity=workflow.activity(db, doc_record),
+        can_edit=ctx.is_editor,
+        can_review=ctx.is_admin,
+        template_name=tmpl.name if tmpl else None,
     )
 
 
@@ -3019,6 +3047,186 @@ def recreate_document_version_endpoint(
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to re-create version: {e}")
+
+
+class DocumentReviseRequest(BaseModel):
+    changes: dict[str, Any]
+    note: Optional[str] = Field(None, max_length=500)
+
+
+class DocumentReviewAction(BaseModel):
+    comment: Optional[str] = Field(None, max_length=2000)
+
+
+class DocumentEmailRequest(BaseModel):
+    to: list[str] = Field(..., min_length=1, max_length=20)
+    message: Optional[str] = Field(None, max_length=4000)
+    attach: str = Field("pdf", pattern="^(pdf|docx|both)$")
+
+
+def _club_document(ctx: ClubContext, db: Session, doc_id: str) -> Document:
+    doc_record = ScopedRepository(db, Document, club_id=ctx.club.id).get(doc_id)
+    if not doc_record:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc_record
+
+
+@router.post("/rows/parse")
+async def parse_rows_endpoint(
+    template_id: str = Form(...),
+    sheet_url: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Read rows for a per-row batch from an uploaded CSV or a shared Google Sheet."""
+    from server.app.core import sheet_import
+
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id),
+        (Template.club_id == ctx.club.id) | (Template.is_system == True),  # noqa: E712
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    ver = db.query(TemplateVersion).filter(TemplateVersion.id == tmpl.current_version_id).first()
+    schema = yaml.safe_load(ver.schema_yaml) if ver and ver.schema_yaml else {}
+    fields = [
+        {"key": f["key"], "label": f.get("label") or f["key"].replace("_", " ").title(), "required": bool(f.get("required"))}
+        for f in (schema or {}).get("fields", [])
+        if isinstance(f, dict) and f.get("key") and f.get("type") != "table"
+    ]
+    try:
+        if file is not None:
+            data = await file.read(sheet_import.MAX_BYTES + 1)
+            if len(data) > sheet_import.MAX_BYTES:
+                raise ValueError("The file is too large (limit 2 MB).")
+        elif sheet_url:
+            data = sheet_import.fetch_sheet_csv(sheet_url)
+        else:
+            raise ValueError("Upload a CSV file or paste a Google Sheets link.")
+        headers, rows = sheet_import.parse_csv(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read the rows. Check the file or sheet link.")
+    return {
+        "headers": headers,
+        "rows": rows,
+        "row_count": len(rows),
+        "fields": fields,
+        "mapping": sheet_import.suggest_mapping(headers, fields),
+    }
+
+
+@router.post("/{doc_id}/revise")
+def revise_document_endpoint(
+    doc_id: str,
+    payload: DocumentReviseRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Edit field values and regenerate as a new version (same reference number)."""
+    doc_record = _club_document(ctx, db, doc_id)
+    ver = workflow.revise_document(db, doc_record, ctx.user, payload.changes, payload.note)
+    log_audit(db=db, action="document_revised", entity_type="document", entity_id=doc_record.id,
+              club_id=ctx.club.id, user_id=ctx.user.id, meta={"version_no": ver.version_no})
+    return {"version_no": ver.version_no, "status": doc_record.status, "change_summary": ver.diff_summary}
+
+
+@router.post("/{doc_id}/submit")
+def submit_document_endpoint(
+    doc_id: str,
+    payload: DocumentReviewAction,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Send the document to the club's reviewers (admins/owners) for approval."""
+    doc_record = _club_document(ctx, db, doc_id)
+    workflow.submit_for_review(db, doc_record, ctx.user, payload.comment)
+    return {"status": doc_record.status}
+
+
+@router.post("/{doc_id}/approve")
+def approve_document_endpoint(
+    doc_id: str,
+    payload: DocumentReviewAction,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Approve: stamps the PDF with the approver and a verification code."""
+    doc_record = _club_document(ctx, db, doc_id)
+    position = (ctx.membership.position if ctx.membership else None) or ctx.role.title()
+    entry = workflow.approve(db, doc_record, ctx.user, f"{position}, {ctx.club.short_name}", payload.comment)
+    log_audit(db=db, action="document_approved", entity_type="document", entity_id=doc_record.id,
+              club_id=ctx.club.id, user_id=ctx.user.id, meta={"verification_code": entry.verification_code})
+    return {"status": doc_record.status, "verification_code": entry.verification_code}
+
+
+@router.post("/{doc_id}/request-changes")
+def request_changes_endpoint(
+    doc_id: str,
+    payload: DocumentReviewAction,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    doc_record = _club_document(ctx, db, doc_id)
+    workflow.request_changes(db, doc_record, ctx.user, payload.comment or "")
+    return {"status": doc_record.status}
+
+
+@router.post("/{doc_id}/comments")
+def comment_document_endpoint(
+    doc_id: str,
+    payload: DocumentReviewAction,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    doc_record = _club_document(ctx, db, doc_id)
+    workflow.add_comment(db, doc_record, ctx.user, payload.comment or "")
+    return {"activity": workflow.activity(db, doc_record)}
+
+
+@router.post("/{doc_id}/email")
+def email_document_endpoint(
+    doc_id: str,
+    payload: DocumentEmailRequest,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """Email the latest version (PDF and/or DOCX) to up to 20 recipients."""
+    from email.utils import parseaddr
+
+    from server.app.core.email import get_email_sender
+    from server.app.core.rate_limit import check_rate_limit
+
+    recipients = []
+    for raw in payload.to:
+        addr = parseaddr(raw.strip())[1]
+        if not addr or "@" not in addr or "." not in addr.split("@")[-1]:
+            raise HTTPException(status_code=400, detail=f"Not a valid email address: {raw}")
+        recipients.append(addr)
+    check_rate_limit(f"email:{ctx.user.id}", max_requests=30, window_seconds=3600)
+
+    doc_record = _club_document(ctx, db, doc_id)
+    ver = workflow.latest_version(db, doc_record)
+    storage = require_local_storage()
+    attachments = []
+    safe_title = re.sub(r"[^A-Za-z0-9 _-]+", "", doc_record.title).strip() or "document"
+    wanted = ("pdf", "docx") if payload.attach == "both" else (payload.attach,)
+    for kind in wanted:
+        key = ver.pdf_key if kind == "pdf" else ver.docx_key
+        path = storage.local_path(key) if key else None
+        if not path or not path.exists():
+            raise HTTPException(status_code=409, detail=f"The {kind.upper()} for this version is not available.")
+        mime = "application/pdf" if kind == "pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        attachments.append((f"{safe_title}.{kind}", path.read_bytes(), mime))
+
+    body = (payload.message or "").strip() or f"Please find attached {doc_record.title}."
+    body += f"\n\nRef. No.: {doc_record.ref_no or '-'}\nSent by {ctx.user.name}, {ctx.club.name}"
+    get_email_sender().send_document(recipients, f"{doc_record.title} — {ctx.club.name}", body, attachments,
+                                     reply_to=ctx.user.email)
+    workflow.log_email(db, doc_record, ctx.user, recipients)
+    return {"sent_to": recipients}
 
 
 @router.get("/{doc_id}/download")

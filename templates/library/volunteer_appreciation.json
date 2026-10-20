@@ -1,0 +1,34 @@
+{
+  "name": "Volunteer Appreciation Letter",
+  "category": "Letters",
+  "stage": "post_event",
+  "description": "Thank-you letter for volunteers and organising-team members.",
+  "numbering_series": "VA",
+  "triggers": ["volunteer", "appreciation"],
+  "recommend": {
+    "keywords": ["volunteer", "volunteers", "appreciation letter", "thank you letter", "thank-you letter", "letter of appreciation"],
+    "reason": "Thank-you letter for each volunteer.",
+    "reason_not": "Ask for volunteer or appreciation letters to include it."
+  },
+  "fields": [
+    {"key": "recipient_name", "type": "text", "required": true, "label": "Volunteer Name", "ask": "Name of the volunteer"},
+    {"key": "event_name", "type": "text", "required": true, "label": "Event Name", "ask": "Name of the event"},
+    {"key": "dates", "type": "date_range", "required": true, "label": "Event Dates", "ask": "When was the event held?"},
+    {"key": "role", "type": "text", "required": false, "label": "Role", "ask": "Volunteer's role (optional)"},
+    {"key": "contribution", "type": "longtext", "required": false, "label": "Contribution", "ask": "What did they do? (optional)"}
+  ],
+  "blocks": [
+    {"type": "paragraph", "text": "Ref. No.: {{ref_no}}"},
+    {"type": "paragraph", "text": "Date: {{document_date}}"},
+    {"type": "heading", "level": 1, "align": "center", "text": "LETTER OF APPRECIATION"},
+    {"type": "paragraph", "text": "Dear {{recipient_name}},"},
+    {"type": "paragraph", "align": "justify", "text": "On behalf of {{club_name}}, we thank you for volunteering at {{event_name}} on {{dates}}."},
+    {"type": "paragraph", "showIf": "role", "text": "Role: {{role}}"},
+    {"type": "paragraph", "align": "justify", "showIf": "contribution", "text": "{{contribution}}"},
+    {"type": "paragraph", "align": "justify", "text": "Your time and effort helped make the event a success. We look forward to working with you again."},
+    {"type": "signatureGrid", "columns": 2, "signatures": [
+      {"label": "Student Head", "designation": ""},
+      {"label": "Faculty Advisor", "designation": ""}
+    ]}
+  ]
+}

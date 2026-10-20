@@ -6,8 +6,8 @@ import {
   AlignRight,
   Trash2,
   Upload,
-  Sparkles,
   ImageIcon,
+  Shield,
 } from 'lucide-react';
 
 export const ImageBlockView: React.FC<NodeViewProps> = ({
@@ -151,7 +151,7 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
 
       <div
         className={`relative inline-block transition-all ${
-          selected || isHovered || isResizing ? 'ring-2 ring-indigo-500/80 ring-offset-2 rounded-lg' : ''
+          selected || isHovered || isResizing ? 'ring-2 ring-brand-500/80 ring-offset-2 rounded-lg' : ''
         }`}
         style={{
           width: getParsedWidth(),
@@ -168,7 +168,7 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
                 type="button"
                 onClick={() => updateAttributes({ placement: 'left' })}
                 title="Align Left"
-                className={`p-1 rounded hover:bg-slate-800 ${placement === 'left' ? 'text-indigo-400 bg-slate-800' : 'text-slate-300'}`}
+                className={`p-1 rounded hover:bg-slate-800 ${placement === 'left' ? 'text-brand-500 bg-slate-800' : 'text-slate-300'}`}
               >
                 <AlignLeft className="w-3.5 h-3.5" />
               </button>
@@ -176,7 +176,7 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
                 type="button"
                 onClick={() => updateAttributes({ placement: 'center' })}
                 title="Align Center"
-                className={`p-1 rounded hover:bg-slate-800 ${placement === 'center' ? 'text-indigo-400 bg-slate-800' : 'text-slate-300'}`}
+                className={`p-1 rounded hover:bg-slate-800 ${placement === 'center' ? 'text-brand-500 bg-slate-800' : 'text-slate-300'}`}
               >
                 <AlignCenter className="w-3.5 h-3.5" />
               </button>
@@ -184,14 +184,14 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
                 type="button"
                 onClick={() => updateAttributes({ placement: 'right' })}
                 title="Align Right"
-                className={`p-1 rounded hover:bg-slate-800 ${placement === 'right' ? 'text-indigo-400 bg-slate-800' : 'text-slate-300'}`}
+                className={`p-1 rounded hover:bg-slate-800 ${placement === 'right' ? 'text-brand-500 bg-slate-800' : 'text-slate-300'}`}
               >
                 <AlignRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {/* Quick Width Presets */}
-            <div className="flex items-center gap-1 px-1 border-r border-slate-700 pr-1.5 text-[11px]">
+            <div className="flex items-center gap-1 px-1 border-r border-slate-700 pr-1.5 text-xs">
               <button
                 type="button"
                 onClick={() => updateAttributes({ width: '120px', height: 100 })}
@@ -227,7 +227,7 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               title="Replace Image"
-              className="p-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white flex items-center gap-1 text-[11px]"
+              className="p-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white flex items-center gap-1 text-xs"
             >
               <Upload className="w-3.5 h-3.5" />
               <span>Replace</span>
@@ -247,7 +247,7 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
 
         {/* Live resize dimensions badge */}
         {isResizing && liveDimensions && (
-          <div className="absolute top-2 left-2 z-30 bg-slate-900/90 text-white font-mono text-[10px] px-2 py-0.5 rounded shadow">
+          <div className="absolute top-2 left-2 z-30 bg-slate-900/90 text-white font-mono text-[11px] px-2 py-0.5 rounded shadow">
             {liveDimensions.width} × {liveDimensions.height} px
           </div>
         )}
@@ -270,23 +270,23 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
         ) : (
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="w-full py-8 px-6 border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/40 hover:bg-indigo-50/70 rounded-xl cursor-pointer text-center transition flex flex-col items-center justify-center gap-2"
+            className="w-full py-8 px-6 border-2 border-dashed border-brand-200 hover:border-brand-500 bg-brand-50/40 hover:bg-brand-50/70 rounded-xl cursor-pointer text-center transition flex flex-col items-center justify-center gap-2"
             style={{ minHeight: '140px', width: getParsedWidth() }}
           >
-            <div className="w-10 h-10 rounded-full bg-white shadow-xs flex items-center justify-center text-indigo-600">
-              {imageType === 'club-logo' ? <Sparkles className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
+            <div className="w-10 h-10 rounded-full bg-white shadow-xs flex items-center justify-center text-brand-600">
+              {imageType === 'club-logo' ? <Shield className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
             </div>
             <div>
               <p className="text-xs font-bold text-slate-800">
                 {imageType === 'club-logo' ? 'Club Logo Placeholder' : 'Image Placeholder'}
               </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 {placeholderText || 'Click to upload image or drop from left palette'}
               </p>
             </div>
             <button
               type="button"
-              className="mt-1 px-3 py-1 bg-white border border-slate-300 hover:border-indigo-400 text-indigo-700 text-xs font-semibold rounded-lg shadow-2xs flex items-center gap-1.5 transition"
+              className="mt-1 px-3 py-1 bg-white border border-slate-300 hover:border-brand-500 text-brand-700 text-xs font-semibold rounded-lg shadow-2xs flex items-center gap-1.5 transition"
             >
               <Upload className="w-3 h-3" />
               <span>Choose File</span>
@@ -301,28 +301,28 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
             <div
               onMouseDown={(e) => handleResizeStart(e, 'corner')}
               title="Drag cursor to resize image"
-              className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-indigo-600 border-2 border-white rounded-full shadow-md cursor-nwse-resize z-20 hover:scale-125 transition-transform"
+              className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-brand-600 border-2 border-white rounded-full shadow-md cursor-nwse-resize z-20 hover:scale-125 transition-transform"
             />
 
             {/* Right edge handle (cursor drag-to-resize width) */}
             <div
               onMouseDown={(e) => handleResizeStart(e, 'right')}
               title="Drag cursor horizontally to adjust width"
-              className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-6 bg-indigo-500 border border-white rounded-full shadow-xs cursor-ew-resize z-20 hover:scale-110 transition-transform"
+              className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-6 bg-brand-500 border border-white rounded-full shadow-xs cursor-ew-resize z-20 hover:scale-110 transition-transform"
             />
 
             {/* Bottom edge handle (cursor drag-to-resize height) */}
             <div
               onMouseDown={(e) => handleResizeStart(e, 'bottom')}
               title="Drag cursor vertically to adjust height"
-              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-3 bg-indigo-500 border border-white rounded-full shadow-xs cursor-ns-resize z-20 hover:scale-110 transition-transform"
+              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-3 bg-brand-500 border border-white rounded-full shadow-xs cursor-ns-resize z-20 hover:scale-110 transition-transform"
             />
           </>
         )}
       </div>
 
       {caption && (
-        <figcaption className="text-center text-[11px] text-slate-500 italic mt-1 max-w-md self-center">
+        <figcaption className="text-center text-xs text-slate-500 italic mt-1 max-w-md self-center">
           {caption}
         </figcaption>
       )}

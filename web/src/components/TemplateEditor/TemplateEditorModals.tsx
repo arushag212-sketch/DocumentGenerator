@@ -21,7 +21,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in">
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Eye className="w-5 h-5 text-indigo-600" />
+            <Eye className="w-5 h-5 text-brand-600" />
             <h3 className="font-bold text-slate-800 text-base">Template Live Preview</h3>
             <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
               Dummy Data Render
@@ -35,7 +35,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 bg-slate-100 flex flex-col items-center gap-6">
           {loading ? (
             <div className="flex flex-col items-center py-20 text-slate-500">
-              <RefreshCw className="w-8 h-8 animate-spin text-indigo-600 mb-3" />
+              <RefreshCw className="w-8 h-8 animate-spin text-brand-600 mb-3" />
               <p className="text-sm">Generating PDF preview via LibreOffice...</p>
             </div>
           ) : pages.length === 0 ? (
@@ -104,7 +104,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
         <div className="mt-6 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-xs"
+            className="px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-md shadow-xs"
           >
             OK
           </button>
@@ -156,7 +156,7 @@ export const UnreviewedAiModal: React.FC<UnreviewedAiModalProps> = ({
           <button
             onClick={onApproveAll}
             disabled={reviewing}
-            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-xs"
+            className="px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-md shadow-xs"
           >
             {reviewing ? 'Reviewing...' : 'Approve & Mark All Reviewed'}
           </button>

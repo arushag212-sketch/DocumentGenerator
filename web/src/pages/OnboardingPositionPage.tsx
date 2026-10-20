@@ -39,7 +39,7 @@ export const OnboardingPositionPage: React.FC = () => {
     try {
       await api.clubs.updatePosition(activeClub.id, finalPos);
       await refreshClubs();
-      navigate('/home');
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Failed to update position.');
     } finally {
@@ -49,9 +49,9 @@ export const OnboardingPositionPage: React.FC = () => {
 
   return (
     <div className="max-w-xl mx-auto my-12 px-4 sm:px-6">
-      <div className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-10 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-xl p-8 sm:p-10 shadow-sm">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 bg-blue-50 text-[#1b365d] rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <div className="w-14 h-14 bg-brand-50 text-brand-700 rounded-xl flex items-center justify-center mx-auto mb-4">
             <UserCheck className="w-7 h-7" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900">What is your role in {activeClub?.name || 'the club'}?</h1>
@@ -74,9 +74,9 @@ export const OnboardingPositionPage: React.FC = () => {
               return (
                 <label
                   key={pos.id}
-                  className={`flex items-start p-3.5 border rounded-2xl cursor-pointer transition-all ${
+                  className={`flex items-start p-3.5 border rounded-xl cursor-pointer transition-all ${
                     isSelected
-                      ? 'border-[#1b365d] bg-blue-50/50 shadow-sm ring-1 ring-[#1b365d]'
+                      ? 'border-brand-700 bg-brand-50/50 shadow-sm ring-1 ring-brand-700'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
                   }`}
                 >
@@ -86,7 +86,7 @@ export const OnboardingPositionPage: React.FC = () => {
                     value={pos.id}
                     checked={isSelected}
                     onChange={() => setSelectedPosition(pos.id)}
-                    className="mt-1 h-4 w-4 text-[#1b365d] focus:ring-[#1b365d] border-slate-300"
+                    className="mt-1 h-4 w-4 text-brand-700 focus:ring-brand-700 border-slate-300"
                   />
                   <div className="ml-3">
                     <span className="block text-xs sm:text-sm font-bold text-slate-900">{pos.title}</span>
@@ -97,9 +97,9 @@ export const OnboardingPositionPage: React.FC = () => {
             })}
 
             <label
-              className={`flex items-start p-3.5 border rounded-2xl cursor-pointer transition-all ${
+              className={`flex items-start p-3.5 border rounded-xl cursor-pointer transition-all ${
                 selectedPosition === 'Custom'
-                  ? 'border-[#1b365d] bg-blue-50/50 shadow-sm ring-1 ring-[#1b365d]'
+                  ? 'border-brand-700 bg-brand-50/50 shadow-sm ring-1 ring-brand-700'
                   : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
               }`}
             >
@@ -109,7 +109,7 @@ export const OnboardingPositionPage: React.FC = () => {
                 value="Custom"
                 checked={selectedPosition === 'Custom'}
                 onChange={() => setSelectedPosition('Custom')}
-                className="mt-1 h-4 w-4 text-[#1b365d] focus:ring-[#1b365d] border-slate-300"
+                className="mt-1 h-4 w-4 text-brand-700 focus:ring-brand-700 border-slate-300"
               />
               <div className="ml-3 flex-1">
                 <span className="block text-xs sm:text-sm font-bold text-slate-900">Other Custom Role</span>
@@ -121,7 +121,7 @@ export const OnboardingPositionPage: React.FC = () => {
                     value={customPosition}
                     onChange={(e) => setCustomPosition(e.target.value)}
                     required
-                    className="mt-2 w-full text-xs sm:text-sm px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#1b365d] focus:outline-none bg-white"
+                    className="mt-2 w-full text-xs sm:text-sm px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-700 focus:outline-none bg-white"
                   />
                 )}
               </div>
@@ -132,7 +132,7 @@ export const OnboardingPositionPage: React.FC = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3 px-4 bg-[#1b365d] hover:bg-[#132742] text-white text-xs sm:text-sm font-bold rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3 px-4 bg-brand-700 hover:bg-brand-800 text-white text-xs sm:text-sm font-bold rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {submitting ? 'Saving Position...' : 'Confirm & Go to Home'}
               <ArrowRight className="w-4 h-4" />

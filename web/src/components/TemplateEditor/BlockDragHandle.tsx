@@ -132,7 +132,7 @@ export const BlockDragHandle: React.FC<BlockDragHandleProps> = ({ editor, contai
     return (
       <div
         style={{ top: `${handlePos.top}px`, left: `${handlePos.left}px` }}
-        className="absolute z-30 flex items-center gap-1 bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-bold px-2 py-1 rounded-md shadow-sm select-none"
+        className="absolute z-30 flex items-center gap-1 bg-amber-50 border border-amber-300 text-amber-800 text-[11px] font-bold px-2 py-1 rounded-md shadow-sm select-none"
         title="SVNIT Letterhead Slot (Locked, cannot be moved or deleted)"
       >
         <Lock className="w-3 h-3 text-amber-600" />
@@ -150,7 +150,7 @@ export const BlockDragHandle: React.FC<BlockDragHandleProps> = ({ editor, contai
       <div
         draggable
         onDragStart={handleDragStart}
-        className="p-1 rounded cursor-grab active:cursor-grabbing text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+        className="p-1 rounded cursor-grab active:cursor-grabbing text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition"
         title="Drag block to reorder"
       >
         <GripVertical className="w-3.5 h-3.5" />

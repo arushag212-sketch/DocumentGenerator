@@ -3,10 +3,16 @@ name: Event Approval Note
 description: Event approval note submitted to Dean (Students Welfare)
 stage: pre_event
 triggers: [approval, dean, budget, funding, financial, proposal, permission dean]
+recommend:
+  keywords: [approval note, budget approval, sanction, financial sanction, advance approval]
+  auto_when: [budget]
+  requires: [budget, bundle]
+  reason: "Financial sanction and approval are required for the event budget."
+  reason_not: "Needed only when the event has a budget or needs financial sanction."
 letterhead: svnit
 numbering:
   series: null
-  format: "ACM/{academic_year}/{event_code}/{seq:03d}"
+  format: "{club_code}/{academic_year}/{event_code}/{seq:03d}"
   confirm: true
 depends_on: []
 repeat_per: null

@@ -3,6 +3,12 @@ name: Bill Certificate (Form BC-R)
 description: Bill certificate for vendor payments, Form BC-R format
 stage: post_event
 triggers: [bill certificate, form bc-r, vendor payment, purchase, invoice]
+recommend:
+  keywords: [bill certificate, bc-r]
+  auto_when: [bills]
+  requires: [bills]
+  reason: "Formal certificate (Form BC-R) for each bill being reimbursed."
+  reason_not: "Needed only when submitting bills for reimbursement."
 letterhead: svnit
 numbering: null
 depends_on: [approval_note]

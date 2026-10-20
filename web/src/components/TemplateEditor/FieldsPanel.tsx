@@ -101,12 +101,12 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
       {/* Top Search & Add Bar */}
       <div className="p-3 border-b border-slate-200 bg-white space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+          <span className="text-xs font-bold text-slate-800">
             Template Fields ({fields.length})
           </span>
           <button
             onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-xs font-semibold transition"
+            className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded text-xs font-semibold transition"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Field
@@ -120,7 +120,7 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search fields…"
-            className="w-full text-xs pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full text-xs pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </div>
       </div>
@@ -140,7 +140,7 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
                 draggable
                 onDragStart={(e) => handleFieldDragStart(e, field)}
                 onClick={() => handleInsert(field)}
-                className="group flex items-center justify-between p-2.5 bg-white border border-slate-200 hover:border-indigo-300 rounded-lg shadow-sm hover:shadow transition cursor-pointer select-none"
+                className="group flex items-center justify-between p-2.5 bg-white border border-slate-200 hover:border-brand-300 rounded-lg shadow-sm hover:shadow transition cursor-pointer select-none"
                 title="Click to insert or drag onto page"
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -149,7 +149,7 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
                     <div className="font-semibold text-xs text-slate-800 truncate">
                       {field.label}
                     </div>
-                    <div className="text-[10px] font-mono text-slate-400 truncate">
+                    <div className="text-[11px] font-mono text-slate-400 truncate">
                       {field.key}
                     </div>
                   </div>
@@ -162,7 +162,7 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
                     </span>
                   )}
                   <span
-                    className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${
+                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
                       isEssential
                         ? 'bg-rose-50 text-rose-700 border-rose-200'
                         : 'bg-slate-100 text-slate-600 border-slate-200'
@@ -204,10 +204,10 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
                 placeholder="e.g. event_name"
-                className="w-full text-xs font-mono px-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full text-xs font-mono px-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-brand-500 focus:outline-none"
                 required
               />
-              <span className="text-[10px] text-slate-400">Lowercase letters, numbers, and underscores.</span>
+              <span className="text-[11px] text-slate-400">Lowercase letters, numbers, and underscores.</span>
             </div>
 
             <div>
@@ -219,7 +219,7 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
                 value={newLabel}
                 onChange={(e) => setNewLabel(e.target.value)}
                 placeholder="e.g. Event Name"
-                className="w-full text-xs px-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full text-xs px-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-brand-500 focus:outline-none"
               />
             </div>
 
@@ -231,7 +231,7 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
                 <select
                   value={newType}
                   onChange={(e) => setNewType(e.target.value)}
-                  className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-brand-500 focus:outline-none"
                 >
                   <option value="text">Text</option>
                   <option value="date">Date</option>
@@ -248,7 +248,7 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
                 <select
                   value={newImportance}
                   onChange={(e) => setNewImportance(e.target.value as any)}
-                  className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-brand-500 focus:outline-none"
                 >
                   <option value="essential">Essential</option>
                   <option value="optional">Optional</option>
@@ -262,7 +262,7 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
                 id="sensitiveField"
                 checked={newSensitive}
                 onChange={(e) => setNewSensitive(e.target.checked)}
-                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
               />
               <label htmlFor="sensitiveField" className="text-xs text-slate-700 font-medium cursor-pointer">
                 Sensitive Field (Bank, PAN, GST)
@@ -279,7 +279,7 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold transition"
+                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-semibold transition"
               >
                 Create Field
               </button>

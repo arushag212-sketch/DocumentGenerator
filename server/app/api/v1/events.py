@@ -247,6 +247,42 @@ def get_event(
     )
 
 
+@router.post("/{event_id}/regenerate")
+def regenerate_event_documents(
+    event_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.EDITOR)),
+    db: Session = Depends(get_db),
+):
+    """After event details change, bring every document of the event up to date.
+
+    Each affected document gets a new version (same reference number) with the event's
+    current values; documents whose fields did not change are left alone.
+    """
+    from server.app.core import document_workflow as workflow
+
+    ev = ScopedRepository(db, Event, club_id=ctx.club.id).get(event_id)
+    if not ev:
+        raise HTTPException(status_code=404, detail="Event not found")
+    record = ev.record or {}
+    docs = ScopedRepository(db, Document, club_id=ctx.club.id).all(Document.event_id == ev.id)
+    updated, unchanged = [], []
+    for doc in docs:
+        current = {f["key"]: f["value"] for f in workflow.editable_fields(db, doc)}
+        changes = {
+            k: record[k]
+            for k in current
+            if k in record and record[k] not in (None, "") and str(record[k]) != str(current[k])
+        }
+        if not changes:
+            unchanged.append(doc.title)
+            continue
+        ver = workflow.revise_document(db, doc, ctx.user, changes, "Event details updated")
+        updated.append({"id": doc.id, "title": doc.title, "version_no": ver.version_no, "changes": ver.diff_summary})
+    log_audit(db=db, action="event_documents_regenerated", entity_type="event", entity_id=ev.id,
+              club_id=ctx.club.id, user_id=ctx.user.id, meta={"updated": len(updated)})
+    return {"updated": updated, "unchanged": unchanged}
+
+
 @router.put("/{event_id}", response_model=EventDetailOut)
 def update_event(
     event_id: str,

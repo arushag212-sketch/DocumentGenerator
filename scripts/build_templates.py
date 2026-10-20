@@ -184,12 +184,12 @@ def add_svnit_header(section, header_img_name="clean_svnit_approval_header.png",
             run.font.name = "Times New Roman"
             run.font.color.rgb = RGBColor.from_string(color)
 
-        # Right: ACM text/logo
+        # Right: club short code
         right_cell = htable.cell(0, 2)
         right_cell.width = Inches(0.7)
         rp = right_cell.paragraphs[0]
         rp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = rp.add_run("ACM")
+        run = rp.add_run("{{ club_short }}")
         run.bold = True
         run.font.size = Pt(14)
         run.font.name = "Times New Roman"
@@ -222,9 +222,8 @@ def build_permission_letter():
     header.is_linked_to_previous = False
     hp = header.paragraphs[0]
     hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    perm_header_img = ASSETS / "clean_permission_header.png"
-    if not perm_header_img.exists():
-        perm_header_img = ASSETS / "acm_permission_header.png"
+    # Placeholder banner; the renderer swaps in the club's own banner (docgen.letterhead_banner).
+    perm_header_img = ASSETS / "club_banner_placeholder.png"
     if perm_header_img.exists():
         run_h = hp.add_run()
         run_h.add_picture(str(perm_header_img), width=Inches(6.8))
@@ -235,7 +234,7 @@ def build_permission_letter():
             section,
             left_img=svnit_crest,
             right_img=acm_logo,
-            title_line1="ASSOCIATION for COMPUTING MACHINERY",
+            title_line1="{{ club_name | upper }}",
             title_line2="SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT",
         )
 
@@ -315,7 +314,7 @@ def build_permission_letter():
     c00 = sig_table.cell(0, 0)
     p = c00.paragraphs[0]
     p.add_run("Name: {{ chairperson.name }}\n").font.name = "Times New Roman"
-    p.add_run("Designation: Chairperson , ACM\n").font.name = "Times New Roman"
+    p.add_run("Designation: Chairperson , {{ club_short }}\n").font.name = "Times New Roman"
     p.add_run("Admission No.: {{ chairperson.admission_no }}\n").font.name = "Times New Roman"
     p.add_run("Branch: {{ chairperson.branch }}\n").font.name = "Times New Roman"
     p.add_run("Mobile No.: {% if chairperson.mobile %}{{ chairperson.mobile }}{% endif %}").font.name = "Times New Roman"  # Requirement 5: "Mobile" in Permission
@@ -325,15 +324,15 @@ def build_permission_letter():
     p = c01.paragraphs[0]
     p.add_run("Name: {% if venue_tech_assistant %}{{ venue_tech_assistant.name }}{% else %}{{ tech_assistant_name | default('') }}{% endif %}\n").font.name = "Times New Roman"
     p.add_run("Designation: {% if venue_tech_assistant and venue_tech_assistant.roles and venue_tech_assistant.roles.permission_letter %}{{ venue_tech_assistant.roles.permission_letter }}{% else %}Tech Assistant , {{ venue }}{% endif %}\n").font.name = "Times New Roman"
-    p.add_run("Branch: Computer Science & Engineering\n").font.name = "Times New Roman"
+    p.add_run("Branch: {% if venue_tech_assistant and venue_tech_assistant.get('branch') %}{{ venue_tech_assistant.branch }}{% else %}{{ department }}{% endif %}\n").font.name = "Times New Roman"
     p.add_run("Mobile No.: {% if venue_tech_assistant and venue_tech_assistant.mobile %}{{ venue_tech_assistant.mobile }}{% endif %}").font.name = "Times New Roman"
 
     # Cell (1,0): Club Faculty Chairman
     c10 = sig_table.cell(1, 0)
     p = c10.paragraphs[0]
     p.add_run("Name: {{ faculty_chairman.name }}\n").font.name = "Times New Roman"
-    p.add_run("Designation: Chairman , ACM\n").font.name = "Times New Roman"
-    p.add_run("Department: Computer Science & Engineering\n").font.name = "Times New Roman"
+    p.add_run("Designation: Chairman , {{ club_short }}\n").font.name = "Times New Roman"
+    p.add_run("Department: {{ faculty_chairman.get('branch') or department }}\n").font.name = "Times New Roman"
     p.add_run("Mobile No.: {% if faculty_chairman.mobile %}{{ faculty_chairman.mobile }}{% endif %}").font.name = "Times New Roman"
 
     # Cell (1,1): Venue Faculty In-Charge
@@ -341,7 +340,7 @@ def build_permission_letter():
     p = c11.paragraphs[0]
     p.add_run("Name: {% if venue_faculty_in_charge %}{{ venue_faculty_in_charge.name }}{% else %}{{ faculty_in_charge_name | default('') }}{% endif %}\n").font.name = "Times New Roman"
     p.add_run("Designation: {% if venue_faculty_in_charge and venue_faculty_in_charge.roles and venue_faculty_in_charge.roles.permission_letter %}{{ venue_faculty_in_charge.roles.permission_letter }}{% else %}Faculty In-charge , {{ venue }}{% endif %}\n").font.name = "Times New Roman"
-    p.add_run("Department: Computer Science & Engineering\n").font.name = "Times New Roman"
+    p.add_run("Department: {% if venue_faculty_in_charge and venue_faculty_in_charge.get('branch') %}{{ venue_faculty_in_charge.branch }}{% else %}{{ department }}{% endif %}\n").font.name = "Times New Roman"
     p.add_run("Mobile No.: {% if venue_faculty_in_charge and venue_faculty_in_charge.mobile %}{{ venue_faculty_in_charge.mobile }}{% endif %}").font.name = "Times New Roman"
 
     for r in sig_table.rows:
@@ -445,7 +444,7 @@ def build_prize_money_receipt():
         "It is certified that the said amount is recommended for payment.\n\n",
         "Chairman Signature\n",
         "{{ faculty_chairman.name }}\n",
-        "Chairman, ACM Student Chapter SVNIT",
+        "Chairman, {{ club_name }}",
     ]
     for line in runs_stu:
         r = p_stu.add_run(line)
@@ -674,11 +673,11 @@ def build_approval_note():
     p_names = doc.add_paragraph()
     p_names.paragraph_format.space_before = Pt(2)
     p_names.paragraph_format.space_after = Pt(1)
-    r2 = p_names.add_run("Dr. Rakesh Maurya\t\t\tDr. Manish K Rathod\t\t\tDr. Sanjay R. Patel\n")
+    r2 = p_names.add_run("{{ approval_chain[0].name }}\t\t\t{{ approval_chain[1].name }}\t\t\t{{ approval_chain[2].name }}\n")
     r2.font.size = Pt(9)
     r2.font.name = "Times New Roman"
     r2.bold = True
-    r3 = p_names.add_run("Chairman, F& SW\t\t\tAssociate Dean(SW)\t\t\tDean (Students Welfare)")
+    r3 = p_names.add_run("{{ approval_chain[0].designation }}\t\t\t{{ approval_chain[1].designation }}\t\t\t{{ approval_chain[2].designation }}")
     r3.font.size = Pt(9)
     r3.font.name = "Times New Roman"
 
@@ -688,8 +687,8 @@ def build_approval_note():
     sigs = [
         ("Signature of Student Head\nName: {{ student_head.name }}\nRoll No. {{ student_head.admission_no }}\nBranch: {{ student_head.branch }}\nMobile No. {{ student_head.mobile }}",
          "Signature of Student Secretary\nName: {{ student_secretary.name }}\nRoll No. {{ student_secretary.admission_no }}\nBranch: {{ student_secretary.branch }}\nMobile No. {{ student_secretary.mobile }}"),
-        ("Signature of Faculty Co-Chairman\nName:           {{ faculty_co_chairman.name }}\nDesignation: Co-Chairman\nDept:            CSE\nMoblie No.   {{ faculty_co_chairman.mobile }}",
-         "Signature of Faculty Chairman\nName:           {{ faculty_chairman.name }}\nDesignation: Chairman\nDept:             CSE\nMoblie No.   {{ faculty_chairman.mobile }}"),
+        ("Signature of Faculty Co-Chairman\nName:           {{ faculty_co_chairman.name }}\nDesignation: Co-Chairman\nDept:            {{ department_short }}\nMoblie No.   {{ faculty_co_chairman.mobile }}",
+         "Signature of Faculty Chairman\nName:           {{ faculty_chairman.name }}\nDesignation: Chairman\nDept:             {{ department_short }}\nMoblie No.   {{ faculty_chairman.mobile }}"),
     ]
     for ri, (left, right) in enumerate(sigs):
         lcell = sig_table.cell(ri, 0)
@@ -739,8 +738,8 @@ def build_bill_summary():
     section.top_margin = Inches(0.5)
     section.bottom_margin = Inches(0.5)
 
-    # ACM text header (this sample uses text, not logos)
-    add_paragraph_with_tag(doc, "ACM Student Chapter", bold=True,
+    # Club text header (this sample uses text, not logos)
+    add_paragraph_with_tag(doc, "{{ club_name }}", bold=True,
                            font_size=14, font_name="Times New Roman",
                            alignment=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
     add_paragraph_with_tag(
@@ -852,9 +851,9 @@ def build_bill_summary():
             end={"val": "none", "sz": "0"})
     
     sigs = [
-        "Student Head\n{{ student_head.name }}\nACM NIT-Surat",
-        "Student Secretary\n{{ student_secretary.name }}\nACM NIT-Surat",
-        "Faculty Chairman\n{{ faculty_chairman.name }}\nACM NIT-Surat",
+        "Student Head\n{{ student_head.name }}\n{{ club_short }} NIT-Surat",
+        "Student Secretary\n{{ student_secretary.name }}\n{{ club_short }} NIT-Surat",
+        "Faculty Chairman\n{{ faculty_chairman.name }}\n{{ club_short }} NIT-Surat",
     ]
     for i, sig in enumerate(sigs):
         p = sig1.cell(0, i).paragraphs[0]
@@ -1159,8 +1158,8 @@ def build_bill_certificate():
     ind_table = doc.add_table(rows=4, cols=2, style='Table Grid')
     ind_data = [
         ("Name of the Faculty Chairman/Co-Chairman", "{{ faculty_chairman.name }}"),
-        ("Designation", "Chairman, ACM Student Chapter SVNIT"),
-        ("Department", "CSE"),
+        ("Designation", "Chairman, {{ club_name }}"),
+        ("Department", "{{ department_short }}"),
         ("Signature with Date", "\n\n"),
     ]
     for i, (label, value) in enumerate(ind_data):
@@ -1181,7 +1180,7 @@ def build_bill_certificate():
     # RECOMMENDATIONS (HoD & Dean) matching sample PDF exactly
     add_paragraph_with_tag(doc, "Recommendation (Head of the Department)", bold=True,
                            font_size=9.0, font_name="Times New Roman", space_before=4, space_after=2)
-    add_paragraph_with_tag(doc, "Recommended Amount: {{ bill_total_with_tax }}\nApproved and Recommended for Bill Payment\n\n\nSignature of HoD (CSE)",
+    add_paragraph_with_tag(doc, "Recommended Amount: {{ bill_total_with_tax }}\nApproved and Recommended for Bill Payment\n\n\nSignature of HoD ({{ department_short }})",
                            font_size=8.5, font_name="Times New Roman", space_after=4)
 
     add_paragraph_with_tag(doc, "Dean (Students Welfare) Approval", bold=True,
@@ -1212,9 +1211,8 @@ def build_mom():
     header.is_linked_to_previous = False
     hp = header.paragraphs[0]
     hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    mom_header_img = ASSETS / "clean_permission_header.png"
-    if not mom_header_img.exists():
-        mom_header_img = ASSETS / "acm_permission_header.png"
+    # Placeholder banner; the renderer swaps in the club's own banner (docgen.letterhead_banner).
+    mom_header_img = ASSETS / "club_banner_placeholder.png"
     if mom_header_img.exists():
         run_h = hp.add_run()
         run_h.add_picture(str(mom_header_img), width=Inches(6.8))
@@ -1225,7 +1223,7 @@ def build_mom():
             section,
             left_img=svnit_crest,
             right_img=acm_logo,
-            title_line1="ASSOCIATION for COMPUTING MACHINERY",
+            title_line1="{{ club_name | upper }}",
             title_line2="SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT",
         )
 

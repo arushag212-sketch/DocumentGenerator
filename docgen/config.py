@@ -40,14 +40,32 @@ class NumberingConfig(BaseModel):
     last_used: int = 0
 
 
+DEFAULT_APPROVAL_CHAIN = (
+    "\nChairman, F& SW",
+    "\nAssociate Dean(SW)",
+    "\nDean (Students Welfare)",
+)
+
+
 class ClubConfig(BaseModel):
-    club_name: str = "ACM Student Chapter, SVNIT"
-    club_short: str = "ACM"
+    # Club identity comes from the club's own record; no club's values are defaults.
+    club_name: str = ""
+    club_short: str = ""
     institute_name: str = "Sardar Vallabhbhai National Institute of Technology, Surat (SVNIT)"
     institute_short: str = "SVNIT"
-    chapter_code: str = "6/52"
-    head_of_account: str = "6/52"
+    chapter_code: str = ""
+    head_of_account: str = ""
     academic_year: str = "2026-27"
+    # Owning department, e.g. "Computer Science & Engineering" / "CSE" (for HoD lines, branches).
+    department: str = ""
+    department_short: str = ""
+    # Full-width header banner for letter-style system templates. When unset, one is
+    # composed from the institute crest, the club name and the club logo.
+    letterhead_banner_path: Optional[str] = None
+    club_logo_path: Optional[str] = None
+    # Brand kit: accent colour for composed banners, footer line on generated documents.
+    brand_color: str = "#4F81BD"
+    footer_text: str = ""
 
     letterheads: dict[str, LetterheadConfig] = Field(default_factory=dict)
 
@@ -58,12 +76,20 @@ class ClubConfig(BaseModel):
     faculty_chairman: Optional[PersonConfig] = None
     faculty_co_chairman: Optional[PersonConfig] = None
 
-    # Approval chain
-    approval_chain: list[str] = Field(default_factory=lambda: [
-        "Chairman F&SW",
-        "Associate Dean SW",
-        "Dean SW",
-    ])
+    # Approval chain: "Name\nDesignation" entries in signing order. Names are per-institute
+    # data and belong in club settings; the default carries designations only.
+    approval_chain: list[str] = Field(default_factory=lambda: list(DEFAULT_APPROVAL_CHAIN))
+
+    def approval_signatories(self, count: int = 3) -> list[dict[str, str]]:
+        """approval_chain as [{name, designation}], padded to ``count`` entries."""
+        out: list[dict[str, str]] = []
+        for entry in self.approval_chain[:count]:
+            name, _, designation = str(entry or "").partition("\n")
+            out.append({"name": name.strip(), "designation": designation.strip()})
+        while len(out) < count:
+            _, _, designation = DEFAULT_APPROVAL_CHAIN[len(out) % len(DEFAULT_APPROVAL_CHAIN)].partition("\n")
+            out.append({"name": "", "designation": designation.strip()})
+        return out
 
     # Venue registry
     venues: dict[str, VenueConfig] = Field(default_factory=dict)

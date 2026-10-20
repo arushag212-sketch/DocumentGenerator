@@ -705,7 +705,7 @@ def test_template_unique_names_enforced(client, owner_context):
 
 
 def test_recommender_club_template_filtering(client, owner_context, db_session):
-    """Recommender lists club template only if triggers or stage match, otherwise in other_templates."""
+    """Recommender lists a club template only when the request names it, otherwise in other_templates."""
     club_id = owner_context["club_id"]
 
     # Create two custom published club templates:
@@ -714,7 +714,7 @@ def test_recommender_club_template_filtering(client, owner_context, db_session):
         id=str(uuid.uuid4()),
         club_id=club_id,
         slug=f"club-code-{uuid.uuid4().hex[:6]}",
-        name=f"Coding Contest Registration {uuid.uuid4().hex[:4]}",
+        name=f"Coding Contest Registration Form {uuid.uuid4().hex[:4]}",
         category="Official Event Documents",
         stage="pre_event",
         is_system=False,
@@ -765,7 +765,7 @@ def test_recommender_club_template_filtering(client, owner_context, db_session):
     # Query recommender for pre-event workshop (no AGM triggers)
     rec_res = client.post(
         f"/api/v1/clubs/{club_id}/events/recommend",
-        json={"text": "We are conducting a two-day Web Development Workshop on 14-15 October in Seminar Hall."},
+        json={"text": "We are conducting a coding contest on 14-15 October in Seminar Hall; prepare the registration form."},
         headers=owner_context["headers"],
     )
     assert rec_res.status_code == 200
@@ -774,7 +774,7 @@ def test_recommender_club_template_filtering(client, owner_context, db_session):
     rec_tmpl_ids = [t["template_id"] for t in data["templates"]]
     other_tmpl_ids = [t["template_id"] for t in data["other_templates"]]
 
-    # t1 (pre_event stage) matches event detected_stage ("pre_event") -> listed in templates
+    # t1 is named by the request (coding contest ... registration form) -> listed in templates
     assert t1.id in rec_tmpl_ids
 
     # t2 (meeting stage, no trigger match) does not match -> hidden under other_templates

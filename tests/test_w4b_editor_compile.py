@@ -424,7 +424,7 @@ def test_w4b_sponsorship_request_letter_end_to_end(client, auth_setup):
     # 1. Create blank template
     create_res = client.post(
         f"/api/v1/clubs/{acm_id}/documents/templates/blank",
-        json={"name": "Sponsorship Request Letter", "category": "Official Event Documents"},
+        json={"name": "Sponsorship Request Letter (Editor)", "category": "Official Event Documents"},
         headers=owner_headers,
     )
     assert create_res.status_code == 201

@@ -50,11 +50,11 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
           <ChevronLeft className="w-4 h-4" />
         </button>
         <span
-          className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-6 select-none cursor-pointer flex items-center gap-1.5"
+          className="text-[11px] font-bold text-slate-400 mt-6 select-none cursor-pointer flex items-center gap-1.5"
           style={{ writingMode: 'vertical-rl' }}
           onClick={onToggle}
         >
-          <Sparkles className="w-3 h-3 text-indigo-500" />
+          <Sparkles className="w-3 h-3 text-brand-500" />
           AI & Tools Panel
         </span>
       </aside>
@@ -70,12 +70,12 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
     <aside className={containerClasses}>
       {/* Tab Navigation Header */}
       <div className="flex items-center justify-between border-b border-slate-200 px-2 py-1.5 bg-slate-50/80">
-        <div className="flex items-center gap-1 text-[11px] font-semibold">
+        <div className="flex items-center gap-1 text-xs font-semibold">
           <button
             onClick={() => setActiveTab('chat')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition ${
               activeTab === 'chat'
-                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/80'
+                ? 'bg-white text-brand-600 shadow-sm border border-slate-200/80'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -87,7 +87,7 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
             onClick={() => setActiveTab('fields')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition ${
               activeTab === 'fields'
-                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/80'
+                ? 'bg-white text-brand-600 shadow-sm border border-slate-200/80'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -99,7 +99,7 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
             onClick={() => setActiveTab('design')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition ${
               activeTab === 'design'
-                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/80'
+                ? 'bg-white text-brand-600 shadow-sm border border-slate-200/80'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -111,7 +111,7 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
             onClick={() => setActiveTab('checks')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition ${
               activeTab === 'checks'
-                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/80'
+                ? 'bg-white text-brand-600 shadow-sm border border-slate-200/80'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >

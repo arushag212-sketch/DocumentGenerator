@@ -280,6 +280,12 @@ def migrate_template_content(content: dict[str, Any]) -> dict[str, Any]:
         else:
             new_blocks.append(b)
 
+    # One output block per input block: carry block-level conditions across the migration.
+    for old_block, new_block in zip(blocks, new_blocks):
+        show_if = isinstance(old_block, dict) and (old_block.get("attrs") or {}).get("showIf")
+        if show_if and isinstance(new_block, dict) and new_block is not old_block:
+            new_block.setdefault("attrs", {})["showIf"] = show_if
+
     migrated = dict(content)
     migrated["content"] = new_blocks
     return migrated
@@ -354,6 +360,28 @@ def _validate_chips_recursive(nodes: list[dict[str, Any]] | None) -> None:
 
         if "content" in node and isinstance(node["content"], list):
             _validate_chips_recursive(node["content"])
+
+
+def _block_condition(block: dict[str, Any]) -> Optional[str]:
+    """Field key a block is conditional on ("show only if this field has a value"), if any."""
+    attrs = block.get("attrs") or {}
+    key = attrs.get("showIf") or block.get("showIf")
+    if not isinstance(key, str) or not key.strip():
+        return None
+    key = key.strip()
+    validate_identifier(key, "Condition field")
+    return key
+
+
+BLANK_FILL_LINE = "____________________"
+
+
+def condition_open_tag(key: str) -> str:
+    """Opening tag of a conditional section: shown only when ``key`` has a real value.
+
+    Optional fields left empty render as a blank fill-in line, which must not count as a value.
+    """
+    return f'{{%p if {key} is defined and {key} and {key} != "{BLANK_FILL_LINE}" %}}'
 
 
 def validate_jinja_expression(expr: str) -> bool:
@@ -700,43 +728,105 @@ class TipTapDocxCompiler:
 
     def build(self) -> Document:
         """Construct the complete DOCX document."""
-        # 1. Letterhead / Header
+        # 1. Letterhead / Header and club footer
         self._build_header()
+        self._build_footer()
 
         # 2. Iterate through TipTap content blocks
         content = self.editor_json.get("content", [])
         for block in content:
-            b_type = block.get("type", "")
-            if b_type == "heading":
-                self._add_heading(block)
-            elif b_type == "paragraph":
-                self._add_paragraph(block)
-            elif b_type in ("bulletList", "orderedList"):
-                self._add_list(block, ordered=(b_type == "orderedList"))
-            elif b_type == "table":
-                self._add_native_table(block)
-            elif b_type == "infoTable":
-                self._add_info_table(block)
-            elif b_type == "repeatingTable":
-                self._add_repeating_table(block)
-            elif b_type == "signatureGrid":
-                self._add_signature_grid(block)
-            elif b_type == "imageBlock":
-                self._add_image_block(block)
-            elif b_type in ("pageBreak", "horizontalRule"):
-                self._add_page_break()
-            else:
-                # Fallback: attempt paragraph extraction
-                if "content" in block:
-                    self._add_paragraph(block)
+            condition = _block_condition(block)
+            if condition:
+                self._add_control_paragraph(condition_open_tag(condition))
+            self._add_block(block)
+            if condition:
+                self._add_control_paragraph("{%p endif %}")
 
         return self.doc
+
+    def _add_control_paragraph(self, tag: str) -> None:
+        """A paragraph holding only a docxtpl control tag; docxtpl removes it when rendering."""
+        p = self.doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(0)
+        p.add_run(tag)
+
+    def _add_block(self, block: dict[str, Any]) -> None:
+        b_type = block.get("type", "")
+        if b_type == "heading":
+            self._add_heading(block)
+        elif b_type == "paragraph":
+            self._add_paragraph(block)
+        elif b_type in ("bulletList", "orderedList"):
+            self._add_list(block, ordered=(b_type == "orderedList"))
+        elif b_type == "table":
+            self._add_native_table(block)
+        elif b_type == "infoTable":
+            self._add_info_table(block)
+        elif b_type == "repeatingTable":
+            self._add_repeating_table(block)
+        elif b_type == "signatureGrid":
+            self._add_signature_grid(block)
+        elif b_type == "imageBlock":
+            self._add_image_block(block)
+        elif b_type in ("pageBreak", "horizontalRule"):
+            self._add_page_break()
+        else:
+            # Fallback: attempt paragraph extraction
+            if "content" in block:
+                self._add_paragraph(block)
+
+    def _build_footer(self):
+        """Footer on every page: the rendering club's footer line and "Page X of Y"."""
+        footer = self.doc.sections[0].footer
+        footer.is_linked_to_previous = False
+        p = footer.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        def _run(text: str):
+            r = p.add_run(text)
+            r.font.size = Pt(7.5)
+            r.font.name = self.body_font
+            r.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
+            return r
+
+        w_ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+
+        def _field(code: str):
+            # begin / instruction / separate+result / end each in a formatted run, so the
+            # page number takes the footer's size instead of the document default.
+            for xml in (
+                f'<w:fldChar {w_ns} w:fldCharType="begin"/>',
+                f'<w:instrText {w_ns} xml:space="preserve"> {code} </w:instrText>',
+                f'<w:fldChar {w_ns} w:fldCharType="separate"/>',
+            ):
+                _run("")._r.append(parse_xml(xml))
+            _run("1")
+            _run("")._r.append(parse_xml(f'<w:fldChar {w_ns} w:fldCharType="end"/>'))
+
+        _run("{{ club_footer }}    ·    Page ")
+        _field("PAGE")
+        _run(" of ")
+        _field("NUMPAGES")
 
     def _build_header(self):
         """Build document header: SVNIT logo on right (locked), club logo on left, centered titles."""
         section = self.doc.sections[0]
         header = section.header
         header.is_linked_to_previous = False
+
+        if self.letterhead_cfg.get("banner_placeholder"):
+            # Shared library templates: a placeholder banner the renderer swaps for the
+            # rendering club's own banner (docgen.letterhead_banner).
+            from docgen.letterhead_banner import PLACEHOLDER_NAME
+
+            placeholder = Path("assets") / PLACEHOLDER_NAME
+            if placeholder.exists():
+                usable = section.page_width - section.left_margin - section.right_margin
+                hp = header.paragraphs[0]
+                hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                hp.add_run().add_picture(str(placeholder), width=min(usable, Inches(7.0)))
+                return
 
         table = header.add_table(rows=1, cols=3, width=Inches(6.67))
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -750,10 +840,9 @@ class TipTapDocxCompiler:
         left_cell.width = Inches(0.85)
         lp = left_cell.paragraphs[0]
         lp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        club_logo_path = Path("assets/permission_page1_img2.png")  # ACM logo default
-        if self.letterhead_cfg.get("club_logo_path") and Path(self.letterhead_cfg["club_logo_path"]).exists():
-            club_logo_path = Path(self.letterhead_cfg["club_logo_path"])
-        if club_logo_path.exists():
+        # The club's own logo only; no logo rather than another club's.
+        club_logo_path = Path(self.letterhead_cfg.get("club_logo_path") or "")
+        if self.letterhead_cfg.get("club_logo_path") and club_logo_path.exists():
             l_run = lp.add_run()
             l_run.add_picture(str(club_logo_path), width=Inches(0.75))
 
@@ -764,7 +853,8 @@ class TipTapDocxCompiler:
         cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         title1 = self.letterhead_cfg.get("title_text", "SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT")
-        subtitle = self.letterhead_cfg.get("subtitle_text", "ASSOCIATION FOR COMPUTING MACHINERY (ACM) STUDENT CHAPTER")
+        # Without a configured letterhead, print the rendering club's own name.
+        subtitle = self.letterhead_cfg.get("subtitle_text") or "{{ club_name | upper }}"
 
         r1 = cp.add_run(title1)
         r1.bold = True
@@ -1120,9 +1210,9 @@ class TipTapDocxCompiler:
         if not signatures:
             # Default 3 signees
             signatures = [
-                {"label": "Student Coordinator", "designation": "ACM Student Chapter"},
-                {"label": "Faculty Advisor", "designation": "Dept. of Computer Science & Engg."},
-                {"label": "Head of Department", "designation": "Dept. of Computer Science & Engg."},
+                {"label": "Student Coordinator", "designation": ""},
+                {"label": "Faculty Advisor", "designation": ""},
+                {"label": "Head of Department", "designation": ""},
             ]
 
         # Break signatures into rows of cols_count
@@ -1647,17 +1737,21 @@ class TemplateCompiler:
             "category": category,
             "description": description,
             "stage": template_meta.get("stage", "custom"),
-            "triggers": [w.lower() for w in template_name.split() if len(w) > 3],
-            "letterhead": letterhead_cfg.get("slug", "acm") if letterhead_cfg else "acm",
+            "triggers": template_meta.get("triggers") or [w.lower() for w in template_name.split() if len(w) > 3],
+            "letterhead": (letterhead_cfg or {}).get("slug") or "club",
             "numbering": {
                 "series": template_meta.get("numbering_series") or "DOC",
-                "format": f"{club_slug.upper()}/{{short_year}}/{template_meta.get('numbering_series') or 'DOC'}/{{seq:03d}}",
+                # {club_code} is filled with the generating club's code, so shared templates
+                # never carry another club's prefix.
+                "format": f"{{club_code}}/{{short_year}}/{template_meta.get('numbering_series') or 'DOC'}/{{seq:03d}}",
                 "confirm": True,
             },
             "depends_on": [],
             "repeat_per": None,
             "fields": [],
         }
+        if isinstance(template_meta.get("recommend"), dict):
+            schema_dict["recommend"] = template_meta["recommend"]
 
         for f in enriched_fields:
             f_entry: dict[str, Any] = {
@@ -1753,6 +1847,7 @@ class TemplateCompiler:
                 "faculty_co_chairman", "venue_config", "submitted_to", "venue_tech_assistant",
                 "venue_faculty_in_charge", "document_date", "today_str", "date_range_str",
                 "ref_no", "sr_no", "description",
+                "department", "department_short", "approval_chain", "club_footer",
             })
 
             approved_escapes = {
@@ -1787,11 +1882,17 @@ class TemplateCompiler:
                             raw_t = m.group(1).strip()
                             found_raw_tags.append(raw_t)
 
+            allowed_conditions = {"{%p endif %}"}
+            for b in editor_json.get("content", []):
+                cond = _block_condition(b)
+                if cond:
+                    allowed_conditions.add(condition_open_tag(cond))
+
             for raw_t in found_raw_tags:
                 norm_t = re.sub(r"\s+", " ", raw_t)
                 if norm_t in approved_escapes:
                     continue
-                if norm_t == allowed_loop_end or norm_t in allowed_loops:
+                if norm_t == allowed_loop_end or norm_t in allowed_loops or norm_t in allowed_conditions:
                     continue
                 if norm_t.startswith("{{") and norm_t.endswith("}}"):
                     inner = norm_t[2:-2].strip()
@@ -1800,6 +1901,10 @@ class TemplateCompiler:
                         report["errors"].append(f"Invalid Jinja expression inside tag: {raw_t}")
                         continue
                     if inner in expected_vars:
+                        continue
+                    # Known variable with display filters, e.g. {{ club_name | upper }}
+                    base_var = inner.split("|", 1)[0].strip()
+                    if "|" in inner and base_var in expected_vars and re.fullmatch(r"[\w\s|]+", inner):
                         continue
                     parts = inner.split(".")
                     if len(parts) == 2 and parts[0] in [b.get("attrs", {}).get("itemAlias", "item") for b in editor_json.get("content", []) if b.get("type") == "repeatingTable"]:
@@ -1915,17 +2020,22 @@ def rename_field_in_editor_json(editor_json: dict[str, Any], old_key: str, new_k
 def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, Any]],
                                editor_json: dict[str, Any]) -> dict[str, Any]:
     """Generate comprehensive synthetic dummy context to safely dry-render compiled templates."""
+    # Neutral sample values for the validation dry-render only.
     ctx: dict[str, Any] = {
-        "club_name": "ACM Student Chapter, SVNIT",
-        "club_short": "ACM",
+        "club_name": "Sample Club",
+        "club_short": "CLUB",
         "institute_name": "SVNIT",
         "institute_short": "SVNIT",
-        "chapter_code": "6/52",
-        "head_of_account": "6/52",
+        "chapter_code": "0/00",
+        "head_of_account": "0/00",
         "academic_year": "2026-27",
         "document_date": "15/10/2026",
         "today_str": "15/10/2026",
-        "ref_no": "ACM/26-27/DOC/001",
+        "ref_no": "CLUB/26-27/DOC/001",
+        "department": "Department",
+        "department_short": "DEPT",
+        "club_footer": "Sample Club · SVNIT",
+        "approval_chain": [{"name": "", "designation": ""}] * 3,
     }
 
     # Generate dummy values for every defined field based on its type
@@ -1935,10 +2045,11 @@ def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, A
         if not f_key:
             continue
 
+        label = f.get("label") or f_key.replace("_", " ").title()
         if f_type == "text":
-            ctx[f_key] = f"Demo {f.get('ask') or f_key.replace('_', ' ').title()}"
+            ctx[f_key] = f"[{label}]"
         elif f_type == "longtext":
-            ctx[f_key] = f"This is demonstrative description text for {f_key}."
+            ctx[f_key] = f"[{label}: text entered when the document is created]"
         elif f_type == "int":
             ctx[f_key] = 100
         elif f_type == "money":

@@ -1,0 +1,34 @@
+{
+  "name": "Notice / Circular",
+  "category": "Announcements",
+  "stage": "pre_event",
+  "description": "Notice to students or members announcing an event, recruitment or meeting.",
+  "numbering_series": "NT",
+  "triggers": ["notice", "circular"],
+  "recommend": {
+    "keywords": ["notice", "circular", "announcement", "announce", "recruitment notice"],
+    "reason": "Notice to announce this to students or members.",
+    "reason_not": "Ask for a notice or circular to include it."
+  },
+  "fields": [
+    {"key": "notice_title", "type": "text", "required": true, "label": "Title", "ask": "Title of the notice"},
+    {"key": "notice_body", "type": "longtext", "required": true, "label": "Notice Text", "ask": "What should the notice say?"},
+    {"key": "dates", "type": "date_range", "required": false, "label": "Date(s)", "ask": "Relevant date(s), if any"},
+    {"key": "venue", "type": "text", "required": false, "label": "Venue", "ask": "Venue, if any"},
+    {"key": "registration_link", "type": "text", "required": false, "label": "Registration Link", "ask": "Registration link, if any"}
+  ],
+  "blocks": [
+    {"type": "paragraph", "text": "Ref. No.: {{ref_no}}"},
+    {"type": "paragraph", "text": "Date: {{document_date}}"},
+    {"type": "heading", "level": 1, "align": "center", "text": "NOTICE"},
+    {"type": "heading", "level": 2, "align": "center", "text": "{{notice_title}}"},
+    {"type": "paragraph", "align": "justify", "text": "{{notice_body}}"},
+    {"type": "paragraph", "showIf": "dates", "text": "Date(s): {{dates}}"},
+    {"type": "paragraph", "showIf": "venue", "text": "Venue: {{venue}}"},
+    {"type": "paragraph", "showIf": "registration_link", "text": "Register at: {{registration_link}}"},
+    {"type": "signatureGrid", "columns": 2, "signatures": [
+      {"label": "Student Secretary", "designation": ""},
+      {"label": "Faculty Advisor", "designation": ""}
+    ]}
+  ]
+}

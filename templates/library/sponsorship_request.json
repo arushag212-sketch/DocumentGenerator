@@ -1,0 +1,49 @@
+{
+  "name": "Sponsorship Request Letter",
+  "category": "External Letters",
+  "stage": "pre_event",
+  "description": "Letter to a company requesting sponsorship, with optional sponsorship tiers.",
+  "numbering_series": "SR",
+  "triggers": ["sponsorship", "sponsor"],
+  "recommend": {
+    "keywords": ["sponsor", "sponsors", "sponsorship", "sponsorship letter", "funding request"],
+    "reason": "Letter to approach companies for event sponsorship.",
+    "reason_not": "Ask for a sponsorship letter to include it."
+  },
+  "fields": [
+    {"key": "company_name", "type": "text", "required": true, "label": "Company Name", "ask": "Which company is the letter addressed to?"},
+    {"key": "company_address", "type": "longtext", "required": false, "label": "Company Address", "ask": "Company address (optional)"},
+    {"key": "event_name", "type": "text", "required": true, "label": "Event Name", "ask": "Name of the event"},
+    {"key": "dates", "type": "date_range", "required": true, "label": "Event Dates", "ask": "When will the event be held?"},
+    {"key": "venue", "type": "text", "required": true, "label": "Venue", "ask": "Where will the event be held?"},
+    {"key": "expected_participants", "type": "int", "required": true, "label": "Expected Participants", "ask": "How many participants are expected?"},
+    {"key": "description", "type": "longtext", "required": true, "label": "About the Event", "ask": "Briefly describe the event."},
+    {"key": "sponsorship_tiers", "type": "table", "required": false, "label": "Sponsorship Tiers", "ask": "Sponsorship tiers, amounts and benefits (optional)",
+     "columns": [{"key": "tier", "label": "Tier", "align": "left"}, {"key": "amount", "label": "Amount (INR)", "align": "right"}, {"key": "benefits", "label": "Benefits", "align": "left"}]},
+    {"key": "contact_name", "type": "text", "required": true, "label": "Contact Person", "ask": "Who should the company contact?"},
+    {"key": "contact_email", "type": "text", "required": false, "label": "Contact Email", "ask": "Contact email (optional)"}
+  ],
+  "blocks": [
+    {"type": "paragraph", "text": "Ref. No.: {{ref_no}}"},
+    {"type": "paragraph", "text": "Date: {{document_date}}"},
+    {"type": "paragraph", "text": "To,"},
+    {"type": "paragraph", "text": "{{company_name}}"},
+    {"type": "paragraph", "showIf": "company_address", "text": "{{company_address}}"},
+    {"type": "paragraph", "text": "Subject: Request for sponsorship of {{event_name}}"},
+    {"type": "paragraph", "text": "Dear Sir/Madam,"},
+    {"type": "paragraph", "align": "justify", "text": "{{club_name}} is organising {{event_name}} on {{dates}} at {{venue}}, with about {{expected_participants}} participants expected."},
+    {"type": "paragraph", "align": "justify", "text": "{{description}}"},
+    {"type": "paragraph", "align": "justify", "text": "We would be glad to have {{company_name}} associated with the event as a sponsor. Partnering with us gives your organisation visibility among the students of {{institute_name}}."},
+    {"type": "heading", "level": 2, "showIf": "sponsorship_tiers", "text": "Sponsorship Options"},
+    {"type": "repeatingTable", "showIf": "sponsorship_tiers", "listVariable": "sponsorship_tiers", "itemAlias": "t",
+     "columns": [{"key": "tier", "label": "Tier", "align": "left"}, {"key": "amount", "label": "Amount (INR)", "align": "right"}, {"key": "benefits", "label": "Benefits", "align": "left"}],
+     "hasTotal": false},
+    {"type": "paragraph", "align": "justify", "text": "For any details, please contact {{contact_name}}."},
+    {"type": "paragraph", "showIf": "contact_email", "text": "Email: {{contact_email}}"},
+    {"type": "paragraph", "text": "Thanking you,"},
+    {"type": "signatureGrid", "columns": 2, "signatures": [
+      {"label": "Student Head", "designation": ""},
+      {"label": "Faculty Advisor", "designation": ""}
+    ]}
+  ]
+}

@@ -253,7 +253,19 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
             db.flush()
             tmpl.current_version_id = ver.id
             db.flush()
+        else:
+            # System templates are read-only library items: keep them in sync with templates/
+            # (schema rules and DOCX) so updates reach existing installs. Clubs edit forks.
+            ver.schema_yaml = schema_yaml_str
+            ver.docx_storage_key = dest_docx
+            db.flush()
     print(f"-> Seeded {len(system_template_slugs)} system templates and versions")
+
+    # Shared template library (templates/library/*.json): data-defined, read-only, forkable.
+    from server.app.core.template_library import install_library
+
+    library_count = install_library(db, active_storage)
+    print(f"-> Installed {library_count} library templates")
 
     # Production startup may install/update immutable system resources, but it
     # must never create the demo club, demo people, sample credentials, or
@@ -274,8 +286,8 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
             name=cfg_data.get("club_name", "ACM Student Chapter, SVNIT"),
             short_name=cfg_data.get("club_short", "ACM"),
             slug="acm",
-            chapter_code=cfg_data.get("chapter_code", "6/52"),
-            head_of_account=cfg_data.get("head_of_account", "6/52"),
+            chapter_code=cfg_data.get("chapter_code", ""),
+            head_of_account=cfg_data.get("head_of_account", ""),
             academic_year_default=cfg_data.get("academic_year", "2026-27"),
             default_letterhead_id=lh_acm.id if lh_acm else None,
             settings={
@@ -284,6 +296,11 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
                 "affiliating_institute_text": cfg_data.get("affiliating_institute_text"),
                 "defaults": cfg_data.get("defaults", {}),
                 "approval_chain": cfg_data.get("approval_chain", []),
+                "department": cfg_data.get("department", ""),
+                "department_short": cfg_data.get("department_short", ""),
+                "letterhead_banner_path": cfg_data.get("letterhead_banner_path"),
+                # The asset file used as this club's logo ("use the ACM logo", composed banners).
+                "logo_filename": cfg_data.get("logo_filename"),
             },
         )
         db.add(club)

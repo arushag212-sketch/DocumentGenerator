@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, FileText, CheckSquare, Square, AlertCircle, ArrowRight, Calendar, Clock, MapPin, Users, HelpCircle, CheckCircle2 } from 'lucide-react';
+import { FileText, CheckSquare, Square, AlertCircle, ArrowRight, Calendar, Clock, MapPin, Users, HelpCircle, CheckCircle2, Award, Receipt, Megaphone, ClipboardList, LayoutTemplate } from 'lucide-react';
 import { api } from '../api/client';
+import { BatchRowsPanel, BatchRows } from './BatchRowsPanel';
 import { HomeUnderstoodData, HomeRecommendedDoc, HomeMissingQuestion, HomeGenerateResponse } from '../types';
 
 export const formatDateToIndian = (d: string): string => {
@@ -43,59 +44,25 @@ interface HomePageProps {
   onDocumentsGenerated: (result: HomeGenerateResponse) => void;
 }
 
-export const STANDARD_DOC_TYPES = [
-  {
-    slug: 'permission_letter',
-    name: 'Permission Letter',
-    desc: 'Venue & classroom permission',
-    icon: '🏛️',
-    defaultPrompt: 'Permission letter to organize a technical workshop in Seminar Hall on 15 October 2026 from 9:00 AM to 5:00 PM for 120 students.',
-  },
-  {
-    slug: 'approval_note',
-    name: 'Approval Note',
-    desc: 'Event proposal & budget sanction',
-    icon: '📑',
-    defaultPrompt: 'Approval note for Annual Coding Conclave with budget sanction of Rs 25000 on 10 November 2026.',
-  },
-  {
-    slug: 'bill_certificate',
-    name: 'Bill Certificate',
-    desc: 'Expenditure verification',
-    icon: '🧾',
-    defaultPrompt: 'Bill certificate verifying expenditure for banners, stage decoration, and guest hospitality.',
-  },
-  {
-    slug: 'bill_summary',
-    name: 'Bill Summary',
-    desc: 'Consolidated expense table',
-    icon: '📊',
-    defaultPrompt: 'Bill summary table for hackathon expenses including refreshment, prizes, and certificates.',
-  },
-  {
-    slug: 'prize_money_receipt',
-    name: 'Prize Receipts',
-    desc: 'Student prize distribution',
-    icon: '🏆',
-    defaultPrompt: 'Prize money receipts for 1st, 2nd, and 3rd place winners of Annual Coding Hackathon.',
-  },
-  {
-    slug: 'mom',
-    name: 'Minutes of Meeting',
-    desc: 'Club meeting resolutions',
-    icon: '⏱️',
-    defaultPrompt: 'Minutes of meeting held on 10 October to plan upcoming semester technical events and core team tasks.',
-  },
+/** Example requests a member can start from; they only fill the box, nothing runs until "Continue". */
+const EXAMPLE_REQUESTS = [
+  'We are conducting a two-day Web Development Workshop on 14–15 October in Seminar Hall for around 120 students.',
+  'Certificates of participation for everyone who attended the Garba Night on 20 October.',
+  'Minutes of the core committee meeting held today to plan the hackathon.',
+  'Prize money receipts for the three winners of the coding contest.',
 ];
 
-const EXAMPLE_CHIPS = [
-  'Permission letter for an event',
-  'Prize money receipts',
-  'Bill summary',
-  'Minutes of meeting',
-  'Approval note',
-  'Bill certificate',
-];
+type TemplateOption = { key: string; name: string; description?: string; category?: string; is_system: boolean };
+
+function templateIcon(t: TemplateOption): React.ElementType {
+  const n = `${t.name} ${t.category || ''}`.toLowerCase();
+  if (n.includes('certificate')) return Award;
+  if (n.includes('minutes') || n.includes('meeting')) return Users;
+  if (n.includes('bill') || n.includes('receipt') || n.includes('budget') || n.includes('sponsor')) return Receipt;
+  if (n.includes('notice') || n.includes('circular')) return Megaphone;
+  if (n.includes('report') || n.includes('proposal')) return ClipboardList;
+  return FileText;
+}
 
 export const HomePage: React.FC<HomePageProps> = ({
   clubId,
@@ -143,6 +110,9 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [activeEvents, setActiveEvents] = useState<any[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
   const [clubPeople, setClubPeople] = useState<any[]>([]);
+  const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>([]);
+  const [batchRows, setBatchRows] = useState<BatchRows | null>(null);
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const today = new Date();
   const minDate = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate()).toISOString().split('T')[0];
@@ -156,6 +126,17 @@ export const HomePage: React.FC<HomePageProps> = ({
       api.clubs.getPeople(clubId)
         .then((data) => setClubPeople(data || []))
         .catch(() => {});
+      // The club's published templates (built-in and its own), not a fixed list
+      api.documents.listTemplates(clubId)
+        .then((data) =>
+          setTemplateOptions(
+            (data || [])
+              .filter((t: any) => t.status === 'published')
+              .map((t: any) => ({ key: t.slug || t.id, name: t.name, description: t.description, category: t.category, is_system: !!t.is_system }))
+              .sort((x: TemplateOption, y: TemplateOption) => Number(x.is_system) - Number(y.is_system) || x.name.localeCompare(y.name))
+          )
+        )
+        .catch(() => setTemplateOptions([]));
     }
   }, [clubId]);
 
@@ -208,18 +189,16 @@ export const HomePage: React.FC<HomePageProps> = ({
         handleUnderstand(initialPrompt, [initialTemplateId]);
         return;
       }
-      const matched = STANDARD_DOC_TYPES.find((d) => d.slug === initialTemplateId);
-      if (matched && !inputText) {
-        setInputText(matched.defaultPrompt);
-        handleUnderstand(matched.defaultPrompt, [matched.slug]);
-      }
+      exclusiveSelectionRef.current = true;
+      textAreaRef.current?.focus();
     }
   }, [initialTemplateId]);
 
-  const handleSelectDocType = (docType: typeof STANDARD_DOC_TYPES[0]) => {
-    setSelectedTemplateIds([docType.slug]);
-    setInputText(docType.defaultPrompt);
-    handleUnderstand(docType.defaultPrompt, [docType.slug]);
+  const handleSelectDocType = (t: TemplateOption) => {
+    const already = selectedTemplateIds.length === 1 && selectedTemplateIds[0] === t.key;
+    setSelectedTemplateIds(already ? [] : [t.key]);
+    exclusiveSelectionRef.current = !already;
+    textAreaRef.current?.focus();
   };
 
   const handleUnderstand = async (textToUnderstand: string, selectedTemplateIdsOverride?: string[]) => {
@@ -293,7 +272,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const handleImproveText = async (
     text: string,
-    mode: 'formal' | 'proofread' | 'expand' | 'shorten',
+    mode: 'formal' | 'proofread' | 'longer' | 'shorter',
     setter: (val: string) => void
   ) => {
     if (!text || text.includes('[AI-drafted')) return;
@@ -326,10 +305,9 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
-  const handleChipClick = (chipText: string) => {
-    const fullPrompt = `${chipText} for our upcoming college event`;
-    setInputText(fullPrompt);
-    handleUnderstand(fullPrompt);
+  const handleChipClick = (example: string) => {
+    setInputText(example);
+    textAreaRef.current?.focus();
   };
 
   const handleToggleDoc = (templateSlug: string) => {
@@ -398,6 +376,11 @@ export const HomePage: React.FC<HomePageProps> = ({
       objectives: objectives,
     };
 
+    if (batchRows && selectedTemplateIds.includes(batchRows.templateKey)) {
+      eventData.rows = batchRows.rows;
+      eventData.rows_for = batchRows.templateKey;
+    }
+
     if (timeStart) eventData.time_start = timeStart;
     if (timeEnd) eventData.time_end = timeEnd;
 
@@ -427,12 +410,15 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
+  // Values that come from the spreadsheet rows are not asked again
+  const rowKeys = new Set(batchRows && selectedTemplateIds.includes(batchRows.templateKey) ? batchRows.mappedKeys : []);
   const essentialQuestions = missingQuestions
+    .filter((q) => !rowKeys.has(q.key))
     .filter((q) => q.importance === 'essential' || q.required)
     .slice(0, 6);
 
   const optionalQuestions = missingQuestions.filter(
-    (q) => !essentialQuestions.includes(q)
+    (q) => !essentialQuestions.includes(q) && !rowKeys.has(q.key)
   );
 
   const renderQuestionInput = (q: HomeMissingQuestion) => {
@@ -442,19 +428,19 @@ export const HomePage: React.FC<HomePageProps> = ({
         <label className="block text-xs sm:text-sm font-semibold text-slate-800">
           {q.question} {q.required && <span className="text-red-500">*</span>}
           {q.importance === 'optional' && !q.required && (
-            <span className="ml-1.5 text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+            <span className="ml-1.5 text-xs font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
               Optional
             </span>
           )}
         </label>
-        <p className="text-[11px] text-slate-400">Needed for: {q.needed_by.join(', ')}</p>
+        <p className="text-xs text-slate-400">Needed for: {q.needed_by.join(', ')}</p>
 
         {/* Widget rendering based on type */}
         {(q.type === 'enum' || (q.values && q.values.length > 0)) ? (
           <select
             value={val}
             onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
           >
             <option value="">-- Select {q.label} --</option>
             {q.values?.map((opt) => (
@@ -465,7 +451,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           <select
             value={val}
             onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+            className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
           >
             <option value="">-- Select Person --</option>
             {clubPeople.map((p) => {
@@ -482,7 +468,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div>
             <div className="flex justify-between items-center mb-1">
               {val && (
-                <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                <span className="text-xs font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                   {formatTime12Hour(val)}
                 </span>
               )}
@@ -491,7 +477,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               type="time"
               value={val}
               onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
-              className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+              className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
             />
           </div>
         ) : (q.type === 'money' || q.key === 'budget_items' || q.key.includes('amount') || q.key.includes('budget')) ? (
@@ -505,11 +491,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                 value={val}
                 onChange={(e) => setAnswers({ ...answers, [q.key]: e.target.value })}
                 placeholder="e.g. 25000.00"
-                className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
               />
             </div>
             {val && !isNaN(Number(val)) && (
-              <p className="text-[11px] text-slate-500 mt-1 font-medium">
+              <p className="text-xs text-slate-500 mt-1 font-medium">
                 Formatted: {formatIndianCurrency(val)}
               </p>
             )}
@@ -527,10 +513,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                   ? 'e.g. Dr. Alok Kumar, Prof. Sharma (or leave blank if none)'
                   : q.label
               }
-              className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+              className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
             />
             {q.key === 'judges' && (
-              <p className="text-[10px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 Enter comma-separated names of external judges, or leave empty if none.
               </p>
             )}
@@ -541,130 +527,119 @@ export const HomePage: React.FC<HomePageProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
-      {/* Hero / Big Input Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-7 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="max-w-4xl mx-auto space-y-6 px-4 sm:px-8 py-8">
+      <div className="surface-card p-5 sm:p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              <Sparkles className="w-6 h-6 text-amber-500 flex-shrink-0" />
-              What do you need?
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Type in plain words what document or package you want to draft, or click an example below.
+            <h1 className="page-title">Create documents</h1>
+            <p className="page-subtitle">
+              Describe the event or what you need in plain words. ClubDocs picks the documents, fills in what you said and asks for the rest.
             </p>
           </div>
-          {/* Active Event Selector */}
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 self-start sm:self-auto">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Event:</span>
+          <label className="flex items-center gap-2 text-sm text-slate-600 self-start flex-shrink-0">
+            <span>Event</span>
             <select
               value={selectedEventId}
               onChange={(e) => handleEventChange(e.target.value)}
-              className="text-xs bg-transparent border-0 text-slate-800 font-semibold focus:outline-none cursor-pointer"
+              className="input-field !w-auto !py-1.5"
             >
-              <option value="">-- New event --</option>
+              <option value="">New event</option>
               {activeEvents.map((ev) => (
                 <option key={ev.id} value={ev.id}>
                   {ev.title} {ev.event_code ? `(${ev.event_code})` : ''}
                 </option>
               ))}
             </select>
-          </div>
-        </div>
-
-        {/* Document Type Picker */}
-        <div className="space-y-2 pt-1">
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-            1. Select Document Type
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {STANDARD_DOC_TYPES.map((docType) => {
-              const isSelected = selectedTemplateIds.includes(docType.slug);
-              return (
-                <button
-                  key={docType.slug}
-                  type="button"
-                  onClick={() => handleSelectDocType(docType)}
-                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                    isSelected
-                      ? 'border-[#1b365d] bg-blue-50/70 ring-1 ring-[#1b365d] shadow-xs'
-                      : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{docType.icon}</span>
-                    <span className="text-xs font-bold text-slate-900 leading-tight">
-                      {docType.name}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1 line-clamp-1">
-                    {docType.desc}
-                  </p>
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => navigate('/templates')}
-              className="p-3 rounded-xl border border-dashed border-[#1b365d]/40 text-left transition-all flex flex-col justify-between bg-amber-50/40 hover:bg-amber-50 hover:border-[#1b365d]"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-lg">✨</span>
-                <span className="text-xs font-bold text-slate-900 leading-tight">Create a Template</span>
-              </div>
-              <p className="text-[10px] text-slate-500 mt-1 line-clamp-1">Build a reusable document type</p>
-            </button>
-          </div>
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-            2. Describe Details in Plain English
-          </label>
-          {/* Example Chips */}
-          <div className="flex flex-wrap gap-2 pb-2">
-            {EXAMPLE_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                onClick={() => handleChipClick(chip)}
-                className="text-xs font-medium px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 hover:bg-[#1b365d] hover:text-white transition-colors border border-slate-200"
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Input Text Box */}
-        <div className="relative">
+          <label htmlFor="request-text" className="field-label">What do you need?</label>
           <textarea
-            rows={3}
+            id="request-text"
+            ref={textAreaRef}
+            rows={4}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="e.g. We are conducting a two-day Web Development Workshop on 14-15 October in Seminar Hall for around 120 students."
-            className="w-full text-xs sm:text-sm p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1b365d]/20 focus:border-[#1b365d] transition-all resize-none text-slate-800 leading-relaxed"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && inputText.trim()) handleUnderstand(inputText);
+            }}
+            placeholder="e.g. We are conducting a two-day Web Development Workshop on 14–15 October in Seminar Hall for around 120 students."
+            className="input-field resize-y leading-relaxed"
           />
-          <div className="flex justify-end mt-2">
+          <div className="mt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+              <span className="text-slate-500">Try:</span>
+              {EXAMPLE_REQUESTS.map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => handleChipClick(example)}
+                  className="text-brand-700 hover:underline text-left"
+                  title={example}
+                >
+                  {example.split(' ').slice(0, 4).join(' ')}…
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={() => handleUnderstand(inputText)}
               disabled={understanding || !inputText.trim()}
-              className="px-4 py-2 bg-[#1b365d] hover:bg-[#132742] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+              className="btn-primary flex-shrink-0 self-end sm:self-auto"
             >
               {understanding ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Understanding...
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Reading your request…
                 </>
               ) : (
                 <>
-                  Understand & Recommend
+                  Continue
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="field-label !mb-0">Or pick a document type <span className="font-normal text-slate-500">(optional)</span></p>
+            <button type="button" onClick={() => navigate('/templates')} className="text-sm text-brand-700 hover:underline inline-flex items-center gap-1">
+              <LayoutTemplate className="w-4 h-4" /> Manage templates
+            </button>
+          </div>
+          {templateOptions.length === 0 ? (
+            <p className="text-sm text-slate-500">No published templates yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {templateOptions.map((t) => {
+                const Icon = templateIcon(t);
+                const isSelected = selectedTemplateIds.includes(t.key);
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => handleSelectDocType(t)}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-colors ${
+                      isSelected ? 'border-brand-700 bg-brand-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isSelected ? 'text-brand-700' : 'text-slate-400'}`} />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-900 truncate">{t.name}</span>
+                      <span className="block text-xs text-slate-500 truncate">
+                        {t.is_system ? 'Built-in' : 'Club template'}
+                        {t.description ? ` · ${t.description}` : ''}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -692,13 +667,13 @@ export const HomePage: React.FC<HomePageProps> = ({
       {understood && (
         <div className="space-y-6">
           {/* 1. What was Understood */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                 What we understood
               </h2>
-              <span className="text-[11px] font-medium text-slate-400">Click any field to edit</span>
+              <span className="text-xs font-medium text-slate-400">Click any field to edit</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
@@ -710,7 +685,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   value={eventName}
                   onChange={(e) => setEventName(e.target.value)}
                   placeholder="e.g. Web Development Workshop"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
                 />
               </div>
 
@@ -725,7 +700,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   value={venue}
                   onChange={(e) => setVenue(e.target.value)}
                   placeholder="e.g. Seminar Hall"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
                 />
               </div>
 
@@ -737,7 +712,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     Start Date
                   </span>
                   {dateStart && (
-                    <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                    <span className="text-xs font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                       {formatDateToIndian(dateStart)}
                     </span>
                   )}
@@ -748,7 +723,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   max={maxDate}
                   value={dateStart}
                   onChange={(e) => setDateStart(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
                 />
               </div>
               <div>
@@ -758,7 +733,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     End Date
                   </span>
                   {dateEnd && (
-                    <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                    <span className="text-xs font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                       {formatDateToIndian(dateEnd)}
                     </span>
                   )}
@@ -769,7 +744,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   max={maxDate}
                   value={dateEnd}
                   onChange={(e) => setDateEnd(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
                 />
               </div>
 
@@ -781,7 +756,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     id="confirmDatesYear"
                     checked={datesConfirmed}
                     onChange={(e) => setDatesConfirmed(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#1b365d] focus:ring-[#1b365d]"
+                    className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-700"
                   />
                   <label htmlFor="confirmDatesYear" className="text-xs text-amber-950 font-medium cursor-pointer">
                     Confirm schedule dates: <strong>{understood.dates}</strong>
@@ -797,7 +772,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     Start Time
                   </span>
                   {timeStart && (
-                    <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                    <span className="text-xs font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                       {formatTime12Hour(timeStart)}
                     </span>
                   )}
@@ -806,7 +781,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   type="time"
                   value={timeStart}
                   onChange={(e) => setTimeStart(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
                 />
               </div>
               <div>
@@ -816,7 +791,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     End Time
                   </span>
                   {timeEnd && (
-                    <span className="text-[11px] font-bold text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                    <span className="text-xs font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                       {formatTime12Hour(timeEnd)}
                     </span>
                   )}
@@ -825,7 +800,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   type="time"
                   value={timeEnd}
                   onChange={(e) => setTimeEnd(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
                 />
               </div>
 
@@ -842,7 +817,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   value={participants}
                   onChange={(e) => setParticipants(e.target.value)}
                   placeholder="e.g. 120"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
                 />
               </div>
 
@@ -858,16 +833,21 @@ export const HomePage: React.FC<HomePageProps> = ({
                       {!val && (
                         <button
                           type="button"
+                          disabled={improvingText || !eventName.trim()}
+                          title={eventName.trim() ? undefined : 'Add the event name first'}
                           onClick={() => {
-                            const draft = label === 'Description'
-                              ? `[AI-drafted] Organized by student coordinators for campus community participation and practical learning.`
-                              : `[AI-drafted] 1. Enhance technical proficiency. 2. Promote hands-on collaborative problem solving.`;
-                            setVal(draft);
+                            // Drafted by the AI from the facts on this form only; marked for review.
+                            const facts = [
+                              `${label} of ${eventName}`,
+                              venue && `at ${venue}`,
+                              dateStart && `on ${formatDateToIndian(dateStart)}`,
+                              participants && `for ${participants} participants`,
+                            ].filter(Boolean).join(' ');
+                            handleImproveText(facts + '.', 'longer', (text) => setVal(`[AI-drafted] ${text}`));
                           }}
-                          className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                          className="btn-ghost !px-2 !py-0.5 text-xs"
                         >
-                          <Sparkles className="w-3 h-3 text-indigo-600" />
-                          Write a draft for me
+                          {improvingText ? 'Drafting…' : 'Draft with AI'}
                         </button>
                       )}
                       {val && val.includes('[AI-drafted') && (
@@ -875,7 +855,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                           type="button"
                           id={btnId}
                           onClick={() => setVal(val.replace(/\[AI-drafted[^\]]*\]\s*/g, '').trim())}
-                          className="text-[11px] font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                          className="text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
                         >
                           Accept AI Draft
                         </button>
@@ -886,7 +866,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                             type="button"
                             disabled={improvingText}
                             onClick={() => handleImproveText(val, 'formal', setVal)}
-                            className="text-[10px] font-medium text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-2 py-0.5 rounded transition cursor-pointer"
+                            className="text-xs font-medium text-slate-600 hover:text-brand-600 bg-slate-100 hover:bg-brand-50 px-2 py-0.5 rounded transition cursor-pointer"
                           >
                             Make Formal
                           </button>
@@ -894,7 +874,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                             type="button"
                             disabled={improvingText}
                             onClick={() => handleImproveText(val, 'proofread', setVal)}
-                            className="text-[10px] font-medium text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-2 py-0.5 rounded transition cursor-pointer"
+                            className="text-xs font-medium text-slate-600 hover:text-brand-600 bg-slate-100 hover:bg-brand-50 px-2 py-0.5 rounded transition cursor-pointer"
                           >
                             Proofread
                           </button>
@@ -907,16 +887,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                     value={val}
                     onChange={(e) => setVal(e.target.value)}
                     placeholder={`Leave blank to omit or write a custom ${label.toLowerCase()}...`}
-                    className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1b365d]"
+                    className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-700"
                   />
                   {label === 'Description' && (
                     <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                       <button
                         type="button"
                         onClick={handleSuggestDetails}
-                        className="text-[10px] font-semibold text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 px-2 py-0.5 rounded border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                        className="text-xs font-semibold text-brand-700 bg-brand-50/70 hover:bg-brand-100 px-2 py-0.5 rounded border border-brand-200 transition-colors flex items-center gap-1 cursor-pointer"
                       >
-                        <Sparkles className="w-2.5 h-2.5 text-indigo-600" />
                         Suggest optional details
                       </button>
                       {detailSuggestions.map((sug, sIdx) => (
@@ -927,7 +906,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                             setVal(val ? `${val}\n• ${sug}` : `• ${sug}`);
                             setDetailSuggestions((prev) => prev.filter((_, idx) => idx !== sIdx));
                           }}
-                          className="text-[10px] text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition cursor-pointer"
+                          className="text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition cursor-pointer"
                         >
                           + {sug}
                         </button>
@@ -940,10 +919,10 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           {/* 2. Recommended Documents */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
             <div className="border-b border-slate-100 pb-3">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-[#1b365d]" />
+                <FileText className="w-5 h-5 text-brand-700" />
                 Recommended documents
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -960,13 +939,13 @@ export const HomePage: React.FC<HomePageProps> = ({
                     onClick={() => handleToggleDoc(doc.slug || doc.template_id)}
                     className={`p-4 rounded-xl border transition-all cursor-pointer flex items-start gap-3.5 ${
                       isSelected
-                        ? 'border-[#1b365d] bg-blue-50/40'
+                        ? 'border-brand-700 bg-brand-50/40'
                         : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                   >
-                    <div className="mt-0.5 text-[#1b365d]">
+                    <div className="mt-0.5 text-brand-700">
                       {isSelected ? (
-                        <CheckSquare className="w-5 h-5 text-[#1b365d]" />
+                        <CheckSquare className="w-5 h-5 text-brand-700" />
                       ) : (
                         <Square className="w-5 h-5 text-slate-400" />
                       )}
@@ -975,13 +954,13 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-sm text-slate-900">{doc.name}</span>
                         {doc.recommended && (
-                          <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 rounded">
+                          <span className="px-2 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-800 rounded">
                             Recommended
                           </span>
                         )}
                       </div>
                       <p className="text-xs text-slate-600 mt-1 leading-relaxed">{doc.reason}</p>
-                      <div className="mt-2 text-[11px] font-mono text-slate-600 bg-slate-100/90 px-2.5 py-1 rounded-lg inline-block border border-slate-200">
+                      <div className="mt-2 text-xs font-mono text-slate-600 bg-slate-100/90 px-2.5 py-1 rounded-lg inline-block border border-slate-200">
                         {doc.suggested_ref_no}
                       </div>
                     </div>
@@ -998,21 +977,31 @@ export const HomePage: React.FC<HomePageProps> = ({
                   id="acceptRefNumbers"
                   checked={refNumbersAccepted}
                   onChange={(e) => setRefNumbersAccepted(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#1b365d] focus:ring-[#1b365d]"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-700"
                 />
                 <label htmlFor="acceptRefNumbers" className="text-xs sm:text-sm font-semibold text-slate-800 cursor-pointer">
                   I accept the suggested reference numbers for the selected documents.
                 </label>
               </div>
-              <p className="text-[11px] text-slate-500 pl-6 leading-relaxed">
+              <p className="text-xs text-slate-500 pl-6 leading-relaxed">
                 Official reference numbers are safely allocated in unbroken sequence only when you generate.
               </p>
             </div>
           </div>
 
+          {/* Spreadsheet batch: one document per row */}
+          <BatchRowsPanel
+            clubId={clubId}
+            templates={recommendedDocs
+              .filter((d) => selectedTemplateIds.includes(d.slug || d.template_id))
+              .map((d) => ({ key: d.slug || d.template_id, name: d.name }))}
+            value={batchRows}
+            onChange={setBatchRows}
+          />
+
           {/* 3. Grouped Essential Missing Questions */}
           {essentialQuestions.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <HelpCircle className="w-5 h-5 text-amber-600" />
@@ -1031,7 +1020,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
           {/* 4. Collapsible Optional Details (Bank, PAN, GST, etc.) */}
           {optionalQuestions.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <button
                 type="button"
                 id="toggleOptionalDetailsBtn"
@@ -1041,15 +1030,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div>
                   <div className="text-sm font-bold text-slate-800 flex items-center gap-2">
                     <span>Add more details (optional)</span>
-                    <span className="text-[11px] font-normal text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-normal text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded-full">
                       {optionalQuestions.length} optional field{optionalQuestions.length === 1 ? '' : 's'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Bank details, account numbers, IFSC, PAN, GST, etc. Unfilled fields render as clean blank lines ready to fill by hand.
                   </p>
                 </div>
-                <span className="text-xs font-semibold text-[#1b365d]">
+                <span className="text-xs font-semibold text-brand-700">
                   {showOptionalDetails ? '▲ Hide' : '▼ Show'}
                 </span>
               </button>
@@ -1091,7 +1080,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 id="generateDocumentsBtn"
                 onClick={() => handleGenerate(false)}
                 disabled={generating || selectedTemplateIds.length === 0 || !refNumbersAccepted || Boolean(hasUnconfirmedDraft)}
-                className="w-full sm:w-auto px-6 py-3 bg-[#1b365d] hover:bg-[#132742] text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed"
+                className="w-full sm:w-auto px-6 py-3 bg-brand-700 hover:bg-brand-800 text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed"
               >
                 {generating ? (
                   <>

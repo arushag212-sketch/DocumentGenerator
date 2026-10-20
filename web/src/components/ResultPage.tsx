@@ -67,21 +67,21 @@ export const ResultPage: React.FC<ResultPageProps> = ({
   }, [pdfBlobUrl]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12">
+    <div className="max-w-6xl mx-auto space-y-6 px-4 sm:px-8 py-8">
       {/* Top Banner / Actions Header */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="p-3 bg-emerald-100 text-emerald-700 rounded-2xl flex-shrink-0">
+          <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl flex-shrink-0">
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                 Ready for Signatures
               </span>
               <span className="text-xs text-slate-400">Batch ID: {result.batch_id.slice(0, 8)}</span>
             </div>
-            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 mt-0.5">
+            <h1 className="text-lg sm:text-xl font-semibold text-slate-900 mt-0.5">
               {result.event_title || 'Generated Documents'}
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -105,7 +105,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
             <a
               href={result.zip_url}
               download
-              className="px-4 py-2 text-xs font-bold text-white bg-[#1b365d] hover:bg-[#132742] rounded-xl shadow-sm flex items-center gap-2 transition-colors"
+              className="px-4 py-2 text-xs font-bold text-white bg-brand-700 hover:bg-brand-800 rounded-xl shadow-sm flex items-center gap-2 transition-colors"
             >
               <Archive className="w-4 h-4" />
               Download All (.zip)
@@ -118,7 +118,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Documents Tabs & Quick Actions (4 cols) */}
         <div className="lg:col-span-5 space-y-3">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 px-1">
+          <h2 className="text-xs font-bold text-slate-500 px-1">
             Generated Documents
           </h2>
 
@@ -130,21 +130,21 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                 onClick={() => setSelectedDocIndex(idx)}
                 className={`p-4 rounded-xl border transition-all cursor-pointer bg-white ${
                   isSelected
-                    ? 'border-[#1b365d] ring-1 ring-[#1b365d] shadow-sm'
+                    ? 'border-brand-700 ring-1 ring-brand-700 shadow-sm'
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <FileText className={`w-4 h-4 ${isSelected ? 'text-[#1b365d]' : 'text-slate-400'}`} />
+                    <FileText className={`w-4 h-4 ${isSelected ? 'text-brand-700' : 'text-slate-400'}`} />
                     <span className="font-bold text-sm text-slate-900">{doc.title}</span>
                   </div>
-                  <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 rounded">
+                  <span className="px-1.5 py-0.5 text-xs font-bold bg-slate-100 text-slate-600 rounded">
                     v{doc.version_no}
                   </span>
                 </div>
 
-                <div className="mt-2 text-xs font-mono font-bold text-[#1b365d] bg-blue-50/80 px-2 py-1 rounded inline-block border border-blue-100">
+                <div className="mt-2 text-xs font-mono font-bold text-brand-700 bg-brand-50/80 px-2 py-1 rounded inline-block border border-brand-100">
                   {doc.ref_no}
                 </div>
 
@@ -163,7 +163,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                     download
                     className="flex-1 py-1.5 px-2.5 text-center text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center gap-1 transition-colors"
                   >
-                    <FileCode className="w-3.5 h-3.5 text-blue-600" />
+                    <FileCode className="w-3.5 h-3.5 text-brand-600" />
                     Word
                   </a>
                   <a
@@ -183,7 +183,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
 
         {/* Right: PDF / Page Preview Panel (7 cols) */}
         <div className="lg:col-span-7">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[720px]">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[720px]">
             <div className="p-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-slate-50/70">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-xs sm:text-sm text-slate-800">
@@ -237,7 +237,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                     <a
                       href={activeDoc.pdf_url}
                       download
-                      className="px-2.5 py-1 text-xs text-[#1b365d] bg-blue-50 hover:bg-blue-100 rounded-md font-semibold flex items-center gap-1 transition-colors"
+                      className="px-2.5 py-1 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-md font-semibold flex items-center gap-1 transition-colors"
                     >
                       <Download className="w-3.5 h-3.5" />
                       Download
@@ -251,7 +251,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
             <div className="flex-1 bg-slate-100/70 p-3 overflow-auto flex items-center justify-center relative">
               {loadingPreview && (
                 <div className="absolute inset-0 bg-white/70 backdrop-blur-xs flex flex-col items-center justify-center z-10 gap-2">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#1b365d]" />
+                  <Loader2 className="w-6 h-6 animate-spin text-brand-700" />
                   <span className="text-xs text-slate-500 font-medium">Loading document preview...</span>
                 </div>
               )}
@@ -275,7 +275,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                         <button
                           type="button"
                           onClick={() => setPreviewMode('image')}
-                          className="px-3 py-1.5 text-xs font-semibold text-white bg-[#1b365d] hover:bg-[#132742] rounded-lg transition-colors"
+                          className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-700 hover:bg-brand-800 rounded-lg transition-colors"
                         >
                           Switch to Page View Image
                         </button>
@@ -283,7 +283,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                           href={activeDoc.pdf_url.includes('/download') ? activeDoc.pdf_url.replace('/download', '/pdf') + '?disposition=inline' : activeDoc.pdf_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs text-[#1b365d] hover:underline"
+                          className="text-xs text-brand-700 hover:underline"
                         >
                           Open in external tab &rarr;
                         </a>
@@ -311,7 +311,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                   <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                   <h3 className="text-sm font-bold text-slate-800">No preview available yet</h3>
                   <p className="text-xs text-slate-500 mt-1">No documents were returned for this request. Go back to edit the document selection and generate again.</p>
-                  <button type="button" onClick={onEditDetails} className="mt-4 px-3 py-1.5 text-xs font-semibold text-white bg-[#1b365d] rounded-lg">Edit details</button>
+                  <button type="button" onClick={onEditDetails} className="mt-4 px-3 py-1.5 text-xs font-semibold text-white bg-brand-700 rounded-lg">Edit details</button>
                 </div>
               )}
             </div>

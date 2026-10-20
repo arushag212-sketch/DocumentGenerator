@@ -6,7 +6,22 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+      },
       colors: {
+        // SVNIT navy, the single brand accent used across the app
+        brand: {
+          50: '#f2f5f9',
+          100: '#e3e9f2',
+          200: '#c3d0e2',
+          300: '#94abcb',
+          500: '#3a5a86',
+          600: '#27466f',
+          700: '#1b365d',
+          800: '#142a49',
+          900: '#0e1d33',
+        },
         primary: {
           50: '#f0fdf4',
           100: '#dcfce7',

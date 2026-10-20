@@ -51,7 +51,7 @@ export const AuditTab: React.FC<AuditTabProps> = ({ clubId }) => {
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-slate-600">
             Audit Records ({logs.length})
           </span>
           <span className="text-xs text-slate-400 font-mono">Scoped by Club #{clubId}</span>
@@ -64,7 +64,7 @@ export const AuditTab: React.FC<AuditTabProps> = ({ clubId }) => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100/60 text-slate-600 uppercase text-[10px] tracking-wider border-b border-slate-200">
+              <thead className="bg-slate-100/60 text-slate-600 uppercase text-xs tracking-wider border-b border-slate-200">
                 <tr>
                   <th className="py-3 px-6">Timestamp</th>
                   <th className="py-3 px-6">Actor</th>
@@ -77,7 +77,7 @@ export const AuditTab: React.FC<AuditTabProps> = ({ clubId }) => {
               <tbody className="divide-y divide-slate-100">
                 {logs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-6 font-mono text-slate-500 text-[11px] whitespace-nowrap">
+                    <td className="py-3.5 px-6 font-mono text-slate-500 text-xs whitespace-nowrap">
                       {new Date(log.created_at).toLocaleString('en-IN', {
                         day: '2-digit',
                         month: 'short',
@@ -89,17 +89,17 @@ export const AuditTab: React.FC<AuditTabProps> = ({ clubId }) => {
                     </td>
                     <td className="py-3.5 px-6 font-medium text-slate-900">{log.actor_email}</td>
                     <td className="py-3.5 px-6">
-                      <span className="bg-slate-100 text-slate-800 font-mono text-[10px] px-2 py-0.5 rounded font-medium border border-slate-200">
+                      <span className="bg-slate-100 text-slate-800 font-mono text-xs px-2 py-0.5 rounded font-medium border border-slate-200">
                         {log.action}
                       </span>
                     </td>
-                    <td className="py-3.5 px-6 font-mono text-slate-600 text-[11px]">
+                    <td className="py-3.5 px-6 font-mono text-slate-600 text-xs">
                       {log.resource_type} {log.resource_id ? `#${log.resource_id}` : ''}
                     </td>
-                    <td className="py-3.5 px-6 font-mono text-slate-500 text-[11px]">
+                    <td className="py-3.5 px-6 font-mono text-slate-500 text-xs">
                       {log.ip_address || '—'}
                     </td>
-                    <td className="py-3.5 px-6 text-slate-600 font-mono text-[11px] max-w-xs truncate">
+                    <td className="py-3.5 px-6 text-slate-600 font-mono text-xs max-w-xs truncate">
                       {log.changes_json || '—'}
                     </td>
                   </tr>

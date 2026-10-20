@@ -43,6 +43,8 @@ class TemplateSchema(BaseModel):
     description: str = ""
     stage: str = "pre_event"  # pre_event, post_event, meeting
     triggers: list[str] = Field(default_factory=list)
+    # When this template is useful (see server/app/core/recommend_rules.py)
+    recommend: Optional[dict[str, Any]] = None
     letterhead: str = "acm"
     numbering: Optional[NumberingSchema] = None
     depends_on: list[str] = Field(default_factory=list)

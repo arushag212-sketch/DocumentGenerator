@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import { Header } from './components/Header';
+import { AppShell } from './components/AppShell';
 import { AuthPage } from './components/AuthPage';
 import { HomePageWrapper } from './pages/HomePageWrapper';
 import { DocumentsPage } from './pages/DocumentsPage';
@@ -13,6 +13,8 @@ import { SettingsPage } from './pages/SettingsPage';
 import { OnboardingClubPage } from './pages/OnboardingClubPage';
 import { OnboardingPositionPage } from './pages/OnboardingPositionPage';
 import { JoinRequestsPage } from './pages/JoinRequestsPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { VerifyPage } from './pages/VerifyPage';
 import { api } from './api/client';
 import { ClubPermissions } from './types';
 
@@ -50,11 +52,8 @@ const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   if (loading || checkingStatus) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-10 w-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-slate-400 text-xs font-medium">Loading SVNIT ClubDocs...</p>
-        </div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="h-6 w-6 border-2 border-brand-700 border-t-transparent rounded-full animate-spin" role="status" aria-label="Loading" />
       </div>
     );
   }
@@ -92,27 +91,12 @@ const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
-// Layout with Header, Content, Footer
-const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const navigate = useNavigate();
-
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Header onOpenClubModal={() => navigate('/onboarding/club')} />
-      <main className="flex-1 w-full">{children}</main>
-      <footer className="border-t border-slate-200 bg-white py-4 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
-          SVNIT ClubDocs System — Built for Student Chapters & Institute Document Workflows
-        </div>
-      </footer>
-    </div>
-  );
-};
+const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => <AppShell>{children}</AppShell>;
 
 const RootRedirect: React.FC = () => {
   const location = useLocation();
   const search = location.search || window.location.search || '';
-  return <Navigate to={`/home${search}`} replace />;
+  return <Navigate to={`${search ? '/home' : '/dashboard'}${search}`} replace />;
 };
 
 export const App: React.FC = () => {
@@ -120,6 +104,8 @@ export const App: React.FC = () => {
     <Routes>
       {/* Public route */}
       <Route path="/login" element={<AuthPage />} />
+      <Route path="/verify" element={<VerifyPage />} />
+      <Route path="/verify/:code" element={<VerifyPage />} />
 
       {/* Onboarding routes (authenticated) */}
       <Route
@@ -144,6 +130,16 @@ export const App: React.FC = () => {
       />
 
       {/* Main app routes (authenticated) */}
+      <Route
+        path="/dashboard"
+        element={
+          <RequireAuth>
+            <AppLayout>
+              <DashboardPage />
+            </AppLayout>
+          </RequireAuth>
+        }
+      />
       <Route
         path="/home"
         element={

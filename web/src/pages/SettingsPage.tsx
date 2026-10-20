@@ -41,7 +41,7 @@ export const SettingsPage: React.FC = () => {
 
   if (!activeClub) {
     return (
-      <div className="max-w-md mx-auto my-16 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm">
+      <div className="max-w-md mx-auto my-16 bg-white border border-slate-200 rounded-xl p-8 text-center shadow-sm">
         <p className="text-sm text-slate-600">Please select a club to view its settings.</p>
       </div>
     );
@@ -55,7 +55,7 @@ export const SettingsPage: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto my-6 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-8">
       {/* Sub-navigation bar */}
       <div className="flex border-b border-slate-200 mb-6 overflow-x-auto no-scrollbar">
         {tabs.map((tab) => {
@@ -67,7 +67,7 @@ export const SettingsPage: React.FC = () => {
               to={`/settings/${tab.id}`}
               className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
                 isActive
-                  ? 'border-[#1b365d] text-[#1b365d]'
+                  ? 'border-brand-700 text-brand-700'
                   : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
               }`}
             >

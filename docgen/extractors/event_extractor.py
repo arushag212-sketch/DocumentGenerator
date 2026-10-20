@@ -400,39 +400,65 @@ class EventExtractor:
             except Exception:
                 pass
 
-        # SEPARATE AI drafting for Description and Objectives (never shared, clean text without tags)
+        # SEPARATE AI drafting for Description and Objectives. Only stated facts go into the
+        # prompt, so the draft cannot invent a venue or date; the result is plain prose.
         ev_name_val = event.event_name.value or "the event"
-        venue_val = event.venue.value or "the venue"
-        dates_val = event.dates.value or "the scheduled dates"
-        part_val = event.expected_participants.value or "participants"
+        facts = [f"Name: {ev_name_val}"]
+        if event.venue.value:
+            facts.append(f"Venue: {event.venue.value}")
+        if event.dates.value:
+            facts.append(f"Dates: {event.dates.value}")
+        if event.expected_participants.value:
+            facts.append(f"Expected participants: {event.expected_participants.value}")
+        facts.append(f"Request: {text.strip()[:400]}")
+        rules = (
+            "Use only the facts given; do not invent names, places, dates or numbers. "
+            "Plain text only: no markdown, headings, bold, bullets symbols or placeholders."
+        )
 
         if not event.description.is_present:
-            desc_prompt = (
-                f"Draft a brief 2-sentence description of the event '{ev_name_val}' "
-                f"to be held at {venue_val} on {dates_val} for {part_val}."
-            )
+            desc_prompt = "\n".join(["Write a brief 2-sentence description of this activity.", *facts, rules])
             try:
-                raw_desc = self.llm.draft_text(desc_prompt, {"event_name": ev_name_val, "venue": venue_val})
+                raw_desc = _plain_text(self.llm.draft_text(desc_prompt, {"event_name": ev_name_val}))
             except Exception:
-                raw_desc = f"{ev_name_val} scheduled at {venue_val} on {dates_val}."
-            event.description = tf(
-                f"[AI-drafted, review] {raw_desc.strip()}",
-                FieldSource.extracted_llm,
-                confirmed=False
-            )
+                raw_desc = ""
+            if not raw_desc:  # LLM unavailable: a sentence built only from stated facts
+                parts = [ev_name_val]
+                if event.venue.value:
+                    parts.append(f"at {event.venue.value}")
+                if event.dates.value:
+                    parts.append(f"on {event.dates.value}")
+                if event.expected_participants.value:
+                    parts.append(f"for {event.expected_participants.value} participants")
+                raw_desc = " ".join(parts) + "."
+            if raw_desc:
+                event.description = tf(f"[AI-drafted, review] {raw_desc}", FieldSource.extracted_llm, confirmed=False)
 
         if not event.objectives.is_present:
-            obj_prompt = (
-                f"Draft 2 specific, clear learning and organizational objectives for '{ev_name_val}'."
+            obj_prompt = "\n".join(
+                ["Write 2 short, specific objectives for this activity as two numbered lines (1. and 2.).", *facts, rules]
             )
             try:
-                raw_obj = self.llm.draft_text(obj_prompt, {"event_name": ev_name_val, "venue": venue_val})
+                raw_obj = _plain_text(self.llm.draft_text(obj_prompt, {"event_name": ev_name_val}))
             except Exception:
-                raw_obj = f"1. Successfully organize {ev_name_val}.\n2. Facilitate learning and participation for {part_val}."
-            event.objectives = tf(
-                f"[AI-drafted, review] {raw_obj.strip()}",
-                FieldSource.extracted_llm,
-                confirmed=False
-            )
+                raw_obj = ""
+            if not raw_obj:
+                raw_obj = "\n".join(
+                    [f"1. Organise {ev_name_val} smoothly.", "2. Enable learning and participation for attendees."]
+                )
+            if raw_obj:
+                event.objectives = tf(f"[AI-drafted, review] {raw_obj}", FieldSource.extracted_llm, confirmed=False)
 
         return event
+
+
+def _plain_text(value: str) -> str:
+    """Strip markdown an LLM may add (headings, bold, bullets) from a drafted paragraph."""
+    lines = []
+    for line in (value or "").splitlines():
+        line = re.sub(r"^\s{0,3}#{1,6}\s*", "", line)
+        line = re.sub(r"^\s*[-*•]\s+", "", line)
+        line = re.sub(r"(\*\*|__|`)", "", line).strip()
+        if line:
+            lines.append(line)
+    return "\n".join(lines).strip()

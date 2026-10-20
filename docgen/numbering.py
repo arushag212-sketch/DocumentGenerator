@@ -48,7 +48,7 @@ def format_reference_number(
     academic_year: str,
     series_key: str,
     seq: int,
-    club_code: str = "ACM",
+    club_code: str = "",
     event_code: Optional[str] = None,
 ) -> str:
     """Format reference number using a single canonical set of rules across suggest, reserve, and tests.
@@ -97,7 +97,7 @@ def suggest_reference_number(
         seq = config.next_number(series)
 
     academic_year = config.academic_year or ""
-    club_code = getattr(config, "club_short", "ACM")
+    club_code = getattr(config, "club_short", "")
 
     ref_str = format_reference_number(
         format_pattern=fmt,

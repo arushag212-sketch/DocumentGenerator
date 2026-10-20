@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileText, Check, AlertTriangle, ArrowRight, X, Loader2, Sparkles, Tag } from 'lucide-react';
+import { Upload, FileText, Check, AlertTriangle, ArrowRight, X, Loader2, Tag, Wand2 } from 'lucide-react';
 import { api } from '../api/client';
 
 interface TemplateImportModalProps {
@@ -103,11 +103,11 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col border border-slate-200">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col border border-slate-200">
         {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 flex items-center justify-between">
+        <div className="px-6 py-4 bg-white border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs">
+            <div className="p-2 bg-brand-600 text-white rounded-xl shadow-xs">
               <Upload className="w-5 h-5" />
             </div>
             <div>
@@ -141,7 +141,7 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
                   type="button"
                   onClick={() => setMode('text')}
                   className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
-                    mode === 'text' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    mode === 'text' ? 'bg-white text-brand-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <FileText className="w-4 h-4" />
@@ -151,7 +151,7 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
                   type="button"
                   onClick={() => setMode('docx')}
                   className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
-                    mode === 'docx' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    mode === 'docx' ? 'bg-white text-brand-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <Upload className="w-4 h-4" />
@@ -183,7 +183,7 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
                     placeholder="Paste the full text of an official notice, sanction letter, or proposal..."
                     rows={8}
                     required
-                    className="w-full text-xs p-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none font-sans"
+                    className="w-full text-xs p-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:bg-white focus:outline-none font-sans"
                   />
                 </div>
               ) : (
@@ -191,7 +191,7 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                     Upload Word Document (.docx)
                   </label>
-                  <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-8 text-center cursor-pointer bg-slate-50/50 transition">
+                  <div className="border-2 border-dashed border-slate-300 hover:border-brand-500 rounded-xl p-8 text-center cursor-pointer bg-slate-50/50 transition">
                     <input
                       type="file"
                       accept=".docx"
@@ -204,7 +204,7 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
                       <span className="text-xs font-bold text-slate-700">
                         {selectedFile ? selectedFile.name : 'Click to select or drag and drop DOCX file'}
                       </span>
-                      <span className="text-[11px] text-slate-500 mt-1">
+                      <span className="text-xs text-slate-500 mt-1">
                         Extracts paragraphs, tables, bold/italic formatting, and variables
                       </span>
                     </label>
@@ -216,9 +216,9 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading || (mode === 'text' ? !rawText.trim() : !selectedFile)}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-sm transition"
                 >
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
                   <span>Detect Variables & Import</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
@@ -234,7 +234,7 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>Import Notice: Some Word elements were simplified</span>
                   </div>
-                  <ul className="list-disc list-inside text-[11px] pl-1">
+                  <ul className="list-disc list-inside text-xs pl-1">
                     {parsedData.unsupported_elements.map((el, idx) => (
                       <li key={idx}>{el}</li>
                     ))}
@@ -244,10 +244,10 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
 
               <div>
                 <h4 className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
-                  <Tag className="w-4 h-4 text-blue-600" />
+                  <Tag className="w-4 h-4 text-brand-600" />
                   <span>Proposed Dynamic Variable Fields ({parsedData.fields.length})</span>
                 </h4>
-                <p className="text-[11px] text-slate-500 mb-2">
+                <p className="text-xs text-slate-500 mb-2">
                   Check the fields you want to convert into dynamic fillable chips:
                 </p>
 
@@ -266,17 +266,17 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
                           onClick={() => toggleField(f.key)}
                           className={`p-2.5 rounded-xl border text-left text-xs transition flex items-center justify-between ${
                             isChecked
-                              ? 'border-blue-600 bg-blue-50/70 text-blue-900 font-bold'
+                              ? 'border-brand-600 bg-brand-50/70 text-brand-900 font-bold'
                               : 'border-slate-200 bg-white text-slate-600 opacity-60'
                           }`}
                         >
                           <div>
                             <span className="block truncate">{f.label}</span>
-                            <span className="text-[10px] text-slate-400 font-mono font-normal">
+                            <span className="text-xs text-slate-400 font-mono font-normal">
                               {f.key} ({f.type})
                             </span>
                           </div>
-                          {isChecked && <Check className="w-4 h-4 text-blue-600 shrink-0" />}
+                          {isChecked && <Check className="w-4 h-4 text-brand-600 shrink-0" />}
                         </button>
                       );
                     })}
@@ -296,7 +296,7 @@ export const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
                   type="button"
                   onClick={handleCreateTemplate}
                   disabled={loading}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl shadow-md transition"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                   <span>Open in Template Editor</span>

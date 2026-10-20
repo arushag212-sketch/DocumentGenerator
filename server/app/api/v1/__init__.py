@@ -16,6 +16,8 @@ from server.app.api.v1.events import router as events_router
 from server.app.api.v1.home import router as home_router
 from server.app.api.v1.invites import router as invites_router
 from server.app.api.v1.editor_assistant import router as editor_assistant_router
+from server.app.api.v1.verify import router as verify_router
+from server.app.api.v1.analytics import router as analytics_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -25,6 +27,8 @@ api_router.include_router(events_router)
 api_router.include_router(home_router)
 api_router.include_router(invites_router)
 api_router.include_router(editor_assistant_router)
+api_router.include_router(verify_router)
+api_router.include_router(analytics_router)
 
 
 @api_router.get("/assets/{asset_id}/content")

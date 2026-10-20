@@ -173,7 +173,7 @@ def improve_text(
 
 def suggest_optional_details(
     event_type: str = "Workshop",
-    club_name: str = "ACM SVNIT",
+    club_name: str = "",
     existing_fields: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Proposes contextual optional fields — strictly excluding official numbers, amounts, or names."""
@@ -186,7 +186,7 @@ def suggest_optional_details(
             "label": "Target Audience",
             "type": "text",
             "ask": "Which departments or student years are eligible to attend?",
-            "sample": "B.Tech 2nd & 3rd Year (DoCSE / DoECE)",
+            "sample": "B.Tech 2nd & 3rd Year students",
         },
         {
             "key": "expected_attendees",

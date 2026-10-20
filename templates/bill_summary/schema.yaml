@@ -3,6 +3,12 @@ name: Bill Summary
 description: Reimbursement summary for costs incurred in an event
 stage: post_event
 triggers: [reimbursement, bill summary, payment summary, cost, expenses]
+recommend:
+  keywords: [bill summary, expense summary, expenditure summary]
+  auto_when: [bills]
+  requires: [bills, bundle]
+  reason: "Consolidated summary of the event's bills and expenses."
+  reason_not: "Needed after the event, when bills are settled."
 letterhead: acm
 numbering: null
 depends_on: []

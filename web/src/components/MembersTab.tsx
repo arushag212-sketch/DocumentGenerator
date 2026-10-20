@@ -13,9 +13,9 @@ import {
   Copy,
   Ban,
   Clock,
-  Sparkles,
   AlertCircle,
   UserCheck,
+  Wand2,
 } from 'lucide-react';
 
 interface MembersTabProps {
@@ -138,11 +138,11 @@ export const MembersTab: React.FC<MembersTabProps> = ({
 
   const roleColors: Record<string, string> = {
     owner: 'bg-rose-100 text-rose-800 border-rose-300 font-bold',
-    admin: 'bg-purple-100 text-purple-800 border-purple-200 font-bold',
-    lead: 'bg-purple-100 text-purple-800 border-purple-200',
-    co_lead: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    admin: 'bg-brand-100 text-brand-800 border-brand-200 font-bold',
+    lead: 'bg-brand-100 text-brand-800 border-brand-200',
+    co_lead: 'bg-brand-100 text-brand-800 border-brand-200',
     treasurer: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    faculty_advisor: 'bg-blue-100 text-blue-800 border-blue-200',
+    faculty_advisor: 'bg-brand-100 text-brand-800 border-brand-200',
     editor: 'bg-amber-100 text-amber-800 border-amber-200',
     viewer: 'bg-slate-100 text-slate-800 border-slate-200',
   };
@@ -192,7 +192,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
         <div className="lg:col-span-2 space-y-6">
           {/* PENDING JOIN REQUESTS (HEAD APPROVAL FLOW) */}
           {canEdit && (
-            <div className="flex items-center justify-between p-4 bg-amber-50/60 border border-amber-200 rounded-2xl">
+            <div className="flex items-center justify-between p-4 bg-amber-50/60 border border-amber-200 rounded-xl">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
                   <UserCheck className="w-5 h-5" />
@@ -204,7 +204,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
               </div>
               <Link
                 to="/join-requests"
-                className="px-3.5 py-2 bg-[#1b365d] hover:bg-[#132742] text-white text-xs font-bold rounded-xl transition-colors shadow-sm"
+                className="px-3.5 py-2 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-xl transition-colors shadow-sm"
               >
                 Review Requests →
               </Link>
@@ -213,7 +213,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-slate-600">
                 Member Directory ({members.length})
               </span>
             </div>
@@ -232,7 +232,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                           {m.user?.full_name || 'Member'}
                         </span>
                         <span
-                          className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full border ${
+                          className={`text-xs font-semibold uppercase px-2 py-0.5 rounded-full border ${
                             roleColors[m.role] || 'bg-slate-100 text-slate-700'
                           }`}
                         >
@@ -241,7 +241,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5 truncate">{m.user?.email}</p>
                       {m.title && (
-                        <p className="text-[11px] text-slate-400 mt-0.5 italic">{m.title}</p>
+                        <p className="text-xs text-slate-400 mt-0.5 italic">{m.title}</p>
                       )}
                     </div>
 
@@ -266,8 +266,8 @@ export const MembersTab: React.FC<MembersTabProps> = ({
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <LinkIcon className="w-4 h-4 text-[#1b365d]" />
-                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  <LinkIcon className="w-4 h-4 text-brand-700" />
+                  <span className="text-xs font-semibold text-slate-600">
                     Club Invites & Shareable Links ({invites.length})
                   </span>
                 </div>
@@ -288,11 +288,11 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                       <div key={inv.id} className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono font-bold text-sm text-[#1b365d] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                            <span className="font-mono font-bold text-sm text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                               {inv.code}
                             </span>
                             <span
-                              className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded border ${
+                              className={`text-xs font-semibold uppercase px-2 py-0.5 rounded border ${
                                 roleColors[inv.role] || 'bg-slate-100'
                               }`}
                             >
@@ -300,25 +300,25 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                             </span>
 
                             {inv.revoked ? (
-                              <span className="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded border border-red-300">
+                              <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-0.5 rounded border border-red-300">
                                 Revoked
                               </span>
                             ) : isUsedUp ? (
-                              <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-300">
+                              <span className="bg-slate-100 text-slate-600 text-xs font-bold px-2 py-0.5 rounded border border-slate-300">
                                 Used Up
                               </span>
                             ) : isExpired ? (
-                              <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-300">
+                              <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded border border-amber-300">
                                 Expired
                               </span>
                             ) : (
-                              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-300">
+                              <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2 py-0.5 rounded border border-emerald-300">
                                 Active
                               </span>
                             )}
                           </div>
 
-                          <div className="text-slate-500 text-[11px] mt-1.5 flex items-center gap-3">
+                          <div className="text-slate-500 text-xs mt-1.5 flex items-center gap-3">
                             <span>
                               Uses: <strong>{inv.use_count} / {inv.max_uses}</strong>
                             </span>
@@ -370,7 +370,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
           {canEdit && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                <Sparkles className="w-5 h-5 text-[#1b365d]" />
+                <Wand2 className="w-5 h-5 text-brand-700" />
                 <h3 className="font-semibold text-sm text-slate-900">Create Club Invite</h3>
               </div>
 
@@ -384,14 +384,14 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                   <select
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1b365d]"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-700"
                   >
                     {myRole === 'owner' && <option value="admin">Admin</option>}
                     {myRole === 'admin' && <option value="admin">Admin</option>}
                     <option value="editor">Editor</option>
                     <option value="viewer">Viewer</option>
                   </select>
-                  <p className="text-[10px] text-slate-400 mt-1">
+                  <p className="text-xs text-slate-400 mt-1">
                     Roles cannot exceed your own permissions ({myRole}).
                   </p>
                 </div>
@@ -406,7 +406,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                       required
                       value={inviteMaxUses}
                       onChange={(e) => setInviteMaxUses(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1b365d]"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-700"
                     />
                   </div>
                   <div>
@@ -418,7 +418,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                       required
                       value={inviteExpiryDays}
                       onChange={(e) => setInviteExpiryDays(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1b365d]"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-700"
                     />
                   </div>
                 </div>
@@ -426,7 +426,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                 <button
                   type="submit"
                   disabled={creatingInvite}
-                  className="w-full mt-2 bg-[#1b365d] hover:bg-[#162a4a] text-white font-semibold text-xs py-2.5 px-4 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                  className="w-full mt-2 bg-brand-700 hover:bg-[#162a4a] text-white font-semibold text-xs py-2.5 px-4 rounded-lg transition-colors shadow-sm disabled:opacity-50"
                 >
                   {creatingInvite ? 'Generating Invite...' : 'Generate Invite Link'}
                 </button>
@@ -503,7 +503,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
               <Info className="w-4 h-4 text-slate-500" />
               Role Permissions Overview
             </div>
-            <ul className="space-y-1.5 text-slate-600 text-[11px]">
+            <ul className="space-y-1.5 text-slate-600 text-xs">
               <li>• <strong>Admin / Lead</strong>: Full access to documents, members, venues, numbering, and letterheads.</li>
               <li>• <strong>Treasurer</strong>: Manage expenses, bill summaries, and vouchers.</li>
               <li>• <strong>Editor</strong>: Draft documents, view venues & numbering (read-only).</li>

@@ -8,13 +8,13 @@ import {
   AlignCenter,
   AlignRight,
   AlignJustify,
-  Sparkles,
   Table as TableIcon,
   Rows,
   CheckSquare,
   SplitSquareVertical,
   Heading1,
   Heading2,
+  Wand2,
 } from 'lucide-react';
 import { A4Page } from './A4Page';
 import { ChipPopover } from './ChipPopover';
@@ -102,7 +102,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const slashItems = [
     {
       title: 'Heading 1',
-      icon: <Heading1 className="w-4 h-4 text-indigo-600" />,
+      icon: <Heading1 className="w-4 h-4 text-brand-600" />,
       action: () => {
         editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).setHeading({ level: 1 }).run();
         onCloseSlashMenu();
@@ -110,7 +110,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     },
     {
       title: 'Heading 2',
-      icon: <Heading2 className="w-4 h-4 text-indigo-600" />,
+      icon: <Heading2 className="w-4 h-4 text-brand-600" />,
       action: () => {
         editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).setHeading({ level: 2 }).run();
         onCloseSlashMenu();
@@ -127,7 +127,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     },
     {
       title: 'Repeating Table (Items & Sum)',
-      icon: <Rows className="w-4 h-4 text-blue-600" />,
+      icon: <Rows className="w-4 h-4 text-brand-600" />,
       action: () => {
         editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).run();
         insertRepeatingTable(editor);
@@ -145,7 +145,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     },
     {
       title: 'Insert Field Chip',
-      icon: <Sparkles className="w-4 h-4 text-purple-600" />,
+      icon: <Wand2 className="w-4 h-4 text-brand-600" />,
       action: () => {
         editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).run();
         onOpenAddField();
@@ -227,21 +227,21 @@ export const Canvas: React.FC<CanvasProps> = ({
         >
           <button
             onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive('bold') ? 'text-indigo-400 bg-slate-800' : 'text-slate-200'}`}
+            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive('bold') ? 'text-brand-500 bg-slate-800' : 'text-slate-200'}`}
             title="Bold"
           >
             <Bold className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive('italic') ? 'text-indigo-400 bg-slate-800' : 'text-slate-200'}`}
+            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive('italic') ? 'text-brand-500 bg-slate-800' : 'text-slate-200'}`}
             title="Italic"
           >
             <Italic className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive('underline') ? 'text-indigo-400 bg-slate-800' : 'text-slate-200'}`}
+            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive('underline') ? 'text-brand-500 bg-slate-800' : 'text-slate-200'}`}
             title="Underline"
           >
             <UnderlineIcon className="w-3.5 h-3.5" />
@@ -251,28 +251,28 @@ export const Canvas: React.FC<CanvasProps> = ({
 
           <button
             onClick={() => editor.chain().focus().setTextAlign('left').run()}
-            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive({ textAlign: 'left' }) ? 'text-indigo-400 bg-slate-800' : 'text-slate-200'}`}
+            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive({ textAlign: 'left' }) ? 'text-brand-500 bg-slate-800' : 'text-slate-200'}`}
             title="Align Left"
           >
             <AlignLeft className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => editor.chain().focus().setTextAlign('center').run()}
-            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive({ textAlign: 'center' }) ? 'text-indigo-400 bg-slate-800' : 'text-slate-200'}`}
+            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive({ textAlign: 'center' }) ? 'text-brand-500 bg-slate-800' : 'text-slate-200'}`}
             title="Align Center"
           >
             <AlignCenter className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => editor.chain().focus().setTextAlign('right').run()}
-            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive({ textAlign: 'right' }) ? 'text-indigo-400 bg-slate-800' : 'text-slate-200'}`}
+            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive({ textAlign: 'right' }) ? 'text-brand-500 bg-slate-800' : 'text-slate-200'}`}
             title="Align Right"
           >
             <AlignRight className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => editor.chain().focus().setTextAlign('justify').run()}
-            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive({ textAlign: 'justify' }) ? 'text-indigo-400 bg-slate-800' : 'text-slate-200'}`}
+            className={`p-1 rounded hover:bg-slate-800 ${editor.isActive({ textAlign: 'justify' }) ? 'text-brand-500 bg-slate-800' : 'text-slate-200'}`}
             title="Justify"
           >
             <AlignJustify className="w-3.5 h-3.5" />
@@ -283,7 +283,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       {/* Slash Command Popover Menu */}
       {showSlashMenu && (
         <div className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-2xl w-64 p-1.5 animate-in fade-in zoom-in-95">
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
+          <div className="text-[11px] font-bold text-slate-400 px-2 py-1">
             Insert Block
           </div>
           <div className="space-y-0.5">
@@ -291,7 +291,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               <button
                 key={idx}
                 onClick={item.action}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs text-slate-700 hover:bg-brand-50 hover:text-brand-700 transition"
               >
                 {item.icon}
                 <span className="font-medium">{item.title}</span>
@@ -348,7 +348,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       </A4Page>
 
       {/* Bottom Floating Stats Bar */}
-      <div className="sticky bottom-3 z-20 flex items-center gap-3 px-3.5 py-1.5 bg-white/90 backdrop-blur border border-slate-200/80 rounded-full shadow-lg text-[11px] font-medium text-slate-600 select-none">
+      <div className="sticky bottom-3 z-20 flex items-center gap-3 px-3.5 py-1.5 bg-white/90 backdrop-blur border border-slate-200/80 rounded-full shadow-lg text-xs font-medium text-slate-600 select-none">
         <span>{wordCount} words</span>
         <span className="text-slate-300">•</span>
         <span>{charCount} characters</span>

@@ -111,6 +111,52 @@ export interface DocumentVersionInfo {
   pdf_available: boolean;
   created_at: string;
   created_by?: string;
+  change_summary?: string | null;
+}
+
+export interface EditableField {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  value: any;
+}
+
+export interface DocumentActivity {
+  id: string;
+  action: 'submitted' | 'approved' | 'changes_requested' | 'comment' | 'revised' | 'emailed';
+  version_no: number;
+  user_name: string;
+  comment?: string | null;
+  verification_code?: string | null;
+  created_at: string;
+}
+
+export interface ClubAnalytics {
+  documents_total: number;
+  documents_this_month: number;
+  events_total: number;
+  members: number;
+  club_templates: number;
+  approvals: number;
+  awaiting_review: number;
+  ai_requests: number;
+  hours_saved: number;
+  by_month: { month: string; documents: number }[];
+  by_template: { name: string; count: number }[];
+  by_status: Record<string, number>;
+}
+
+export interface VerificationResult {
+  valid: boolean;
+  document_title: string;
+  ref_no?: string | null;
+  club_name: string;
+  version_no: number;
+  approved_by: string;
+  approved_at: string;
+  sha256?: string | null;
+  file_matches?: boolean | null;
 }
 
 export interface GeneratedDocument {
@@ -128,6 +174,11 @@ export interface GeneratedDocument {
   page_images: string[];
   versions: DocumentVersionInfo[];
   record_snapshot: Record<string, any>;
+  editable_fields?: EditableField[];
+  activity?: DocumentActivity[];
+  can_edit?: boolean;
+  can_review?: boolean;
+  template_name?: string | null;
 }
 
 export interface ExtractResult {

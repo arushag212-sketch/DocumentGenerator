@@ -121,6 +121,7 @@ class Renderer:
             doc = DocxTemplate(docx_source)
         else:
             doc = DocxTemplate(str(docx_source))
+        self._apply_club_banner(doc)
         safe_render_docx(doc, context, timeout=30.0)
 
         # Output path
@@ -147,6 +148,42 @@ class Renderer:
             converter=converter_used,
         )
 
+    def _apply_club_banner(self, doc: DocxTemplate) -> None:
+        """Swap the system templates' placeholder header banner for this club's banner."""
+        from docx.oxml.ns import qn
+        from docgen.letterhead_banner import PLACEHOLDER_NAME, club_banner_path
+
+        doc.init_docx()
+        # Image parts referenced by a picture named as the placeholder, in any header.
+        targets = []
+        for section in doc.docx.sections:
+            for header in (section.header, section.first_page_header, section.even_page_header):
+                if header.is_linked_to_previous:
+                    continue
+                part = header.part
+                for pic in part.element.iter(qn("pic:pic")):
+                    c_nv = pic.find(f"{qn('pic:nvPicPr')}/{qn('pic:cNvPr')}")
+                    blip = pic.find(f"{qn('pic:blipFill')}/{qn('a:blip')}")
+                    if c_nv is None or blip is None or c_nv.get("name") != PLACEHOLDER_NAME:
+                        continue
+                    rid = blip.get(qn("r:embed"))
+                    if rid in part.related_parts:
+                        targets.append(part.related_parts[rid])
+        if not targets:
+            return  # custom templates have no placeholder banner
+
+        banner = club_banner_path(
+            Path(os.environ.get("STORAGE_LOCAL_ROOT", "storage")).resolve() / "cache" / "banners",
+            self.config.club_name,
+            self.config.institute_name,
+            uploaded_banner=self.config.letterhead_banner_path,
+            logo_path=self.config.club_logo_path,
+            color=self.config.brand_color,
+        )
+        data = Path(banner).read_bytes()
+        for image_part in targets:
+            image_part._blob = data
+
     def _build_context(self, event: EventRecord, schema: TemplateSchema,
                        extra_context: dict[str, Any] | None = None,
                        allow_blanks: bool = False) -> dict[str, Any]:
@@ -169,6 +206,11 @@ class Renderer:
         ctx["head_of_account"] = self.config.head_of_account
         ctx["academic_year"] = event.academic_year.value or self.config.academic_year
         ctx["affiliating_institute_text"] = self.config.affiliating_institute_text
+        ctx["department"] = self.config.department
+        ctx["department_short"] = self.config.department_short or self.config.department
+        ctx["approval_chain"] = self.config.approval_signatories(3)
+        inst = (self.config.institute_name or "").split("(")[0].strip()
+        ctx["club_footer"] = self.config.footer_text or " · ".join(x for x in (self.config.club_name, inst) if x)
 
         # Add defaults from config
         for key, value in self.config.defaults.items():
@@ -210,7 +252,9 @@ class Renderer:
             venue_config = self.config.get_venue(venue_name)
             if venue_config:
                 ctx["venue_config"] = venue_config.model_dump()
-                ctx["submitted_to"] = venue_config.default_addressee
+                # The venue's usual addressee is a default; never override what the user gave.
+                if not str(ctx.get("submitted_to") or "").strip():
+                    ctx["submitted_to"] = venue_config.default_addressee
                 if venue_config.tech_assistant:
                     ctx["venue_tech_assistant"] = venue_config.tech_assistant.model_dump()
                 if venue_config.faculty_in_charge:

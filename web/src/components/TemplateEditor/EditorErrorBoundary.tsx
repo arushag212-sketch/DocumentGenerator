@@ -48,7 +48,7 @@ export class EditorErrorBoundary extends React.Component<ErrorBoundaryProps, Err
           </p>
           <button
             onClick={this.handleReset}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded shadow-sm transition"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-medium text-xs rounded shadow-sm transition"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Try Recovering

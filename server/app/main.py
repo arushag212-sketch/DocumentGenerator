@@ -201,6 +201,8 @@ def check_db_schema_up_to_date(target_engine=None) -> bool:
                 cols = {c["name"] for c in inspector.get_columns("document_versions")}
                 if "template_version_id" not in cols:
                     return False
+            if "documents" in tables and "document_reviews" not in tables:
+                return False
             if "join_requests" in tables:
                 cols = {c["name"] for c in inspector.get_columns("join_requests")}
                 if "requested_role" not in cols:

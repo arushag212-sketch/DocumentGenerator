@@ -7,6 +7,15 @@ chapter_code: "6/52"
 head_of_account: "6/52"
 academic_year: "2026-27"
 
+# Owning department (printed in HoD lines and as the default department)
+department: "Computer Science & Engineering"
+department_short: "CSE"
+# Header banner for letter-style templates (permission letter, minutes). Clubs without one
+# get a banner composed from the institute crest, the club name and the club logo.
+letterhead_banner_path: "assets/clean_permission_header.png"
+# Asset file used as the club logo (logo requests in AI templates, composed banners)
+logo_filename: "permission_page1_img2.png"
+
 affiliating_institute_text: "Sardar Vallabhbhai National Institute of Technology, Surat (SVNIT)"
 
 letterheads:

@@ -1,0 +1,29 @@
+{
+  "name": "Certificate of Participation",
+  "category": "Certificates",
+  "stage": "post_event",
+  "description": "Landscape participation certificate. Use batch generation from a participant list to issue one per person.",
+  "numbering_series": "CP",
+  "triggers": ["participation certificate", "certificate of participation"],
+  "recommend": {
+    "keywords": ["participation certificate", "participation certificates", "certificate of participation", "certificates of participation", "certificates for participants"],
+    "reason": "A participation certificate for each participant.",
+    "reason_not": "Ask for participation certificates to include it."
+  },
+  "design": {"layout": "certificate", "orientation": "landscape", "pageBorder": "double", "borderColor": "#1E3A8A", "headingColor": "#1E3A8A", "headingFontFamily": "Playfair Display", "fontFamily": "Tinos", "margins": "wide"},
+  "fields": [
+    {"key": "recipient_name", "type": "text", "required": true, "label": "Participant Name", "ask": "Name of the participant"},
+    {"key": "event_name", "type": "text", "required": true, "label": "Event Name", "ask": "Name of the event"},
+    {"key": "dates", "type": "date_range", "required": true, "label": "Event Dates", "ask": "When was the event held?"}
+  ],
+  "blocks": [
+    {"type": "heading", "level": 1, "align": "center", "text": "CERTIFICATE OF PARTICIPATION"},
+    {"type": "paragraph", "align": "center", "text": "This is to certify that"},
+    {"type": "heading", "level": 2, "align": "center", "text": "{{recipient_name}}"},
+    {"type": "paragraph", "align": "center", "text": "participated in {{event_name}} organised by {{club_name}} on {{dates}}."},
+    {"type": "signatureGrid", "columns": 2, "signatures": [
+      {"label": "Student Coordinator", "designation": ""},
+      {"label": "Faculty Advisor", "designation": ""}
+    ]}
+  ]
+}

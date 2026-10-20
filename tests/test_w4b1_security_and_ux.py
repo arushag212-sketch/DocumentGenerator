@@ -183,6 +183,7 @@ def test_template_injection_payloads_render_literally():
         "document_date": "16/10/2026",
         "today_str": "16/10/2026",
         "ref_no": "ACM/26-27/DOC/001",
+        "club_footer": "ACM Student Chapter · SVNIT",
     }
     safe_render_docx(tpl, dummy_ctx, timeout=30.0)
     rendered_docx = tmp_dir / "sec_test_rendered.docx"

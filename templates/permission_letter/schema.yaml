@@ -3,10 +3,16 @@ name: Permission Letter
 description: Request to HoD for venue/room use
 stage: pre_event
 triggers: [event, workshop, hall booking, room, seminar hall, venue, lab, competition, hackathon]
+recommend:
+  keywords: [permission, permission letter, book, booking, hall, seminar hall, room, venue, lab, ground, auditorium]
+  general_event: true
+  suppress_when: [bills, meeting, winners]
+  reason: "Official permission is needed to use the venue and conduct the event on campus."
+  reason_not: "Only needed when booking a venue or conducting an event."
 letterhead: acm
 numbering:
   series: ROOM
-  format: "ACM/{short_year}/{series}/{seq:03d}"
+  format: "{club_code}/{short_year}/{series}/{seq:03d}"
   confirm: true
 depends_on: []
 repeat_per: null

@@ -584,18 +584,22 @@ def resolve_club_logo_by_text(club_id: str, text: str, db: Session) -> dict[str,
 
     logo_assets = [
         a for a in all_assets
-        if a.kind in ("logo", "letterhead") or "logo" in a.filename.lower() or "acm" in a.filename.lower() or "img" in a.filename.lower()
+        if a.kind in ("logo", "letterhead") or "logo" in a.filename.lower() or "img" in a.filename.lower()
     ]
 
+    # "use the <club> logo": match on this club's own short name, not a hardcoded club.
+    club_row = db.query(Club).filter(Club.id == club_id).first()
+    club_code = (club_row.short_name or "").strip().lower() if club_row else ""
     matched: list[Asset] = []
-    if "acm" in text_lower:
-        club_acm = [a for a in club_assets if "acm" in a.filename.lower()]
-        if club_acm:
-            matched = club_acm
-        else:
-            matched = [a for a in logo_assets if "acm" in a.filename.lower()]
-            if not matched:
-                matched = [a for a in logo_assets if "permission_page1_img2" in a.filename]
+    if club_code and re.search(rf"\b{re.escape(club_code)}\b", text_lower):
+        # 1. The logo the club configured; 2. files named after the club; 3. the club's only logo.
+        logo_filename = ((club_row.settings or {}).get("logo_filename") or "").strip()
+        if logo_filename:
+            matched = [a for a in all_assets if a.filename == logo_filename][:1]
+        if not matched:
+            matched = [a for a in all_assets if club_code in a.filename.lower()]
+        if not matched:
+            matched = [a for a in club_assets if a.kind == "logo"]
 
     if not matched:
         m = re.search(r"(\w+)\s+logo", text_lower)
@@ -726,7 +730,7 @@ COMPLETE EXAMPLE SPEC:
     {"type": "signatureGrid", "attrs": {
       "columns": 2,
       "signatures": [
-        {"label": "Student Secretary", "designation": "ACM Chapter"},
+        {"label": "Student Secretary", "designation": "Organising Club"},
         {"label": "Faculty Convener", "designation": "SVNIT Surat"}
       ]
     }}

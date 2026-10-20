@@ -15,7 +15,7 @@ export const DocumentNewPage: React.FC = () => {
 
   if (!activeClub) {
     return (
-      <div className="max-w-md mx-auto my-16 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm">
+      <div className="max-w-md mx-auto my-16 bg-white border border-slate-200 rounded-xl p-8 text-center shadow-sm">
         <p className="text-sm text-slate-600">Please select or join a club first to draft documents.</p>
       </div>
     );

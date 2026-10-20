@@ -35,20 +35,20 @@ export const ChipPopover: React.FC<ChipPopoverProps> = ({
       </div>
 
       <div>
-        <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Label</label>
+        <label className="block text-xs font-semibold text-slate-600 mb-0.5">Label</label>
         <input
           type="text"
           value={chipPopover.label}
           onChange={(e) => onUpdateChip({ label: e.target.value })}
-          className="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+          className="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-brand-500 focus:outline-none"
         />
       </div>
 
       <div className="flex items-center justify-between pt-1">
-        <span className="text-[11px] font-semibold text-slate-600">Importance</span>
+        <span className="text-xs font-semibold text-slate-600">Importance</span>
         <button
           onClick={() => onToggleRequired(!chipPopover.required)}
-          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition ${
+          className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
             chipPopover.required
               ? 'bg-rose-100 text-rose-700 border border-rose-300'
               : 'bg-slate-100 text-slate-600'
@@ -59,10 +59,10 @@ export const ChipPopover: React.FC<ChipPopoverProps> = ({
       </div>
 
       <div className="flex items-center justify-between pt-1">
-        <span className="text-[11px] font-semibold text-slate-600">Sensitive</span>
+        <span className="text-xs font-semibold text-slate-600">Sensitive</span>
         <button
           onClick={() => onToggleSensitive(!chipPopover.sensitive)}
-          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition flex items-center gap-1 ${
+          className={`px-2 py-0.5 rounded text-[11px] font-bold transition flex items-center gap-1 ${
             chipPopover.sensitive
               ? 'bg-amber-100 text-amber-800 border border-amber-300'
               : 'bg-slate-100 text-slate-600'
@@ -76,14 +76,14 @@ export const ChipPopover: React.FC<ChipPopoverProps> = ({
       <div className="pt-2 border-t border-slate-100 flex justify-between items-center">
         <button
           onClick={onDelete}
-          className="text-rose-600 hover:text-rose-700 flex items-center gap-1 text-[11px] font-semibold"
+          className="text-rose-600 hover:text-rose-700 flex items-center gap-1 text-xs font-semibold"
         >
           <Trash2 className="w-3.5 h-3.5" />
           Remove Chip
         </button>
         <button
           onClick={onClose}
-          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold text-[11px]"
+          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold text-xs"
         >
           Done
         </button>

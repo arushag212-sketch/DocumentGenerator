@@ -11,9 +11,9 @@ import {
   Save,
   ZoomIn,
   ZoomOut,
-  Sparkles,
   Languages,
   FilePlus2,
+  Wand2,
 } from 'lucide-react';
 import { SaveStatus } from './useEditorAutosave';
 
@@ -89,11 +89,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <h1 className="font-bold text-slate-900 text-sm md:text-base leading-tight truncate max-w-[220px] md:max-w-md">
               {templateName || 'Untitled Template'}
             </h1>
-            <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+            <span className="text-[11px] uppercase font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
               {category}
             </span>
             {version !== undefined && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
                 v{version}
               </span>
             )}
@@ -130,7 +130,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <ZoomOut className="w-3.5 h-3.5" />
         </button>
-        <span className="text-[11px] font-mono font-medium text-slate-600 px-1 w-10 text-center select-none">
+        <span className="text-xs font-mono font-medium text-slate-600 px-1 w-10 text-center select-none">
           {Math.round(zoom * 100)}%
         </span>
         <button
@@ -165,33 +165,33 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={() => setShowTranslateMenu(!showTranslateMenu)}
             disabled={translating}
-            className="p-1.5 rounded text-slate-600 hover:text-indigo-600 hover:bg-white disabled:opacity-50 transition"
+            className="p-1.5 rounded text-slate-600 hover:text-brand-600 hover:bg-white disabled:opacity-50 transition"
             title="Translate Document (Hindi / Gujarati)"
           >
-            <Languages className={`w-4 h-4 ${translating ? 'animate-spin text-indigo-600' : ''}`} />
+            <Languages className={`w-4 h-4 ${translating ? 'animate-spin text-brand-600' : ''}`} />
           </button>
           {showTranslateMenu && (
             <div className="absolute top-full mt-2 left-0 z-50 bg-white border border-slate-200 shadow-xl rounded-xl p-2 w-48 text-xs flex flex-col gap-1">
-              <span className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">Translate Document</span>
+              <span className="text-[11px] uppercase font-bold text-slate-400 px-2 py-1">Translate Document</span>
               <button
                 onClick={() => {
                   setShowTranslateMenu(false);
                   onTranslate?.('hi');
                 }}
-                className="px-2.5 py-1.5 text-left rounded-lg hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 font-medium flex items-center justify-between transition"
+                className="px-2.5 py-1.5 text-left rounded-lg hover:bg-brand-50 text-slate-700 hover:text-brand-700 font-medium flex items-center justify-between transition"
               >
                 <span>Hindi (हिंदी)</span>
-                <span className="text-[10px] text-slate-400">Devanagari</span>
+                <span className="text-[11px] text-slate-400">Devanagari</span>
               </button>
               <button
                 onClick={() => {
                   setShowTranslateMenu(false);
                   onTranslate?.('gu');
                 }}
-                className="px-2.5 py-1.5 text-left rounded-lg hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 font-medium flex items-center justify-between transition"
+                className="px-2.5 py-1.5 text-left rounded-lg hover:bg-brand-50 text-slate-700 hover:text-brand-700 font-medium flex items-center justify-between transition"
               >
                 <span>Gujarati (ગુજરાતી)</span>
-                <span className="text-[10px] text-slate-400">Gujarati</span>
+                <span className="text-[11px] text-slate-400">Gujarati</span>
               </button>
             </div>
           )}
@@ -252,11 +252,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         {/* Publish Button */}
         <button
           onClick={onPublish}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white shadow-sm transition"
         >
           {unreviewedAiCount > 0 ? (
             <>
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <Wand2 className="w-3.5 h-3.5 text-amber-300" />
               <span>Review & Publish ({unreviewedAiCount})</span>
             </>
           ) : (

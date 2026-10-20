@@ -1,0 +1,48 @@
+{
+  "name": "Event Report",
+  "category": "Reports",
+  "stage": "post_event",
+  "description": "Post-event report: what happened, participation, outcomes and optional winners list.",
+  "numbering_series": "ER",
+  "triggers": ["event report", "report"],
+  "recommend": {
+    "keywords": ["report", "event report", "post-event report", "post event report", "summary of the event"],
+    "reason": "Report of the completed event for the department and records.",
+    "reason_not": "Ask for an event report to include it."
+  },
+  "fields": [
+    {"key": "event_name", "type": "text", "required": true, "label": "Event Name", "ask": "Name of the event"},
+    {"key": "dates", "type": "date_range", "required": true, "label": "Event Dates", "ask": "When was the event held?"},
+    {"key": "venue", "type": "text", "required": true, "label": "Venue", "ask": "Where was it held?"},
+    {"key": "actual_participants", "type": "int", "required": true, "label": "Participants", "ask": "How many people actually participated?"},
+    {"key": "summary", "type": "longtext", "required": true, "label": "Summary", "ask": "What happened at the event?"},
+    {"key": "outcomes", "type": "longtext", "required": false, "label": "Outcomes", "ask": "Key outcomes or feedback (optional)"},
+    {"key": "winners_list", "type": "table", "required": false, "label": "Winners", "ask": "Winners and positions (optional)",
+     "columns": [{"key": "position", "label": "Position", "align": "left"}, {"key": "name", "label": "Name", "align": "left"}]}
+  ],
+  "blocks": [
+    {"type": "heading", "level": 1, "align": "center", "text": "EVENT REPORT"},
+    {"type": "paragraph", "text": "Ref. No.: {{ref_no}}"},
+    {"type": "paragraph", "text": "Date: {{document_date}}"},
+    {"type": "infoTable", "rows": [
+      {"label": "Event", "field": "event_name"},
+      {"label": "Organised by", "field": "club_name"},
+      {"label": "Date(s)", "field": "dates"},
+      {"label": "Venue", "field": "venue"},
+      {"label": "Participants", "field": "actual_participants"}
+    ]},
+    {"type": "heading", "level": 2, "text": "Summary"},
+    {"type": "paragraph", "align": "justify", "text": "{{summary}}"},
+    {"type": "heading", "level": 2, "showIf": "outcomes", "text": "Outcomes"},
+    {"type": "paragraph", "align": "justify", "showIf": "outcomes", "text": "{{outcomes}}"},
+    {"type": "heading", "level": 2, "showIf": "winners_list", "text": "Winners"},
+    {"type": "repeatingTable", "showIf": "winners_list", "listVariable": "winners_list", "itemAlias": "w",
+     "columns": [{"key": "position", "label": "Position", "align": "left"}, {"key": "name", "label": "Name", "align": "left"}],
+     "hasTotal": false},
+    {"type": "signatureGrid", "columns": 3, "signatures": [
+      {"label": "Student Coordinator", "designation": ""},
+      {"label": "Faculty Advisor", "designation": ""},
+      {"label": "Head of Department", "designation": ""}
+    ]}
+  ]
+}

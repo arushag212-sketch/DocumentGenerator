@@ -210,7 +210,9 @@ def test_document_version_retention_and_regeneration(client, db_session):
     # Test prune_document_versions with keep_count=0 on dummy duplicate versions
     # Create 3 dummy older versions
     import uuid
-    for i in range(2, 5):
+    # The shared test DB may already hold revisions of this document; number after the latest
+    latest_no = max(v.version_no for v in db_session.query(DocumentVersion).filter(DocumentVersion.document_id == doc.id))
+    for i in range(latest_no + 1, latest_no + 4):
         dummy_file = Path(os.environ["STORAGE_LOCAL_ROOT"], "documents") / doc.id / f"v{i}" / "doc.docx"
         dummy_file.parent.mkdir(parents=True, exist_ok=True)
         dummy_file.write_bytes(b"dummy")

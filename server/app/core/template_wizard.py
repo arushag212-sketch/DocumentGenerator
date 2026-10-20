@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from docgen.llm import LLMClient, get_llm_client
+from server.app.core.club_identity import default_addressee, default_signatures
 from server.app.core.template_compiler import TemplateCompiler
 from server.app.core.template_generator import (
     OFFICIAL_WORDING_TRIGGERS,
@@ -94,7 +95,7 @@ def get_default_wizard_questions(prompt: str) -> list[WizardQuestion]:
 
     # 2. Audience options
     audience_opts = [
-        "Faculty Advisor & Head of Department (DoCSE)",
+        "Faculty Advisor & Head of Department",
         "Dean of Student Welfare (DSW) & Director",
         "Registered Club Members & Students",
         "External Industry Sponsors & Judges",
@@ -130,7 +131,7 @@ def get_default_wizard_questions(prompt: str) -> list[WizardQuestion]:
     ]
 
 
-def get_wizard_questions(prompt: str, club_name: str = "ACM SVNIT") -> WizardQuestionsResponse:
+def get_wizard_questions(prompt: str, club_name: str = "") -> WizardQuestionsResponse:
     """Generate up to 3 clarifying questions with answer chips."""
     cleaned_prompt = strip_pii_from_text(prompt.strip())
     client = get_llm_client()
@@ -189,7 +190,8 @@ def get_wizard_questions(prompt: str, club_name: str = "ACM SVNIT") -> WizardQue
 def build_wizard_template_spec(
     prompt: str,
     answers: dict[str, str],
-    club_name: str = "ACM SVNIT",
+    club_name: str = "",
+    club: Any = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any], str]:
     """Constructs TipTap editor JSON, fields, design settings, and title from user inputs."""
     cleaned_prompt = strip_pii_from_text(prompt)
@@ -271,7 +273,7 @@ def build_wizard_template_spec(
             "attrs": {"blockId": str(uuid.uuid4())[:8]},
             "content": [
                 {"type": "text", "text": "Submitted To: "},
-                {"type": "text", "text": audience or "The Head of Department, DoCSE, SVNIT Surat"},
+                {"type": "text", "text": audience or default_addressee(club)},
             ],
         },
         {
@@ -333,10 +335,10 @@ def build_wizard_template_spec(
         "attrs": {
             "columns": 3,
             "blockId": str(uuid.uuid4())[:8],
-            "signatures": [
+            "signatures": default_signatures(club) if club is not None else [
                 {"label": "Student Coordinator", "designation": club_name},
-                {"label": "Faculty Advisor", "designation": "DoCSE, SVNIT"},
-                {"label": "Head of Department", "designation": "DoCSE, SVNIT"},
+                {"label": "Faculty Advisor", "designation": ""},
+                {"label": "Head of Department", "designation": ""},
             ],
         },
     })
@@ -355,16 +357,16 @@ def create_wizard_template(
 ) -> tuple[Template, TemplateVersion]:
     """Creates a new database Template and TemplateVersion directly from the wizard inputs."""
     club = db.query(Club).filter(Club.id == club_id).first()
-    club_name = club.name if club else "ACM SVNIT"
+    club_name = club.name if club else ""
 
-    editor_json, fields, design_settings, title = build_wizard_template_spec(prompt, answers, club_name)
+    editor_json, fields, design_settings, title = build_wizard_template_spec(prompt, answers, club_name, club=club)
 
     # Compile initial DOCX
     docx_bytes, schema_yaml, report = TemplateCompiler.compile(
         editor_json=editor_json,
         fields=fields,
         template_meta={"name": title, "category": "Official Event Documents", "numbering_series": numbering_series},
-        club_slug=club.short_name.lower() if club and club.short_name else "acm",
+        club_slug=club.slug if club else "club",
         design_settings=design_settings,
     )
 

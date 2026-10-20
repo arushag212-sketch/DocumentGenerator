@@ -3,10 +3,16 @@ name: Prize Money Receipt
 description: Prize money receipt for individual winners
 stage: post_event
 triggers: [prize, winner, award, prize money, receipt]
+recommend:
+  keywords: [prize money receipt, prize receipt]
+  auto_when: [winners]
+  requires: [winners]
+  reason: "Each winner signs a receipt for the prize money paid."
+  reason_not: "Needed after the event, once winners and prize amounts are declared."
 letterhead: svnit
 numbering:
   series: PRIZE
-  format: "ACM/{short_year}/{series}/{seq:03d}"
+  format: "{club_code}/{short_year}/{series}/{seq:03d}"
   confirm: false
 depends_on: []
 repeat_per: winners

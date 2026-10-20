@@ -68,11 +68,12 @@ def apply_field_aliases(data: dict[str, Any], wanted: Optional[Iterable[str]] = 
         if _is_blank(value):
             # Reverse direction: a user-answered alias can satisfy the canonical key.
             for alias in aliases:
-                if not _is_blank(data.get(alias)):
+                # Canonical values are scalars; a list (e.g. MoM `attendees` names) is not a count.
+                if not _is_blank(data.get(alias)) and not isinstance(data.get(alias), (list, dict)):
                     data[canonical] = data[alias]
                     value = data[alias]
                     break
-        if _is_blank(value):
+        if _is_blank(value) or isinstance(value, (list, dict)):
             continue
         for alias in aliases:
             if wanted_set is not None and alias not in wanted_set:

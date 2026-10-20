@@ -332,14 +332,14 @@ class AssetOut(BaseModel):
 
 class SetupWizardRequest(BaseModel):
     chairman_name: str = Field(..., min_length=2)
-    chairman_dept: str = "Computer Science & Engineering"
+    chairman_dept: str = ""
     student_head_name: str = Field(..., min_length=2)
     student_head_roll: str = "DEMO-001"
-    student_head_branch: str = "Computer Science & Engineering"
+    student_head_branch: str = ""
     student_head_mobile: Optional[str] = None
     student_secretary_name: str = Field(..., min_length=2)
     student_secretary_roll: str = "DEMO-002"
-    student_secretary_branch: str = "Computer Science & Engineering"
+    student_secretary_branch: str = ""
     faculty_co_chairman_name: Optional[str] = None
     approval_chain: list[str] = [
         "Demo Faculty In-charge",

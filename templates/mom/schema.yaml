@@ -3,10 +3,16 @@ name: Minutes of Meeting
 description: Minutes of Meeting (MoM) for club meetings
 stage: meeting
 triggers: [meeting, mom, minutes, agenda, discussion, action items]
+recommend:
+  keywords: [minutes, minutes of meeting, mom]
+  auto_when: [meeting]
+  requires: [meeting]
+  reason: "Official record of the meeting's discussion and decisions."
+  reason_not: "Needed only for meetings."
 letterhead: acm
 numbering:
   series: MOM
-  format: "ACM/{short_year}/{series}/{seq:03d}"
+  format: "{club_code}/{short_year}/{series}/{seq:03d}"
   confirm: false
 depends_on: []
 repeat_per: null

@@ -8,10 +8,10 @@ import {
   Rows,
   CheckSquare,
   Minus,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
   GripVertical,
+  Wand2,
 } from 'lucide-react';
 import {
   insertInfoTable,
@@ -79,7 +79,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
           <ChevronRight className="w-4 h-4" />
         </button>
         <span
-          className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-6 select-none cursor-pointer"
+          className="text-[11px] font-bold text-slate-400 mt-6 select-none cursor-pointer"
           style={{ writingMode: 'vertical-rl' }}
           onClick={onToggle}
         >
@@ -106,12 +106,12 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 bg-slate-100 p-1 gap-1 text-[11px] font-semibold">
+      <div className="flex border-b border-slate-200 bg-slate-100 p-1 gap-1 text-xs font-semibold">
         <button
           onClick={() => setActiveCategory('blocks')}
           className={`flex-1 py-1 rounded transition text-center ${
             activeCategory === 'blocks'
-              ? 'bg-white text-indigo-700 shadow-sm'
+              ? 'bg-white text-brand-700 shadow-sm'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -121,7 +121,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
           onClick={() => setActiveCategory('clauses')}
           className={`flex-1 py-1 rounded transition text-center ${
             activeCategory === 'clauses'
-              ? 'bg-white text-indigo-700 shadow-sm'
+              ? 'bg-white text-brand-700 shadow-sm'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -135,7 +135,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
           <>
             {/* Typography */}
             <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1">
                 Typography
               </div>
               <div className="space-y-1">
@@ -143,10 +143,10 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'heading1')}
                   onClick={() => handleInsertHeading(1)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Heading1 className="w-4 h-4 text-indigo-600" />
+                  <Heading1 className="w-4 h-4 text-brand-600" />
                   <span className="font-semibold text-slate-800 text-xs">Title (Heading 1)</span>
                 </button>
 
@@ -154,10 +154,10 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'heading2')}
                   onClick={() => handleInsertHeading(2)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Heading2 className="w-4 h-4 text-indigo-600" />
+                  <Heading2 className="w-4 h-4 text-brand-600" />
                   <span className="font-semibold text-slate-800 text-xs">Section (Heading 2)</span>
                 </button>
 
@@ -165,10 +165,10 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'heading3')}
                   onClick={() => handleInsertHeading(3)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Heading3 className="w-4 h-4 text-indigo-600" />
+                  <Heading3 className="w-4 h-4 text-brand-600" />
                   <span className="font-semibold text-slate-800 text-xs">Sub-section (Heading 3)</span>
                 </button>
 
@@ -176,7 +176,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'paragraph')}
                   onClick={handleInsertParagraph}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
                   <Pilcrow className="w-4 h-4 text-slate-600" />
@@ -187,7 +187,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
 
             {/* Official Tables */}
             <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1">
                 Official Tables
               </div>
               <div className="space-y-1">
@@ -195,13 +195,13 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'infoTable')}
                   onClick={() => insertInfoTable(editor)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
                   <Table className="w-4 h-4 text-emerald-600" />
                   <div className="flex-1">
                     <div className="font-semibold text-slate-800 text-xs">Info Table</div>
-                    <div className="text-[10px] text-slate-500">2-Column key-value details</div>
+                    <div className="text-[11px] text-slate-500">2-Column key-value details</div>
                   </div>
                 </button>
 
@@ -209,13 +209,13 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'repeatingTable')}
                   onClick={() => insertRepeatingTable(editor)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
                   <Rows className="w-4 h-4 text-emerald-600" />
                   <div className="flex-1">
                     <div className="font-semibold text-slate-800 text-xs">Repeating Table</div>
-                    <div className="text-[10px] text-slate-500">Items/budget with sum total</div>
+                    <div className="text-[11px] text-slate-500">Items/budget with sum total</div>
                   </div>
                 </button>
 
@@ -223,13 +223,13 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'signatureGrid')}
                   onClick={() => insertSignatureGrid(editor, 2)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
                   <CheckSquare className="w-4 h-4 text-amber-600" />
                   <div className="flex-1">
                     <div className="font-semibold text-slate-800 text-xs">Signature Grid</div>
-                    <div className="text-[10px] text-slate-500">2-Column official sign-off</div>
+                    <div className="text-[11px] text-slate-500">2-Column official sign-off</div>
                   </div>
                 </button>
               </div>
@@ -237,7 +237,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
 
             {/* Layout & Assets */}
             <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1">
                 Layout & Assets
               </div>
               <div className="space-y-1">
@@ -245,10 +245,10 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'clubLogo')}
                   onClick={() => insertImageBlock(editor, { imageType: 'club-logo', alt: 'Club logo' })}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                  <Wand2 className="w-4 h-4 text-brand-600" />
                   <span className="font-semibold text-slate-800 text-xs">Club Logo Block</span>
                 </button>
 
@@ -287,15 +287,15 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                         alt: asset.name,
                       })
                     }
-                    className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                    className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                   >
                     <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <Wand2 className="w-4 h-4 text-emerald-600" />
                     <div className="flex-1 truncate">
                       <div className="font-semibold text-slate-800 text-xs truncate">
                         {asset.name}
                       </div>
-                      <div className="text-[10px] text-slate-500 uppercase">
+                      <div className="text-[11px] text-slate-500 uppercase">
                         {asset.kind || 'Logo'}
                       </div>
                     </div>
@@ -306,7 +306,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'pageBreak')}
                   onClick={handleInsertDivider}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
                   <Minus className="w-4 h-4 text-slate-400" />
@@ -317,7 +317,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
           </>
         ) : (
           <div className="space-y-2">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+            <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1">
               Official SVNIT Clauses
             </div>
 
@@ -327,10 +327,10 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   'It is certified that the above expenditure was incurred in the interest of the institute/club and the rates are reasonable.'
                 )
               }
-              className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-sm cursor-pointer transition"
+              className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-brand-500 hover:shadow-sm cursor-pointer transition"
             >
               <div className="font-semibold text-slate-800 text-xs mb-1">Expenditure Certification</div>
-              <div className="text-[10px] text-slate-500 line-clamp-2">
+              <div className="text-[11px] text-slate-500 line-clamp-2">
                 "It is certified that the above expenditure was incurred in the interest of the institute..."
               </div>
             </div>
@@ -341,10 +341,10 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   'Submitted for kind approval and administrative sanction please.'
                 )
               }
-              className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-sm cursor-pointer transition"
+              className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-brand-500 hover:shadow-sm cursor-pointer transition"
             >
               <div className="font-semibold text-slate-800 text-xs mb-1">Sanction Request</div>
-              <div className="text-[10px] text-slate-500 line-clamp-2">
+              <div className="text-[11px] text-slate-500 line-clamp-2">
                 "Submitted for kind approval and administrative sanction please."
               </div>
             </div>
@@ -355,10 +355,10 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   'The students and organizing committee undertake to maintain discipline and institute decorum during the event.'
                 )
               }
-              className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-sm cursor-pointer transition"
+              className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-brand-500 hover:shadow-sm cursor-pointer transition"
             >
               <div className="font-semibold text-slate-800 text-xs mb-1">Discipline Undertaking</div>
-              <div className="text-[10px] text-slate-500 line-clamp-2">
+              <div className="text-[11px] text-slate-500 line-clamp-2">
                 "The students and organizing committee undertake to maintain discipline..."
               </div>
             </div>

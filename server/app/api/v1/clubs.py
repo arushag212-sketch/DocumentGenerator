@@ -104,7 +104,7 @@ def _club_to_out(club: Club, my_role: Optional[str], db: Session) -> ClubOut:
         members_count=member_count,
         created_at=club.created_at,
         code=club.short_name,
-        department=settings_dict.get("department", "Computer Science & Engineering"),
+        department=settings_dict.get("department", ""),
         academic_year=ay,
         room_counter=all_series.get("ROOM", 0),
         event_counter=all_series.get("EVT", all_series.get("EVENT", 0)),
@@ -1617,7 +1617,7 @@ def run_setup_wizard(
     for vname in payload.venues:
         venue_repo.create(
             name=vname,
-            addressee_default=f"The Head of Department, {payload.chairman_dept}",
+            addressee_default=f"The Head of Department, {payload.chairman_dept}" if payload.chairman_dept else "The Head of Department",
         )
 
     # 6. Numbering Series from template schemas

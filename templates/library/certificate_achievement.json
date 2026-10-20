@@ -1,0 +1,31 @@
+{
+  "name": "Certificate of Achievement",
+  "category": "Certificates",
+  "stage": "post_event",
+  "description": "Landscape merit certificate for winners and position holders, signed by the judges.",
+  "numbering_series": "CA",
+  "triggers": ["certificate of achievement", "merit certificate"],
+  "recommend": {
+    "keywords": ["certificate of achievement", "achievement certificate", "merit certificate", "winner certificate", "winners certificate", "certificates for winners", "certificate for the winner"],
+    "reason": "A merit certificate for each winner or position holder.",
+    "reason_not": "Ask for winner or achievement certificates to include it."
+  },
+  "design": {"layout": "certificate", "orientation": "landscape", "pageBorder": "double", "borderColor": "#B8860B", "headingColor": "#B8860B", "headingFontFamily": "Playfair Display", "fontFamily": "Tinos", "margins": "wide"},
+  "fields": [
+    {"key": "recipient_name", "type": "text", "required": true, "label": "Recipient Name", "ask": "Name of the winner"},
+    {"key": "position", "type": "text", "required": true, "label": "Position", "ask": "Position secured (e.g. First Place)"},
+    {"key": "event_name", "type": "text", "required": true, "label": "Event Name", "ask": "Name of the event or competition"},
+    {"key": "dates", "type": "date_range", "required": true, "label": "Event Dates", "ask": "When was the event held?"}
+  ],
+  "blocks": [
+    {"type": "heading", "level": 1, "align": "center", "text": "CERTIFICATE OF ACHIEVEMENT"},
+    {"type": "paragraph", "align": "center", "text": "This is to certify that"},
+    {"type": "heading", "level": 2, "align": "center", "text": "{{recipient_name}}"},
+    {"type": "paragraph", "align": "center", "text": "has secured {{position}} in {{event_name}} organised by {{club_name}} on {{dates}}."},
+    {"type": "signatureGrid", "columns": 3, "signatures": [
+      {"label": "Judge", "designation": ""},
+      {"label": "Faculty Advisor", "designation": ""},
+      {"label": "Student Coordinator", "designation": ""}
+    ]}
+  ]
+}

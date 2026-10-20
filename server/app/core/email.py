@@ -31,12 +31,28 @@ class EmailSender(ABC):
         """Send password reset token / link."""
         pass
 
+    def send_document(
+        self,
+        to_emails: list[str],
+        subject: str,
+        body: str,
+        attachments: list[tuple[str, bytes, str]],
+        reply_to: Optional[str] = None,
+    ) -> None:
+        """Send a generated document. ``attachments`` are (filename, data, mime type)."""
+        raise NotImplementedError
+
 
 class ConsoleEmailSender(EmailSender):
     """Development and test email sender that prints visible links to logger/console."""
 
     def __init__(self):
         self.sent_messages: list[dict[str, str]] = []
+
+    def send_document(self, to_emails, subject, body, attachments, reply_to=None) -> None:
+        names = ", ".join(f"{name} ({len(data)} bytes)" for name, data, _ in attachments)
+        logger.info("[DEV EMAIL] To: %s | Subject: %s | Attachments: %s", ", ".join(to_emails), subject, names)
+        self.sent_messages.append({"to": ", ".join(to_emails), "subject": subject, "body": body, "attachments": names})
 
     def send_activation(self, to_email: str, club_name: str, activation_link: str) -> None:
         msg = {
@@ -128,6 +144,27 @@ class SMTPEmailSender(EmailSender):
             if self.username and self.password:
                 server.login(self.username, self.password)
             server.sendmail(self.from_email, [to_email], msg.as_string())
+
+    def send_document(self, to_emails, subject, body, attachments, reply_to=None) -> None:
+        from email.mime.application import MIMEApplication
+
+        msg = MIMEMultipart()
+        msg["Subject"] = subject
+        msg["From"] = self.from_email
+        msg["To"] = ", ".join(to_emails)
+        if reply_to:
+            msg["Reply-To"] = reply_to
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        for filename, data, mime in attachments:
+            part = MIMEApplication(data, _subtype=mime.split("/", 1)[-1])
+            part.add_header("Content-Disposition", "attachment", filename=filename)
+            msg.attach(part)
+        with smtplib.SMTP(self.host, self.port, timeout=30) as server:
+            if self.use_tls:
+                server.starttls()
+            if self.username and self.password:
+                server.login(self.username, self.password)
+            server.sendmail(self.from_email, list(to_emails), msg.as_string())
 
     def send_activation(self, to_email: str, club_name: str, activation_link: str) -> None:
         subject = f"Activate your account for {club_name} - SVNIT ClubDocs"

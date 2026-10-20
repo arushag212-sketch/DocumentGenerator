@@ -335,6 +335,25 @@ class DocumentVersion(TimestampMixin, Base):
     )
 
 
+class DocumentReview(TimestampMixin, Base):
+    """One step in a document's review history: submitted, approved, changes requested,
+    commented or emailed. Approvals carry the verification code and the SHA-256 of the
+    signed PDF so a printed or forwarded copy can be checked later."""
+
+    __tablename__ = "document_reviews"
+
+    club_id: Mapped[str] = mapped_column(String(36), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String(30), nullable=False)  # submitted | approved | changes_requested | comment | revised | emailed
+    user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    verification_code: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True, index=True)
+    pdf_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])
+
+
 class RateLimitBucket(Base):
     """Database-backed fixed-window counter shared by all application workers."""
 

@@ -163,18 +163,18 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
       {/* Top Banner */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-200">
         <div>
-          <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-indigo-600" />
+          <h3 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-brand-600" />
             Document Quality Checks
           </h3>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-xs text-slate-500">
             Rules, protocol & pre-flight validation
           </p>
         </div>
         <button
           onClick={runChecks}
           disabled={isRunning}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-sm transition"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-sm transition"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin' : ''}`} />
           Run Checks
@@ -184,8 +184,8 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
       {score !== null && hasRun && (
         <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Compliance Score</span>
-            <div className="text-xl font-extrabold text-slate-800">{score}<span className="text-xs font-normal text-slate-400">/100</span></div>
+            <span className="text-[11px] font-bold text-slate-400">Compliance Score</span>
+            <div className="text-xl font-semibold text-slate-800">{score}<span className="text-xs font-normal text-slate-400">/100</span></div>
           </div>
           <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${score >= 90 ? 'bg-emerald-100 text-emerald-800' : score >= 70 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}`}>
             {score >= 90 ? 'Ready to Publish' : score >= 70 ? 'Needs Attention' : 'Action Required'}
@@ -199,7 +199,7 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
           <p className="font-semibold text-slate-700 text-xs mb-1">
             Check your document for compliance
           </p>
-          <p className="text-[11px] text-slate-400 max-w-xs mb-4">
+          <p className="text-xs text-slate-400 max-w-xs mb-4">
             Scans for missing required fields, official wording gaps, and typography consistency.
           </p>
           <button
@@ -213,13 +213,13 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
         <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 text-center">
           <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
           <h4 className="font-bold text-emerald-900 text-xs mb-1">All Checks Passed</h4>
-          <p className="text-[11px] text-emerald-700">
+          <p className="text-xs text-emerald-700">
             No missing required fields or formatting issues were detected. Document is ready for publishing!
           </p>
         </div>
       ) : (
         <div className="space-y-2.5">
-          <div className="text-[11px] text-slate-600 font-medium">
+          <div className="text-xs text-slate-600 font-medium">
             Found {findings.length} item(s) to review:
           </div>
           {findings.map((f) => (
@@ -234,10 +234,10 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 font-bold text-[11px] text-slate-800">
+                <span className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
                   {f.type === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-600" />}
                   {f.type === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />}
-                  {f.type === 'info' && <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />}
+                  {f.type === 'info' && <ShieldCheck className="w-3.5 h-3.5 text-brand-600" />}
                   {f.title}
                 </span>
                 <span
@@ -252,13 +252,13 @@ export const ChecksPanel: React.FC<ChecksPanelProps> = ({
                   {f.type}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-600">{f.message}</p>
+              <p className="text-xs text-slate-600">{f.message}</p>
               {f.actionLabel && (
                 <button
                   onClick={() => handleFix(f)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded text-[10px] transition"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 font-semibold rounded text-[11px] transition"
                 >
-                  <Wrench className="w-3 h-3 text-indigo-600" />
+                  <Wrench className="w-3 h-3 text-brand-600" />
                   {f.actionLabel}
                 </button>
               )}

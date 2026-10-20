@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
-import { Lock, Mail, User, KeyRound, ShieldAlert, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react';
+import { Lock, Mail, User, KeyRound, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react';
 const AuthInput: React.FC<{
   icon: any;
   label?: string;
@@ -16,10 +16,10 @@ const AuthInput: React.FC<{
       <Icon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
       <input
         {...props}
-        className={`w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${className}`}
+        className={`w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-700/30 focus:border-brand-700 ${className}`}
       />
     </div>
-    {helper && <p className="text-[10px] text-slate-400 mt-1">{helper}</p>}
+    {helper && <p className="text-xs text-slate-400 mt-1">{helper}</p>}
   </div>
 );
 
@@ -27,7 +27,7 @@ export const AuthPage: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as any)?.from || '/home';
+  const from = (location.state as any)?.from || '/dashboard';
 
   const getInviteParam = () => {
     const params = new URLSearchParams(location.search || window.location.search);
@@ -186,10 +186,10 @@ export const AuthPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       {/* Permanent SVNIT Branding in Auth Shell */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="inline-flex items-center justify-center h-20 w-20 rounded-2xl bg-white p-2 shadow-md border border-slate-200 mb-3">
+        <div className="inline-flex items-center justify-center h-14 w-14 mb-3">
           <img
             src="/assets/svnit_crest.png"
             alt="SVNIT Crest"
@@ -199,14 +199,14 @@ export const AuthPage: React.FC = () => {
             }}
           />
         </div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-[#1b365d]">SVNIT ClubDocs</h1>
-        <p className="mt-1 text-xs text-slate-600">
+        <h1 className="text-xl font-semibold text-slate-900">ClubDocs</h1>
+        <p className="mt-1 text-sm text-slate-500">
           Sardar Vallabhbhai National Institute of Technology, Surat
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-6 shadow-2xl rounded-2xl sm:px-10 border border-slate-100">
+        <div className="surface-card py-7 px-6 sm:px-8">
           {/* Auth Tabs */}
           <div className="flex border-b border-slate-200 mb-6">
             <button
@@ -215,13 +215,13 @@ export const AuthPage: React.FC = () => {
                 setTab('login');
                 resetFormFeedback();
               }}
-              className={`flex-1 py-2 text-center text-xs font-semibold border-b-2 transition-colors ${
+              className={`flex-1 py-2 text-center text-sm font-medium border-b-2 transition-colors ${
                 tab === 'login'
-                  ? 'border-amber-500 text-amber-600'
+                  ? 'border-brand-700 text-brand-800'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              Sign In
+              Sign in
             </button>
             <button
               type="button"
@@ -229,13 +229,13 @@ export const AuthPage: React.FC = () => {
                 setTab('register');
                 resetFormFeedback();
               }}
-              className={`flex-1 py-2 text-center text-xs font-semibold border-b-2 transition-colors ${
+              className={`flex-1 py-2 text-center text-sm font-medium border-b-2 transition-colors ${
                 tab === 'register'
-                  ? 'border-amber-500 text-amber-600'
+                  ? 'border-brand-700 text-brand-800'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              Register
+              Create account
             </button>
             <button
               type="button"
@@ -243,27 +243,27 @@ export const AuthPage: React.FC = () => {
                 setTab('forgot');
                 resetFormFeedback();
               }}
-              className={`flex-1 py-2 text-center text-xs font-semibold border-b-2 transition-colors ${
+              className={`flex-1 py-2 text-center text-sm font-medium border-b-2 transition-colors ${
                 tab === 'forgot' || tab === 'reset'
-                  ? 'border-amber-500 text-amber-600'
+                  ? 'border-brand-700 text-brand-800'
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              Forgot Key
+              Reset password
             </button>
           </div>
 
           {invitePreview && (
             <div className={`mb-4 p-3 rounded-lg border text-xs flex items-start gap-2.5 ${
               invitePreview.is_valid
-                ? 'bg-blue-50 border-blue-200 text-[#1b365d]'
+                ? 'bg-brand-50 border-brand-200 text-brand-700'
                 : 'bg-amber-50 border-amber-200 text-amber-800'
             }`}>
-              <Sparkles className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+              <Mail className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <div>
                 {invitePreview.is_valid ? (
                   <>
-                    <p className="font-bold">You've been invited!</p>
+                    <p className="font-semibold">You have been invited</p>
                     <p className="mt-0.5">
                       Join <span className="font-semibold">{invitePreview.club_name}</span> as{' '}
                       <span className="font-semibold capitalize">{invitePreview.role}</span>.
@@ -297,14 +297,14 @@ export const AuthPage: React.FC = () => {
           {/* LOGIN FORM */}
           {tab === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
-              <AuthInput icon={Mail} label="Email Address" type="email" required value={loginEmail} onChange={(e: any) => setLoginEmail(e.target.value)} placeholder="student@example.com" />
+              <AuthInput icon={Mail} label="Email" type="email" required value={loginEmail} onChange={(e: any) => setLoginEmail(e.target.value)} placeholder="student@example.com" />
               <AuthInput icon={Lock} label="Password" type="password" required value={loginPassword} onChange={(e: any) => setLoginPassword(e.target.value)} placeholder="••••••••••••" />
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-500">HttpOnly cookie session</span>
-                <button type="button" onClick={() => { setTab('forgot'); resetFormFeedback(); }} className="text-amber-600 hover:text-amber-700 font-medium">Forgot password?</button>
+              <div className="flex items-center justify-between text-xs">
+                <span />
+                <button type="button" onClick={() => { setTab('forgot'); resetFormFeedback(); }} className="text-brand-700 hover:underline">Forgot password?</button>
               </div>
-              <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                {loading ? 'Authenticating...' : 'Sign In'}
+              <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
+                {loading ? 'Signing in…' : 'Sign in'}
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>
@@ -313,12 +313,12 @@ export const AuthPage: React.FC = () => {
           {/* REGISTER FORM */}
           {tab === 'register' && (
             <form onSubmit={handleRegister} className="space-y-4">
-              <AuthInput icon={User} label="Full Name" type="text" required value={fullName} onChange={(e: any) => setFullName(e.target.value)} placeholder="Student Lead" />
+              <AuthInput icon={User} label="Full name" type="text" required value={fullName} onChange={(e: any) => setFullName(e.target.value)} placeholder="Your name" />
               <AuthInput icon={Mail} label="Email" type="email" required value={registerEmail} onChange={(e: any) => setRegisterEmail(e.target.value)} placeholder="lead@example.com" />
-              <AuthInput icon={Lock} label="Password (min 10 characters)" type="password" required minLength={10} value={registerPassword} onChange={(e: any) => setRegisterPassword(e.target.value)} placeholder="Min 10 characters" helper="Enforces strong password policy. Common dictionary passwords are rejected." />
-              <AuthInput icon={KeyRound} label="Club Invite Code (Optional)" type="text" value={inviteCode} onChange={(e: any) => setInviteCode(e.target.value.toUpperCase())} placeholder="e.g. ACM-A7B8C9" className="font-mono uppercase" />
-              <button type="submit" disabled={loading} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-2 px-4 rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50">
-                {loading ? 'Creating Account...' : 'Create Account'}
+              <AuthInput icon={Lock} label="Password (min 10 characters)" type="password" required minLength={10} value={registerPassword} onChange={(e: any) => setRegisterPassword(e.target.value)} placeholder="Min 10 characters" helper="Use at least 10 characters. Common passwords are not allowed." />
+              <AuthInput icon={KeyRound} label="Club invite code (optional)" type="text" value={inviteCode} onChange={(e: any) => setInviteCode(e.target.value.toUpperCase())} placeholder="e.g. ACM-A7B8C9" className="font-mono uppercase" />
+              <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
+                {loading ? 'Creating account…' : 'Create account'}
               </button>
             </form>
           )}
@@ -327,14 +327,14 @@ export const AuthPage: React.FC = () => {
           {tab === 'forgot' && (
             <div className="space-y-4">
               <form onSubmit={handleForgotPassword} className="space-y-4">
-                <AuthInput icon={Mail} label="Registered Email Address" type="email" required value={forgotEmail} onChange={(e: any) => setForgotEmail(e.target.value)} placeholder="student@example.com" helper="Returns enumeration-safe confirmation. Tokens expire in 30 minutes." />
-                <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2 px-4 rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50">
-                  {loading ? 'Dispatching...' : 'Send Reset Link'}
+                <AuthInput icon={Mail} label="Email" type="email" required value={forgotEmail} onChange={(e: any) => setForgotEmail(e.target.value)} placeholder="student@example.com" helper="If the address is registered, you will receive a reset link valid for 30 minutes." />
+                <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
+                  {loading ? 'Sending…' : 'Send reset link'}
                 </button>
               </form>
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                 <span className="text-slate-500">Already have a reset token?</span>
-                <button type="button" onClick={() => { setTab('reset'); resetFormFeedback(); }} className="text-amber-600 hover:text-amber-700 font-semibold">Enter Token</button>
+                <button type="button" onClick={() => { setTab('reset'); resetFormFeedback(); }} className="text-brand-700 hover:underline">Enter token</button>
               </div>
             </div>
           )}
@@ -342,13 +342,13 @@ export const AuthPage: React.FC = () => {
           {/* RESET PASSWORD FORM */}
           {tab === 'reset' && (
             <form onSubmit={handleResetPassword} className="space-y-4">
-              <AuthInput icon={KeyRound} label="Reset Token" type="text" required value={resetToken} onChange={(e: any) => setResetToken(e.target.value)} placeholder="Paste one-time token" className="font-mono" />
-              <AuthInput icon={Lock} label="New Password (min 10 characters)" type="password" required minLength={10} value={newPassword} onChange={(e: any) => setNewPassword(e.target.value)} placeholder="••••••••••••" />
-              <button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-lg text-xs font-semibold transition-colors shadow-sm disabled:opacity-50">
-                {loading ? 'Updating Password...' : 'Reset Password'}
+              <AuthInput icon={KeyRound} label="Reset token" type="text" required value={resetToken} onChange={(e: any) => setResetToken(e.target.value)} placeholder="Paste one-time token" className="font-mono" />
+              <AuthInput icon={Lock} label="New password" type="password" required minLength={10} value={newPassword} onChange={(e: any) => setNewPassword(e.target.value)} placeholder="••••••••••••" />
+              <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
+                {loading ? 'Updating…' : 'Reset password'}
               </button>
               <div className="text-center pt-2">
-                <button type="button" onClick={() => { setTab('login'); resetFormFeedback(); }} className="text-xs text-slate-500 hover:text-slate-800">Back to Sign In</button>
+                <button type="button" onClick={() => { setTab('login'); resetFormFeedback(); }} className="text-xs text-slate-500 hover:text-slate-800">Back to sign in</button>
               </div>
             </form>
           )}

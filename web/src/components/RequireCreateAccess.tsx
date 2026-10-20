@@ -16,7 +16,7 @@ export const RequireCreateAccess: React.FC<{ children: React.ReactNode }> = ({ c
     return (
       <div className="max-w-3xl mx-auto my-16 px-4 space-y-3" aria-busy="true">
         <div className="h-8 w-2/3 rounded-xl bg-slate-200 animate-pulse" />
-        <div className="h-32 rounded-2xl bg-slate-100 animate-pulse" />
+        <div className="h-32 rounded-xl bg-slate-100 animate-pulse" />
       </div>
     );
   }
@@ -26,7 +26,7 @@ export const RequireCreateAccess: React.FC<{ children: React.ReactNode }> = ({ c
   return (
     <div className="max-w-lg mx-auto my-16 px-4">
       <div className="surface-card p-8 text-center">
-        <div className="w-14 h-14 bg-slate-100 text-slate-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <div className="w-14 h-14 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center mx-auto mb-4">
           <Eye className="w-7 h-7" />
         </div>
         <h2 className="text-lg font-bold text-slate-900">You have read-only access</h2>

@@ -10,7 +10,6 @@ import {
   Hash,
   Shield,
   Layers,
-  Sparkles,
   Edit2,
   Archive,
   FileText,
@@ -204,7 +203,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
   if (loading) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
-        <Loader2 className="w-8 h-8 text-[#1b365d] animate-spin mx-auto mb-3" />
+        <Loader2 className="w-8 h-8 text-brand-700 animate-spin mx-auto mb-3" />
         <p className="text-slate-600 text-sm font-medium">Loading Template Gallery...</p>
       </div>
     );
@@ -213,17 +212,11 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <Layers className="w-6 h-6 text-[#1b365d]" />
-            <h1 className="text-xl font-bold text-slate-900">Template Gallery</h1>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-              {templates.length} templates
-            </span>
-          </div>
-          <p className="text-xs text-slate-600 mt-1.5 max-w-2xl">
-            Official institute-standard document templates and club-customized workflows. System templates are immutable and read-only; club editors and admins can customize them by creating an independent club fork.
+          <h1 className="page-title">Templates</h1>
+          <p className="page-subtitle max-w-2xl">
+            {templates.length} templates. Built-in templates are read-only; make a club copy to change one, or create your own.
           </p>
         </div>
 
@@ -234,57 +227,51 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                 type="button"
                 data-testid="wizard-template-btn"
                 onClick={() => setShowWizardModal(true)}
-                className="inline-flex items-center gap-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg font-semibold shadow-xs transition-colors"
+                className="btn-secondary"
               >
-                <Wand2 className="w-3.5 h-3.5" />
-                Template Wizard
+                <Wand2 className="w-4 h-4" />
+                Guided setup
               </button>
 
               <button
                 type="button"
                 data-testid="import-template-btn"
                 onClick={() => setShowImportModal(true)}
-                className="inline-flex items-center gap-1.5 text-xs text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-semibold shadow-xs transition-colors"
+                className="btn-secondary"
               >
-                <Upload className="w-3.5 h-3.5 text-blue-600" />
-                Import Document
+                <Upload className="w-4 h-4" />
+                Import a document
               </button>
 
               <button
                 type="button"
                 data-testid="new-blank-template-btn"
                 onClick={() => setActionModal({ type: 'blank', value: '' })}
-                className="inline-flex items-center gap-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg font-semibold shadow-xs transition-colors"
+                className="btn-secondary"
               >
-                <PlusCircle className="w-3.5 h-3.5" />
-                New Blank Template
+                <PlusCircle className="w-4 h-4" />
+                Blank template
               </button>
             </>
           )}
 
           <button
             onClick={fetchTemplates}
-            className="inline-flex items-center gap-1.5 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg font-semibold transition-colors"
+            className="btn-ghost"
+            title="Refresh"
+            aria-label="Refresh"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Refresh
+            <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Describe your template (AI Draft) - Admin/Editor Only */}
       {canManage && onOpenEditor && (
-        <div data-testid="ai-describe-box" className="bg-gradient-to-r from-blue-900 to-[#1b365d] rounded-xl p-5 text-white shadow-md border border-blue-800">
-          <div className="flex items-center justify-between gap-4 mb-2">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-yellow-300" />
-              <h2 className="text-sm font-bold tracking-wide uppercase text-blue-100">Describe Your Template (AI Draft)</h2>
-              <span className="text-[10px] bg-blue-700/80 text-blue-100 px-2 py-0.5 rounded-full font-semibold">Admin & Editor</span>
-            </div>
-            <span className="text-xs text-blue-200 hidden sm:inline">Builds a draft directly in the TipTap editor</span>
-          </div>
-          <p className="text-xs text-blue-100 mb-3">
-            Type what you need in plain English (e.g. purpose, event fields, repeating tables with computed totals, signees, and logos like &quot;use the ACM logo on the left&quot;).
+        <div data-testid="ai-describe-box" className="surface-card p-5">
+          <h2 className="section-title">Describe a new template</h2>
+          <p className="text-sm text-slate-600 mt-0.5 mb-3">
+            Say what the document is for and what it should contain: fields, tables, totals, who signs. The AI drafts it in the editor for you to review before publishing.
           </p>
           <form onSubmit={handleAiDraftSubmit} className="space-y-3">
             <textarea
@@ -293,18 +280,18 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
               onChange={(e) => setAiPrompt(e.target.value)}
               placeholder="e.g. A sponsorship request letter to a company with event name, date, venue, a tiers table with an amount per tier, and signatures for the coordinator and the faculty advisor"
               rows={3}
-              className="w-full text-xs text-slate-900 bg-white rounded-lg p-3 border border-blue-300 focus:outline-none focus:ring-2 focus:ring-yellow-400 font-normal shadow-inner placeholder:text-slate-400"
+              className="input-field"
               disabled={submittingAi}
             />
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] text-blue-200">Examples:</span>
+                <span className="text-sm text-slate-500">Try:</span>
                 {AI_TEMPLATE_EXAMPLES.map((ex) => (
                   <button
                     key={ex.label}
                     type="button"
                     onClick={() => setAiPrompt(ex.prompt)}
-                    className="text-[11px] bg-blue-800/80 hover:bg-blue-700 text-blue-100 px-2 py-0.5 rounded transition-colors"
+                    className="text-sm text-brand-700 hover:underline"
                   >
                     {ex.label}
                   </button>
@@ -314,58 +301,57 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                 type="submit"
                 disabled={submittingAi || !aiPrompt.trim()}
                 data-testid="ai-draft-submit-btn"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-slate-900 text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary"
               >
                 {submittingAi ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Drafting Template...</span>
+                    <span>Drafting…</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 text-blue-950" />
-                    <span>Generate Draft Template →</span>
+                    <span>Draft template</span>
                   </>
                 )}
               </button>
             </div>
             {submittingAi && (
-              <p className="text-[11px] text-blue-200" role="status">
+              <p className="text-sm text-slate-500" role="status">
                 The AI is designing fields, tables and signatories. This can take up to a minute when the model is busy.
               </p>
             )}
           </form>
           {aiError && (
-            <div className="mt-3 p-3 bg-red-900/60 border border-red-500 rounded-lg text-xs text-red-100 flex flex-col gap-1.5">
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex flex-col gap-1.5">
               <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-300" />
+                <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-600" />
                 <span>{aiError}</span>
               </div>
               {(aiError.toLowerCase().includes('session') || aiError.toLowerCase().includes('credential') || aiError.toLowerCase().includes('unauthorized')) && (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pl-6 mt-1">
-                  <p className="text-[11px] text-amber-200">
+                  <p className="text-sm text-red-700">
                     Your login session has expired. Please sign in again to continue drafting templates.
                   </p>
                   <button
                     type="button"
                     onClick={() => window.location.reload()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-bold rounded-lg text-xs shadow-xs transition-colors self-start sm:self-auto"
+                    className="btn-secondary self-start sm:self-auto"
                   >
-                    <span>Sign In Again →</span>
+                    <span>Sign in again</span>
                   </button>
                 </div>
               )}
               {(aiError.toLowerCase().includes('gemini') || aiError.toLowerCase().includes('api key') || aiError.toLowerCase().includes('unavailable') || aiError.toLowerCase().includes('quota')) && (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pl-6 mt-1">
-                  <p className="text-[11px] text-amber-200">
-                    Tip: Set <code className="bg-blue-950 px-1 py-0.5 rounded text-yellow-300 font-mono">GEMINI_API_KEY</code> in <code className="bg-blue-950 px-1 py-0.5 rounded text-yellow-300 font-mono">.env</code> to activate live Gemini AI drafting.
+                  <p className="text-sm text-red-700">
+                    The AI service is unavailable right now. You can still build the template by hand.
                   </p>
                   <button
                     type="button"
                     onClick={() => setActionModal({ type: 'blank', value: '' })}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold rounded-lg text-xs shadow-xs transition-colors self-start sm:self-auto"
+                    className="btn-secondary self-start sm:self-auto"
                   >
-                    <span>Open Manual Editor →</span>
+                    <span>Start a blank template</span>
                   </button>
                 </div>
               )}
@@ -392,19 +378,17 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenEditor(aiCreatedTemplate.id)}
-                className="px-3.5 py-1.5 bg-[#1b365d] hover:bg-[#132742] text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+                className="px-3.5 py-1.5 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                 Review &amp; publish
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => onSelectTemplate(aiCreatedTemplate.slug || aiCreatedTemplate.id)}
-                className="px-3.5 py-1.5 bg-[#1b365d] hover:bg-[#132742] text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+                className="px-3.5 py-1.5 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                Use This Template
+                Use this template
               </button>
             )}
           </div>
@@ -443,7 +427,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
             onClick={() => setSelectedCategory(cat)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
               selectedCategory === cat
-                ? 'bg-[#1b365d] text-white shadow-sm'
+                ? 'bg-brand-700 text-white shadow-sm'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
             }`}
           >
@@ -477,7 +461,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                   <img
                     src={tmpl.thumbnail_url || `/api/v1/clubs/${clubId}/documents/templates/${tmpl.id}/thumbnail`}
                     alt={tmpl.name}
-                    className="w-full h-full object-cover object-top hover:scale-105 transition-transform duration-300"
+                    className="w-full h-full object-cover object-top "
                     onError={(e) => {
                       const target = e.target as HTMLElement;
                       target.style.display = 'none';
@@ -485,26 +469,25 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                   />
                   <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
                     {tmpl.is_system ? (
-                      <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-900 px-2 py-0.5 rounded-full border border-blue-300 flex items-center gap-1">
-                        <Shield className="w-3 h-3 text-blue-700" />
-                        System Template
+                      <span className="badge bg-white/95 text-slate-700 border-slate-200">
+                        <Shield className="w-3 h-3" />
+                        Built-in
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-amber-700" />
-                        Club Custom ({tmpl.status})
+                      <span className={`badge ${tmpl.status === 'published' ? 'bg-white/95 text-brand-800 border-brand-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
+                        {tmpl.status === 'published' ? 'Club template' : 'Draft'}
                       </span>
                     )}
                     {tmpl.numbering_series && (
-                      <span className="text-[10px] font-mono font-bold bg-slate-900/80 text-white px-2 py-0.5 rounded-full backdrop-blur-xs flex items-center gap-1">
-                        <Hash className="w-2.5 h-2.5 text-amber-400" />
+                      <span className="badge bg-white/95 text-slate-600 border-slate-200 font-mono">
+                        <Hash className="w-3 h-3" />
                         {tmpl.numbering_series}
                       </span>
                     )}
                   </div>
 
                   <div className="absolute top-2.5 right-2.5">
-                    <span className="text-[10px] font-semibold bg-white/90 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200 backdrop-blur-xs">
+                    <span className="text-xs font-semibold bg-white/90 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200 backdrop-blur-xs">
                       {tmpl.stage ? tmpl.stage.replace('_', ' ') : 'General'}
                     </span>
                   </div>
@@ -520,13 +503,13 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                     {tmpl.description || 'Institutional document template compliant with SVNIT Surat standards.'}
                   </p>
 
-                  <div className="pt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                  <div className="pt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                     <span className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded">
                       <Tag className="w-3 h-3 text-slate-400" />
                       {tmpl.category || 'Official Document'}
                     </span>
                     {tmpl.is_system && (
-                      <span className="text-[11px] text-slate-400 italic">
+                      <span className="text-xs text-slate-400 italic">
                         Read-only
                       </span>
                     )}
@@ -539,7 +522,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                 <button
                   type="button"
                   onClick={() => onSelectTemplate(tmpl.slug || tmpl.id)}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-[#1b365d] hover:bg-[#152a48] text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors shadow-xs"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-brand-800 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors shadow-xs"
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
                   Use Template
@@ -566,7 +549,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                         data-testid={`edit-draft-btn-${tmpl.id}`}
                         onClick={() => onOpenEditor(tmpl.id)}
                         title="Open template in editor"
-                        className="inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
+                        className="inline-flex items-center gap-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
                       >
                         <FileText className="w-3.5 h-3.5" />
                         <span>Edit Draft</span>
@@ -605,9 +588,9 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 {actionModal.type === 'fork' && <><Copy className="w-4 h-4 text-amber-600" /> Customize Template (Fork)</>}
-                {actionModal.type === 'rename' && <><Edit2 className="w-4 h-4 text-[#1b365d]" /> Rename Custom Draft</>}
+                {actionModal.type === 'rename' && <><Edit2 className="w-4 h-4 text-brand-700" /> Rename Custom Draft</>}
                 {actionModal.type === 'archive' && <><Archive className="w-4 h-4 text-red-600" /> Archive Custom Draft</>}
-                {actionModal.type === 'blank' && <><PlusCircle className="w-4 h-4 text-blue-600" /> New Blank Template</>}
+                {actionModal.type === 'blank' && <><PlusCircle className="w-4 h-4 text-brand-600" /> New Blank Template</>}
               </h3>
               <button
                 type="button"
@@ -639,7 +622,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                     value={actionModal.value || ''}
                     onChange={(e) => setActionModal({ ...actionModal, value: e.target.value })}
                     placeholder={actionModal.type === 'blank' ? 'e.g. Sponsorship Request Letter' : undefined}
-                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[#1b365d]"
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-700"
                   />
                 </div>
               )}
@@ -663,7 +646,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                   className={`px-5 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5 text-white ${
                     actionModal.type === 'archive'
                       ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-[#1b365d] hover:bg-[#152a48]'
+                      : 'bg-brand-700 hover:bg-brand-800'
                   }`}
                 >
                   {modalSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -681,8 +664,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-blue-600" />
-                Select Club Logo
+                Select club logo
               </h3>
               <button
                 onClick={() => {
@@ -703,7 +685,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                 <button
                   key={c.asset_id}
                   onClick={() => handlePickLogo(c.asset_id)}
-                  className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 hover:border-brand-500 hover:bg-brand-50 transition-all text-left"
                 >
                   <div className="flex items-center gap-3">
                     <img
@@ -713,7 +695,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                     />
                     <span className="text-xs font-semibold text-slate-700">{c.filename}</span>
                   </div>
-                  <span className="text-xs text-blue-600 font-bold">Use this →</span>
+                  <span className="text-xs text-brand-600 font-bold">Use this →</span>
                 </button>
               ))}
             </div>

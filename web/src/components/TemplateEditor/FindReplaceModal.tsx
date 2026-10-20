@@ -67,7 +67,7 @@ export const FindReplaceModal: React.FC<FindReplaceModalProps> = ({ isOpen, onCl
     <div className="fixed top-20 right-20 z-50 bg-white rounded-xl shadow-2xl border border-slate-200 w-80 p-4 animate-in fade-in duration-150">
       <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
         <div className="flex items-center gap-2">
-          <Search className="w-4 h-4 text-indigo-600" />
+          <Search className="w-4 h-4 text-brand-600" />
           <h4 className="font-bold text-slate-800 text-xs">Find and Replace</h4>
         </div>
         <button
@@ -80,18 +80,18 @@ export const FindReplaceModal: React.FC<FindReplaceModalProps> = ({ isOpen, onCl
 
       <div className="space-y-3">
         <div>
-          <label className="block text-[11px] font-semibold text-slate-600 mb-1">Find</label>
+          <label className="block text-xs font-semibold text-slate-600 mb-1">Find</label>
           <div className="relative">
             <input
               type="text"
               value={findText}
               onChange={(e) => handleFindChange(e.target.value)}
               placeholder="Search in template..."
-              className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-brand-500 focus:outline-none"
               autoFocus
             />
             {matchCount !== null && (
-              <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-mono">
+              <span className="absolute right-2 top-1.5 text-[11px] text-slate-400 font-mono">
                 {matchCount} found
               </span>
             )}
@@ -99,18 +99,18 @@ export const FindReplaceModal: React.FC<FindReplaceModalProps> = ({ isOpen, onCl
         </div>
 
         <div>
-          <label className="block text-[11px] font-semibold text-slate-600 mb-1">Replace With</label>
+          <label className="block text-xs font-semibold text-slate-600 mb-1">Replace With</label>
           <input
             type="text"
             value={replaceText}
             onChange={(e) => setReplaceText(e.target.value)}
             placeholder="New text..."
-            className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-brand-500 focus:outline-none"
           />
         </div>
 
         {message && (
-          <div className="text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded flex items-center gap-1.5">
+          <div className="text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded flex items-center gap-1.5">
             <Check className="w-3.5 h-3.5" />
             {message}
           </div>
@@ -126,7 +126,7 @@ export const FindReplaceModal: React.FC<FindReplaceModalProps> = ({ isOpen, onCl
           <button
             onClick={handleReplaceAll}
             disabled={!findText || matchCount === 0}
-            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded shadow-sm transition flex items-center gap-1"
+            className="px-3 py-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-xs font-semibold rounded shadow-sm transition flex items-center gap-1"
           >
             <Replace className="w-3 h-3" />
             Replace All
