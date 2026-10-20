@@ -32,6 +32,8 @@ PyYAML==6.0.3
 # Utilities & Networking
 httpx==0.28.1
 anyio==4.15.1
+google-auth==2.62.0
+requests==2.33.1
 
 # Testing & Browser Automation
 pytest==9.1.1

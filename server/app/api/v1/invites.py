@@ -164,6 +164,20 @@ def accept_invite(
                 },
             )
 
+    # Check if invite is tied to a specific email
+    from server.app.core.security import is_allowed_email, EMAIL_DOMAIN_ERROR_CODE, EMAIL_DOMAIN_REJECTION_MESSAGE
+    if invite.email_or_code and "@" in invite.email_or_code:
+        if invite.email_or_code.strip().lower() != current_user.email.strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "EMAIL_MISMATCH", "message": "This invite was created for a different email address."},
+            )
+    if not is_allowed_email(current_user.email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": EMAIL_DOMAIN_ERROR_CODE, "message": EMAIL_DOMAIN_REJECTION_MESSAGE},
+        )
+
     club = db.query(Club).filter(Club.id == invite.club_id).first()
     if not club:
         raise HTTPException(

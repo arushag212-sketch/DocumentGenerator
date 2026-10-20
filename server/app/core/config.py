@@ -78,6 +78,10 @@ class Settings(BaseModel):
     ASSETS_DIR: Path = BASE_DIR / "assets"
     DATA_DIR: Path = BASE_DIR / "data"
 
+    # Google OAuth & Email Domain Policy
+    GOOGLE_CLIENT_ID: str = ""
+    ALLOWED_EMAIL_DOMAIN: str = ""
+
     def __init__(self, **data):
         super().__init__(**data)
         self._initialize_secrets()
@@ -128,6 +132,18 @@ class Settings(BaseModel):
                     raise RuntimeError(f"FATAL: FIELD_ENCRYPTION_KEY is invalid for Fernet: {e}")
                 generated_fernet = Fernet.generate_key().decode()
                 self.FIELD_ENCRYPTION_KEY = generated_fernet
+
+        # Validation for ALLOWED_EMAIL_DOMAIN in production
+        allowed_domain = os.environ.get("ALLOWED_EMAIL_DOMAIN", "").strip().lower()
+        if not allowed_domain and not is_dev:
+            raise RuntimeError(
+                f"FATAL: In non-development mode ({env_mode}), ALLOWED_EMAIL_DOMAIN environment variable "
+                f"must be explicitly provided."
+            )
+        self.ALLOWED_EMAIL_DOMAIN = allowed_domain
+
+        # Google OAuth Client ID
+        self.GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 
 
 settings = Settings()

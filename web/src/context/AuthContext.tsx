@@ -9,6 +9,7 @@ interface AuthContextType {
   activeClub: Club | null;
   setActiveClubId: (id: string | number) => void;
   login: (formData: URLSearchParams) => Promise<void>;
+  loginWithGoogle: (credential: string, inviteCode?: string) => Promise<User>;
   logout: () => Promise<void>;
   refreshClubs: () => Promise<void>;
 }
@@ -57,6 +58,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fetchUserAndClubs();
   };
 
+  const loginWithGoogle = async (credential: string, inviteCode?: string) => {
+    const res = await api.auth.google(credential, inviteCode);
+    await fetchUserAndClubs();
+    return res.user;
+  };
+
   const logout = async () => {
     try {
       await api.auth.logout();
@@ -94,6 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activeClub,
         setActiveClubId,
         login,
+        loginWithGoogle,
         logout,
         refreshClubs,
       }}

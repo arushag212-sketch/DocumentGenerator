@@ -15,6 +15,8 @@ import { OnboardingPositionPage } from './pages/OnboardingPositionPage';
 import { JoinRequestsPage } from './pages/JoinRequestsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { VerifyPage } from './pages/VerifyPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { TermsPage } from './pages/TermsPage';
 import { api } from './api/client';
 import { ClubPermissions } from './types';
 
@@ -102,8 +104,11 @@ const RootRedirect: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <Routes>
-      {/* Public route */}
+      {/* Public routes */}
       <Route path="/login" element={<AuthPage />} />
+      <Route path="/register" element={<AuthPage initialTab="register" />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
       <Route path="/verify" element={<VerifyPage />} />
       <Route path="/verify/:code" element={<VerifyPage />} />
 

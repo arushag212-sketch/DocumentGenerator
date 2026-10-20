@@ -2002,6 +2002,14 @@ def create_club_invite(
     import secrets
     from server.app.core.permissions import ROLE_RANKS
 
+    from server.app.core.security import is_allowed_email, EMAIL_DOMAIN_ERROR_CODE, EMAIL_DOMAIN_REJECTION_MESSAGE
+    target_email = payload.email.strip().lower() if payload.email else None
+    if target_email and not is_allowed_email(target_email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": EMAIL_DOMAIN_ERROR_CODE, "message": EMAIL_DOMAIN_REJECTION_MESSAGE},
+        )
+
     target_role = payload.role.lower().strip()
     inviter_rank = ROLE_RANKS.get(ctx.role, 0)
     target_rank = ROLE_RANKS.get(target_role, 0)
@@ -2023,7 +2031,7 @@ def create_club_invite(
         club_id=ctx.club.id,
         code_hash=code_hash,
         code=None,
-        email_or_code=None,
+        email_or_code=target_email,
         role=target_role,
         created_by=ctx.user.id,
         max_uses=max_uses,

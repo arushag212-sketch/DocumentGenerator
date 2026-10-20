@@ -40,14 +40,15 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
-        "img-src 'self' data: blob:; "
-        "connect-src 'self' http://localhost:* http://127.0.0.1:*; "
-        "frame-src 'self' blob:; "
+        "img-src 'self' data: blob: https://*.googleusercontent.com; "
+        "connect-src 'self' http://localhost:* http://127.0.0.1:* https://accounts.google.com; "
+        "frame-src 'self' blob: https://accounts.google.com; "
         "frame-ancestors 'self';"
     )
     return response

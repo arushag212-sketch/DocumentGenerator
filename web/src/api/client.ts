@@ -116,6 +116,16 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
 export const api = {
   auth: {
     me: () => apiFetch<User>('/auth/me'),
+    google: async (credential: string, invite_code?: string) => {
+      const res = await apiFetch<{ message: string; user: User; access_token?: string; refresh_token?: string; csrf_token?: string }>('/auth/google', {
+        method: 'POST',
+        body: JSON.stringify({ credential, invite_code }),
+      });
+      if (res.access_token) localStorage.setItem('access_token', res.access_token);
+      if (res.refresh_token) localStorage.setItem('refresh_token', res.refresh_token);
+      if (res.csrf_token) localStorage.setItem('csrf_token', res.csrf_token);
+      return res;
+    },
     login: async (formData: URLSearchParams) => {
       const res = await apiFetch<{ message: string; user: User; access_token?: string; refresh_token?: string; csrf_token?: string }>('/auth/token', {
         method: 'POST',

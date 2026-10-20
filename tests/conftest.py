@@ -29,6 +29,8 @@ TEST_STORAGE_ROOT = Path(tempfile.gettempdir()) / "clubdocs_test_storage"
 shutil.rmtree(TEST_STORAGE_ROOT, ignore_errors=True)
 os.environ["STORAGE_LOCAL_ROOT"] = str(TEST_STORAGE_ROOT)
 os.environ["STORAGE_GC_ENABLED"] = "false"
+os.environ["ALLOWED_EMAIL_DOMAIN"] = ""
+os.environ["ENVIRONMENT"] = "test"
 
 from server.app.core.database import Base, engine as app_engine, SessionLocal as app_SessionLocal
 import server.app.core.database as db_module

@@ -153,6 +153,27 @@ This generates `clubdocs_share.zip` in the root directory (typically under 10 MB
 
 ---
 
+## 🔑 Google Sign-In Setup
+
+SVNIT ClubDocs supports institutional "Sign in with Google", restricted exclusively to SVNIT email accounts (`@svnit.ac.in` and approved departmental sub-domains).
+
+### Required Environment Variables
+
+1. **Backend / API Service (Render / Docker / Local)**:
+   - `GOOGLE_CLIENT_ID`: Public OAuth 2.0 Client ID (e.g. `344292307873-ck6rrqp176c72qo5cnm8m9m86n0avj3g.apps.googleusercontent.com`).
+   - `ALLOWED_EMAIL_DOMAIN`: Institutional domain restriction (`svnit.ac.in`).
+
+2. **Frontend SPA (Vercel / Web build)**:
+   - `VITE_GOOGLE_CLIENT_ID`: The same public Google Client ID exposed to Vite.
+
+### Google Cloud Console Configuration
+- In Google Cloud Console under **APIs & Services > Credentials > OAuth 2.0 Client IDs**:
+  - Add `http://localhost:5173` and `http://localhost` to **Authorised JavaScript origins** for local development.
+  - Add your production Vercel deployment URL (e.g. `https://clubdocs.vercel.app` or custom domain `https://clubdocs.svnit.ac.in`) to **Authorised JavaScript origins**.
+- Note: The platform uses Google Identity Services token verification on the backend and does not require or use a client secret.
+
+---
+
 ## 📚 Documentation Links
 
 - [Template Editor & Design Studio Guide](docs/TEMPLATE_EDITOR_GUIDE.md)

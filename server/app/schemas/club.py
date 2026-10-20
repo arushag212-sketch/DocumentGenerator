@@ -124,6 +124,7 @@ class InviteCreate(BaseModel):
     role: str = Field("editor", pattern="^(owner|admin|editor|viewer)$")
     max_uses: int = Field(1, ge=1, le=100)
     expiry_days: int = Field(7, ge=1, le=30)
+    email: Optional[str] = None
 
 
 class InviteOut(BaseModel):

@@ -159,3 +159,12 @@ def generate_reset_token() -> tuple[str, str]:
     raw_token = secrets.token_urlsafe(32)
     token_hash = hash_token(raw_token)
     return raw_token, token_hash
+
+
+# ---------------- EMAIL DOMAIN POLICY ----------------
+from server.app.core.email_domain import (  # noqa: E402
+    EMAIL_DOMAIN_ERROR_CODE,
+    EMAIL_DOMAIN_REJECTION_MESSAGE,
+    is_allowed_email,
+)
+

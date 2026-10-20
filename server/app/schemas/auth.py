@@ -39,6 +39,11 @@ class UserRegister(BaseModel):
         return data
 
 
+class GoogleAuthRequest(BaseModel):
+    credential: str
+    invite_code: Optional[str] = None
+
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str

@@ -97,6 +97,9 @@ ClubDocs supports two production deployment topologies:
 | `S3_ENDPOINT_URL` | No | - | S3 endpoint override for MinIO, Cloudflare R2, or Supabase Storage. |
 | `S3_ACCESS_KEY` | Cond. | - | Access key for S3 compatible object storage. |
 | `S3_SECRET_KEY` | Cond. | - | Secret key for S3 compatible object storage. |
+| `GOOGLE_CLIENT_ID` | Yes | - | Google OAuth Client ID for institutional sign-in. Set on Render/backend. |
+| `ALLOWED_EMAIL_DOMAIN` | Yes | `svnit.ac.in` | Institutional domain restriction. Set on Render/backend (`svnit.ac.in`). |
+| `VITE_GOOGLE_CLIENT_ID` | Yes | - | Google OAuth Client ID for frontend GIS button. Set in Vercel project settings. |
 | `SMTP_HOST` | No | - | SMTP hostname for outgoing emails (activation, password reset, invitations). If unset, defaults to Console fallback. |
 | `SMTP_PORT` | No | `587` | SMTP port (587 for STARTTLS, 465 for TLS). |
 | `SMTP_USER` | No | - | SMTP authentication username. |

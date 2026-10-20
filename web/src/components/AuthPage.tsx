@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { GoogleSignInButton } from './auth/GoogleSignInButton';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { Lock, Mail, User, KeyRound, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react';
@@ -23,7 +24,7 @@ const AuthInput: React.FC<{
   </div>
 );
 
-export const AuthPage: React.FC = () => {
+export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ initialTab }) => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,7 +40,7 @@ export const AuthPage: React.FC = () => {
   };
 
   const initialInvite = getInviteParam();
-  const [tab, setTab] = useState<'login' | 'register' | 'forgot' | 'reset'>(initialInvite ? 'register' : 'login');
+  const [tab, setTab] = useState<'login' | 'register' | 'forgot' | 'reset'>(initialInvite ? 'register' : (initialTab || 'login'));
 
   // Form states
   const [loginEmail, setLoginEmail] = useState('');
@@ -280,6 +281,34 @@ export const AuthPage: React.FC = () => {
             </div>
           )}
 
+          {/* TOP OF LOGIN & REGISTER: Google Sign-in */}
+          {(tab === 'login' || tab === 'register') && (
+            <div className="mb-4">
+              <GoogleSignInButton
+                inviteCode={inviteCode.trim() || undefined}
+                onSuccess={(_user) => {
+                  navigate(from, { replace: true });
+                }}
+                onError={(msg) => {
+                  setError(msg);
+                }}
+              />
+              <p className="text-center text-xs text-slate-500 mt-1.5">
+                Use your SVNIT email (@svnit.ac.in)
+              </p>
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-white px-2.5 text-slate-400 font-medium">
+                    or continue with email
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-start gap-2">
               <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -352,6 +381,16 @@ export const AuthPage: React.FC = () => {
               </div>
             </form>
           )}
+          {/* Footer links to Privacy and Terms */}
+          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-3 text-xs text-slate-400">
+            <Link to="/privacy" className="hover:text-slate-600 hover:underline transition-colors">
+              Privacy Policy
+            </Link>
+            <span>·</span>
+            <Link to="/terms" className="hover:text-slate-600 hover:underline transition-colors">
+              Terms of Service
+            </Link>
+          </div>
         </div>
       </div>
     </div>

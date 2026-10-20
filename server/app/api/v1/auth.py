@@ -14,6 +14,7 @@ from server.app.core.database import get_db
 from server.app.core.email import get_email_sender
 from server.app.core.permissions import get_current_user
 from server.app.core.rate_limit import check_rate_limit
+from server.app.core.scoped_repo import ScopedRepository
 from server.app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -24,11 +25,15 @@ from server.app.core.security import (
     hash_token,
     validate_password_policy,
     verify_password,
+    is_allowed_email,
+    EMAIL_DOMAIN_ERROR_CODE,
+    EMAIL_DOMAIN_REJECTION_MESSAGE,
 )
 from server.app.models import Club, Invite, Membership, User
 from server.app.schemas.auth import (
     ClubMembershipSummary,
     ForgotPasswordRequest,
+    GoogleAuthRequest,
     RefreshTokenRequest,
     ResetPasswordRequest,
     TokenResponse,
@@ -134,13 +139,119 @@ def get_csrf(response: Response):
     return {"csrf_token": token}
 
 
+def _validate_invite_code(
+    invite_code: Optional[str],
+    db: Session,
+    client_ip: Optional[str] = None,
+    user_email: Optional[str] = None,
+) -> Optional[Invite]:
+    """Validate an invite code for registration or Google sign-in."""
+    if not invite_code or not invite_code.strip():
+        return None
+
+    clean_inv = invite_code.strip()
+    inv_hash = hashlib.sha256(clean_inv.encode("utf-8")).hexdigest()
+    invite_obj = (
+        db.query(Invite)
+        .filter((Invite.code_hash == inv_hash) | (Invite.code == inv_hash) | (Invite.code == clean_inv))
+        .first()
+    )
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if (
+        not invite_obj
+        or invite_obj.revoked
+        or (invite_obj.expires_at and invite_obj.expires_at < now)
+        or (invite_obj.max_uses > 0 and invite_obj.use_count >= invite_obj.max_uses)
+    ):
+        log_audit(
+            db=db,
+            action="invite_failed",
+            entity_type="invite",
+            entity_id=invite_obj.id if invite_obj else None,
+            club_id=invite_obj.club_id if invite_obj else None,
+            user_id=None,
+            meta={"code_hash": inv_hash[:16], "reason": "invalid_or_expired"},
+            ip=client_ip,
+            commit=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "INVALID_OR_EXPIRED_INVITE", "message": "Invalid or expired invite"},
+        )
+
+    # If invite is tied to a specific email, verify match
+    if invite_obj.email_or_code and "@" in invite_obj.email_or_code and user_email:
+        if invite_obj.email_or_code.strip().lower() != user_email.strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "EMAIL_MISMATCH", "message": "This invite was created for a different email address."},
+            )
+
+    return invite_obj
+
+
+def _apply_invite_to_user(
+    invite_obj: Invite,
+    user: User,
+    db: Session,
+    client_ip: Optional[str] = None,
+) -> Membership:
+    """Create or update club membership from invite and record audit log."""
+    repo = ScopedRepository(db, Membership, club_id=invite_obj.club_id)
+    existing_m = repo.find_first(Membership.user_id == user.id)
+    if existing_m:
+        if existing_m.status != "active":
+            existing_m.status = "active"
+            existing_m.role = invite_obj.role
+            m = existing_m
+        else:
+            from server.app.core.permissions import ROLE_RANKS
+            if ROLE_RANKS.get(invite_obj.role, 0) > ROLE_RANKS.get(existing_m.role, 0):
+                existing_m.role = invite_obj.role
+            m = existing_m
+    else:
+        m = repo.create(
+            user_id=user.id,
+            role=invite_obj.role,
+            status="active",
+        )
+
+    invite_obj.use_count += 1
+    if invite_obj.max_uses > 0 and invite_obj.use_count >= invite_obj.max_uses:
+        invite_obj.accepted_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.flush()
+
+    log_audit(
+        db=db,
+        action="invite_accepted",
+        entity_type="membership",
+        entity_id=m.id,
+        club_id=invite_obj.club_id,
+        user_id=user.id,
+        meta={"code": invite_obj.code, "role": invite_obj.role, "email": user.email},
+        ip=client_ip,
+    )
+    return m
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: UserRegister, request: Request, response: Response, db: Session = Depends(get_db)):
-    """Register a new user account with rate limiting and password policy validation."""
+    """Register a new user account with rate limiting, password policy, and domain check."""
     client_ip = request.client.host if request.client else "unknown"
 
     # Rate limiting: max 10 registrations per hour per IP
     check_rate_limit(f"reg_ip_{client_ip}", max_requests=10, window_seconds=3600, db=db)
+
+    clean_email = payload.email.lower().strip()
+
+    invite_obj = _validate_invite_code(payload.invite_code, db, client_ip, user_email=clean_email)
+
+    # Reject emails failing institution domain policy
+    if not is_allowed_email(clean_email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": EMAIL_DOMAIN_ERROR_CODE, "message": EMAIL_DOMAIN_REJECTION_MESSAGE},
+        )
 
     try:
         validate_password_policy(payload.password)
@@ -150,46 +261,12 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
             detail={"code": "WEAK_PASSWORD", "message": str(e)},
         )
 
-    clean_email = payload.email.lower().strip()
     existing = db.query(User).filter(User.email == clean_email).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "EMAIL_EXISTS", "message": "Email is already registered"},
         )
-
-    invite_obj = None
-    if payload.invite_code:
-        clean_inv = payload.invite_code.strip()
-        inv_hash = hashlib.sha256(clean_inv.encode("utf-8")).hexdigest()
-        invite_obj = (
-            db.query(Invite)
-            .filter((Invite.code_hash == inv_hash) | (Invite.code == inv_hash) | (Invite.code == clean_inv))
-            .first()
-        )
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        if (
-            not invite_obj
-            or invite_obj.revoked
-            or (invite_obj.expires_at and invite_obj.expires_at < now)
-            or (invite_obj.max_uses > 0 and invite_obj.use_count >= invite_obj.max_uses)
-        ):
-            client_ip = request.client.host if request and request.client else None
-            log_audit(
-                db=db,
-                action="invite_failed",
-                entity_type="invite",
-                entity_id=invite_obj.id if invite_obj else None,
-                club_id=invite_obj.club_id if invite_obj else None,
-                user_id=None,
-                meta={"code_hash": inv_hash[:16], "reason": "invalid_or_expired_at_register"},
-                ip=client_ip,
-                commit=True,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "INVALID_OR_EXPIRED_INVITE", "message": "Invalid or expired invite"},
-            )
 
     user = User(
         email=clean_email,
@@ -203,29 +280,7 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
     db.refresh(user)
 
     if invite_obj:
-        m = Membership(
-            id=str(uuid.uuid4()),
-            user_id=user.id,
-            club_id=invite_obj.club_id,
-            role=invite_obj.role,
-            status="active",
-        )
-        db.add(m)
-        invite_obj.use_count += 1
-        if invite_obj.use_count >= invite_obj.max_uses:
-            invite_obj.accepted_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        db.flush()
-
-        log_audit(
-            db=db,
-            action="invite_accepted",
-            entity_type="membership",
-            entity_id=m.id,
-            club_id=invite_obj.club_id,
-            user_id=user.id,
-            meta={"code": invite_obj.code, "role": invite_obj.role, "email": user.email},
-            ip=client_ip,
-        )
+        _apply_invite_to_user(invite_obj, user, db, client_ip)
 
     log_audit(
         db=db,
@@ -249,6 +304,161 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
     )
 
 
+@router.post("/google", response_model=TokenResponse)
+def google_auth(
+    payload: GoogleAuthRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Sign in or register using Google OAuth ID token (SVNIT emails only)."""
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "GOOGLE_AUTH_NOT_CONFIGURED", "message": "Google sign-in is not configured"},
+        )
+
+    client_ip = request.client.host if request.client else "unknown"
+
+    # 1. Rate limit with existing check_rate_limit, like /login (per IP)
+    check_rate_limit(f"login_ip_{client_ip}", max_requests=10, window_seconds=60, db=db)
+
+    # 2. Verify ID token with google-auth
+    import google.auth.transport.requests
+    import google.oauth2.id_token
+
+    try:
+        transport_req = google.auth.transport.requests.Request()
+        claims = google.oauth2.id_token.verify_oauth2_token(
+            payload.credential,
+            transport_req,
+            settings.GOOGLE_CLIENT_ID,
+            clock_skew_in_seconds=10,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "INVALID_GOOGLE_TOKEN", "message": "Google sign-in failed, please try again"},
+        )
+
+    # 3. Require claims["iss"] in {"accounts.google.com", "https://accounts.google.com"} and email_verified is True
+    iss = claims.get("iss")
+    if iss not in {"accounts.google.com", "https://accounts.google.com"} or claims.get("email_verified") is not True:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "INVALID_GOOGLE_TOKEN", "message": "Google sign-in failed, please try again"},
+        )
+
+    # 4. Apply is_allowed_email(claims["email"]) -> 403 with rejection message
+    google_email = (claims.get("email") or "").strip().lower()
+    if not is_allowed_email(google_email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": EMAIL_DOMAIN_ERROR_CODE, "message": EMAIL_DOMAIN_REJECTION_MESSAGE},
+        )
+
+    # If invite_code is given, validate it upfront (before modifying database)
+    invite_obj = None
+    if payload.invite_code:
+        invite_obj = _validate_invite_code(payload.invite_code, db, client_ip, user_email=google_email)
+
+    # 5. Find the user:
+    #    - first by google_sub == claims["sub"]
+    #    - else by lowercased email
+    sub = str(claims["sub"])
+    user = db.query(User).filter(User.google_sub == sub).first()
+    is_new_user = False
+
+    if not user:
+        user = db.query(User).filter(User.email == google_email).first()
+        if user:
+            if not user.google_sub:
+                user.google_sub = sub
+                db.flush()
+        else:
+            is_new_user = True
+            name = (claims.get("name") or google_email.split("@")[0]).strip()
+            user = User(
+                email=google_email,
+                name=name,
+                password_hash=None,
+                email_verified_at=datetime.now(timezone.utc),
+                token_version=1,
+                google_sub=sub,
+            )
+            db.add(user)
+            db.flush()
+            db.refresh(user)
+
+    # 6. Respect existing account states the same way /login does (disabled, locked)
+    now = datetime.now(timezone.utc)
+    if not is_new_user:
+        if user.locked_until:
+            locked_until_dt = user.locked_until
+            if locked_until_dt.tzinfo is None:
+                locked_until_dt = locked_until_dt.replace(tzinfo=timezone.utc)
+            if locked_until_dt > now:
+                remaining = int((locked_until_dt - now).total_seconds())
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": "ACCOUNT_LOCKED",
+                        "message": f"Account temporarily locked due to repeated failed logins. Retry in {remaining} seconds.",
+                    },
+                )
+            else:
+                user.locked_until = None
+                user.failed_login_attempts = 0
+
+        if user.disabled_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "ACCOUNT_DISABLED", "message": "Account has been deactivated"},
+            )
+
+    # 7. Apply invite code if provided
+    if invite_obj:
+        _apply_invite_to_user(invite_obj, user, db, client_ip)
+
+    # 8. Reset lockout/failure counters, update last_login_at, write audit logs
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_login_at = now
+    db.flush()
+
+    if is_new_user:
+        log_audit(
+            db=db,
+            action="user_registered",
+            entity_type="user",
+            entity_id=user.id,
+            user_id=user.id,
+            meta={"method": "google", "email": user.email, "name": user.name},
+            ip=client_ip,
+        )
+    else:
+        log_audit(
+            db=db,
+            action="user_login",
+            entity_type="user",
+            entity_id=user.id,
+            user_id=user.id,
+            meta={"method": "google", "email": user.email},
+            ip=client_ip,
+        )
+
+    # 9. Log in with existing _set_auth_cookies(response, user) and return TokenResponse
+    access_token, refresh_token, csrf_token = _set_auth_cookies(response, user)
+    user_out = _build_user_out(user, db)
+
+    return TokenResponse(
+        user=user_out,
+        csrf_token=csrf_token,
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(payload: UserLogin, request: Request, response: Response, db: Session = Depends(get_db)):
     """Authenticate with rate limiting, account lockout, and httpOnly cookie delivery."""
@@ -264,6 +474,16 @@ def login(payload: UserLogin, request: Request, response: Response, db: Session 
     now = datetime.now(timezone.utc)
 
     if user:
+        # Google-only accounts do not have a password
+        if user.password_hash is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "GOOGLE_AUTH_REQUIRED",
+                    "message": "This account uses Google sign-in. Please use 'Sign in with Google'.",
+                },
+            )
+
         # Check lockout
         if user.locked_until:
             # Handle timezone-naive datetimes from SQLite
@@ -432,7 +652,8 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     clean_email = payload.email.lower().strip()
     user = db.query(User).filter(User.email == clean_email).first()
 
-    if user:
+    # Do not send reset emails to Google-only accounts or non-allowed domains
+    if user and user.password_hash and is_allowed_email(user.email):
         raw_token, token_hash = generate_reset_token()
         now = datetime.now(timezone.utc)
         user.password_reset_token_hash = token_hash
