@@ -34,7 +34,7 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
   const src =
     storedSrc ||
     (imageType === 'college-logo'
-      ? '/assets/svnit_crest.png'
+      ? '/brand/svnit_crest.png'
       : (imageType === 'club-logo' || imageType === 'logo') && activeClub
         ? `/api/v1/clubs/${activeClub.id}/public-logo`
         : '');

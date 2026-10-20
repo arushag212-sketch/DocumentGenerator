@@ -40,7 +40,7 @@ export const VerifyPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header className="h-14 flex items-center gap-2 px-4 sm:px-8 border-b border-slate-200 bg-white">
-        <img src="/assets/svnit_crest.png" alt="" className="w-7 h-7 object-contain" />
+        <img src="/brand/svnit_crest.png" alt="" className="w-7 h-7 object-contain" />
         <span className="text-sm font-semibold text-slate-900">ClubDocs</span>
         <span className="text-xs text-slate-400">Document verification</span>
       </header>

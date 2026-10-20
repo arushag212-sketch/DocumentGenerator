@@ -85,47 +85,55 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-  if (!clientId) {
-    if (!hasWarnedMissingClientId) {
-      console.warn('VITE_GOOGLE_CLIENT_ID is not configured. Google Sign-In is disabled.');
-      hasWarnedMissingClientId = true;
-    }
-    return null;
-  }
+  // The parent re-renders on every keystroke; keep the latest props in a ref so the
+  // Google button is initialised once instead of being torn down and redrawn each time.
+  const latest = useRef({ inviteCode, onSuccess, onError, loginWithGoogle });
+  latest.current = { inviteCode, onSuccess, onError, loginWithGoogle };
 
   useEffect(() => {
+    if (!clientId) {
+      if (!hasWarnedMissingClientId) {
+        console.warn('VITE_GOOGLE_CLIENT_ID is not configured. Google Sign-In is disabled.');
+        hasWarnedMissingClientId = true;
+      }
+      return;
+    }
     let cancelled = false;
     loadGoogleScript()
       .then(() => {
         if (!cancelled) setScriptReady(true);
       })
       .catch(() => {
-        if (!cancelled) onError('Failed to load Google Sign-In script. Please check your network.');
+        if (!cancelled) latest.current.onError('Failed to load Google Sign-In script. Please check your network.');
       });
 
     return () => {
       cancelled = true;
     };
-  }, [onError]);
+  }, [clientId]);
 
   useEffect(() => {
-    if (!scriptReady || !buttonContainerRef.current || !window.google?.accounts?.id) {
+    if (!clientId || !scriptReady || !buttonContainerRef.current || !window.google?.accounts?.id) {
       return;
     }
 
+    // Google draws the button asynchronously, so a re-run (e.g. React StrictMode) could add a second
+    // one. Draw into a fresh slot each time and drop it on cleanup.
     const container = buttonContainerRef.current;
-    container.innerHTML = '';
+    const slot = document.createElement('div');
+    container.replaceChildren(slot);
 
     const handleCallback = async (response: { credential: string }) => {
+      const { inviteCode: code, onSuccess: ok, onError: fail, loginWithGoogle: signIn } = latest.current;
       if (!response.credential) {
-        onError('No authentication credential received from Google.');
+        fail('No authentication credential received from Google.');
         return;
       }
       try {
-        const user = await loginWithGoogle(response.credential, inviteCode || undefined);
-        onSuccess(user);
+        const user = await signIn(response.credential, code || undefined);
+        ok(user);
       } catch (err: any) {
-        onError(err.message || 'Google sign-in failed');
+        fail(err.message || 'Google sign-in failed');
       }
     };
 
@@ -141,14 +149,17 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
     const parentWidth = container.parentElement?.clientWidth || 360;
     const buttonWidth = Math.min(Math.max(parentWidth, 240), 400);
 
-    window.google.accounts.id.renderButton(container, {
+    window.google.accounts.id.renderButton(slot, {
       theme: 'outline',
       size: 'large',
       text: 'signin_with',
       shape: 'pill',
       width: buttonWidth,
     });
-  }, [scriptReady, clientId, inviteCode, loginWithGoogle, onSuccess, onError]);
+    return () => slot.remove();
+  }, [scriptReady, clientId]);
+
+  if (!clientId) return null;
 
   return (
     <div className="w-full flex justify-center py-1">

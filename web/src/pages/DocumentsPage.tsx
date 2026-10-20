@@ -22,6 +22,7 @@ export const DocumentsPage: React.FC = () => {
         onViewDocument={(doc) => {
           navigate(`/documents/${doc.id}`);
         }}
+        onNavigateToEvents={() => navigate('/home')}
       />
     </div>
   );

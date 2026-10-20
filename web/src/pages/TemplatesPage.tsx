@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { markTemplatesVisited } from '../components/onboarding/GettingStarted';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { TemplateGalleryTab } from '../components/TemplateGalleryTab';
@@ -9,6 +10,8 @@ export const TemplatesPage: React.FC = () => {
   const navigate = useNavigate();
   const { activeClub } = useAuth();
   const { permissions } = useClubPermissions();
+
+  useEffect(() => markTemplatesVisited(), []);
 
   if (!activeClub) {
     return (

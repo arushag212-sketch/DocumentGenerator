@@ -332,7 +332,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
                   className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
                   <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
-                  <img src="/assets/svnit_crest.png" alt="" className="w-4 h-4 object-contain shrink-0" />
+                  <img src="/brand/svnit_crest.png" alt="" className="w-4 h-4 object-contain shrink-0" />
                   <div className="flex-1 min-w-0">
                     <span className="font-semibold text-slate-800 text-xs block truncate">College Logo</span>
                     <span className="text-[10px] text-slate-500 block truncate">SVNIT Institute crest</span>

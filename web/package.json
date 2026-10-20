@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/react-query": "5.28.0",
+    "@tanstack/react-query": "5.104.2",
     "@tiptap/core": "3.32.0",
     "@tiptap/extension-table": "3.32.0",
     "@tiptap/extension-table-cell": "3.32.0",
@@ -20,21 +20,21 @@
     "@tiptap/pm": "3.32.0",
     "@tiptap/react": "3.32.0",
     "@tiptap/starter-kit": "3.32.0",
-    "clsx": "2.1.0",
+    "clsx": "2.1.1",
     "lucide-react": "0.359.0",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "react-router-dom": "6.22.3",
-    "tailwind-merge": "2.2.2"
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.30.6",
+    "tailwind-merge": "2.6.1"
   },
   "devDependencies": {
-    "@types/react": "18.2.66",
-    "@types/react-dom": "18.2.22",
-    "@vitejs/plugin-react": "4.2.1",
-    "autoprefixer": "10.4.19",
-    "postcss": "8.4.38",
-    "tailwindcss": "3.4.1",
-    "typescript": "5.2.2",
-    "vite": "5.1.6"
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.7.0",
+    "autoprefixer": "10.6.1",
+    "postcss": "8.5.30",
+    "tailwindcss": "3.4.19",
+    "typescript": "5.9.3",
+    "vite": "5.4.21"
   }
 }

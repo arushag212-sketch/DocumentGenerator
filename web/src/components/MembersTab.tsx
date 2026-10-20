@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { notify } from './common/Toaster';
 import { Link } from 'react-router-dom';
 import { ClubMember, ClubPermissions, RoleName, Invite } from '../types';
 import { api } from '../api/client';
@@ -146,7 +147,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
       await api.clubs.removeMember(clubId, memberId);
       onRefresh();
     } catch (err: any) {
-      alert(`Error removing member: ${err.message}`);
+      notify(`Could not remove the member: ${err.message}`, 'error');
     }
   };
 

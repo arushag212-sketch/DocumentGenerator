@@ -1,24 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AppShell } from './components/AppShell';
 import { AuthPage } from './components/AuthPage';
-import { HomePageWrapper } from './pages/HomePageWrapper';
-import { DocumentsPage } from './pages/DocumentsPage';
-import { DocumentNewPage } from './pages/DocumentNewPage';
-import { DocumentDetailPage } from './pages/DocumentDetailPage';
-import { TemplatesPage } from './pages/TemplatesPage';
-import { TemplateEditorPage } from './pages/TemplateEditorPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { OnboardingClubPage } from './pages/OnboardingClubPage';
-import { OnboardingPositionPage } from './pages/OnboardingPositionPage';
-import { JoinRequestsPage } from './pages/JoinRequestsPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { VerifyPage } from './pages/VerifyPage';
-import { PrivacyPage } from './pages/PrivacyPage';
-import { TermsPage } from './pages/TermsPage';
+import { LandingPage } from './pages/LandingPage';
 import { api } from './api/client';
 import { ClubPermissions } from './types';
+
+// Signed-in pages load on demand, so the landing and sign-in pages stay small
+// (the template editor alone pulls in the whole TipTap/ProseMirror stack).
+const page = <K extends string>(load: () => Promise<Record<K, React.ComponentType<any>>>, name: K) =>
+  lazy(() => load().then((m) => ({ default: m[name] })));
+const HomePageWrapper = page(() => import('./pages/HomePageWrapper'), 'HomePageWrapper');
+const DocumentsPage = page(() => import('./pages/DocumentsPage'), 'DocumentsPage');
+const DocumentNewPage = page(() => import('./pages/DocumentNewPage'), 'DocumentNewPage');
+const DocumentDetailPage = page(() => import('./pages/DocumentDetailPage'), 'DocumentDetailPage');
+const TemplatesPage = page(() => import('./pages/TemplatesPage'), 'TemplatesPage');
+const TemplateEditorPage = page(() => import('./pages/TemplateEditorPage'), 'TemplateEditorPage');
+const SettingsPage = page(() => import('./pages/SettingsPage'), 'SettingsPage');
+const OnboardingClubPage = page(() => import('./pages/OnboardingClubPage'), 'OnboardingClubPage');
+const OnboardingPositionPage = page(() => import('./pages/OnboardingPositionPage'), 'OnboardingPositionPage');
+const JoinRequestsPage = page(() => import('./pages/JoinRequestsPage'), 'JoinRequestsPage');
+const DashboardPage = page(() => import('./pages/DashboardPage'), 'DashboardPage');
+const VerifyPage = page(() => import('./pages/VerifyPage'), 'VerifyPage');
+const PrivacyPage = page(() => import('./pages/PrivacyPage'), 'PrivacyPage');
+const TermsPage = page(() => import('./pages/TermsPage'), 'TermsPage');
+const HelpPage = page(() => import('./pages/HelpPage'), 'HelpPage');
+
+const PageSpinner: React.FC = () => (
+  <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+    <div className="h-6 w-6 border-2 border-brand-700 border-t-transparent rounded-full animate-spin" role="status" aria-label="Loading" />
+  </div>
+);
 
 // Guard component that enforces authentication, club membership, and position assignment
 const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -53,11 +66,7 @@ const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const checkingStatus = Boolean(clubKey) && loadedKey !== clubKey;
 
   if (loading || checkingStatus) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="h-6 w-6 border-2 border-brand-700 border-t-transparent rounded-full animate-spin" role="status" aria-label="Loading" />
-      </div>
-    );
+    return <PageSpinner />;
   }
 
   // 1. Unauthenticated -> redirect to /login preserving deep link and search params
@@ -96,13 +105,18 @@ const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => <AppShell>{children}</AppShell>;
 
 const RootRedirect: React.FC = () => {
+  const { user, loading } = useAuth();
   const location = useLocation();
   const search = location.search || window.location.search || '';
+  if (loading) return <PageSpinner />;
+  // Visitors who are not signed in see the public landing page (links with ?invite= still go on to sign-in)
+  if (!user && !search && location.pathname === '/') return <LandingPage />;
   return <Navigate to={`${search ? '/home' : '/dashboard'}${search}`} replace />;
 };
 
 export const App: React.FC = () => {
   return (
+    <Suspense fallback={<PageSpinner />}>
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<AuthPage />} />
@@ -226,6 +240,16 @@ export const App: React.FC = () => {
         }
       />
       <Route
+        path="/help"
+        element={
+          <RequireAuth>
+            <AppLayout>
+              <HelpPage />
+            </AppLayout>
+          </RequireAuth>
+        }
+      />
+      <Route
         path="/join-requests"
         element={
           <RequireAuth>
@@ -240,6 +264,7 @@ export const App: React.FC = () => {
       <Route path="/" element={<RootRedirect />} />
       <Route path="*" element={<RootRedirect />} />
     </Routes>
+    </Suspense>
   );
 };
 

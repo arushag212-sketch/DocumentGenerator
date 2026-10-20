@@ -11,6 +11,7 @@ import { useEditorAutosave } from './useEditorAutosave';
 import { ShortcutsModal } from './ShortcutsModal';
 import { FindReplaceModal } from './FindReplaceModal';
 import { PreviewModal, ValidationModal, UnreviewedAiModal } from './TemplateEditorModals';
+import { EditorTips } from './EditorTips';
 import { DesignSettings } from './DesignPanel';
 import { DEFAULT_DESIGN_SETTINGS, THEMES } from './themes';
 import { TemplateField } from './FieldsPanel';
@@ -19,8 +20,10 @@ import { applyChatAction, type ApplyResult } from './applyChatAction';
 // Replace the document and leave a collapsed cursor at the start. setContent can
 // leave the whole document selected, and any later insert or rewrite would then
 // replace every block.
+// Loading saved content is not an edit: without emitUpdate: false TipTap 3 fires onUpdate, which
+// marked every freshly opened template "Unsaved" (and triggered the leave-page warning).
 function loadEditorContent(editor: any, content: any) {
-  editor.chain().setContent(content).setTextSelection(1).run();
+  editor.chain().setContent(content, { emitUpdate: false }).setTextSelection(1).run();
 }
 
 export interface ClubLogoOption {
@@ -193,12 +196,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     clubId,
   });
 
-  useEffect(() => {
-    if (editor) {
-      (window as any).editorInstance = editor;
-    }
-  }, [editor]);
-
   // Autosave
   const { saveStatus, conflictMessage, markUnsaved, saveNow } = useEditorAutosave({
     clubId,
@@ -236,8 +233,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       // Ctrl+S / Cmd+S
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        saveNow();
-        showToast('Template saved successfully.', 'success');
+        saveNow().then((ok) =>
+          ok ? showToast('Template saved.', 'success') : showToast('Could not save the template. Please try again.', 'error'),
+        );
       }
       // Ctrl+P / Cmd+P
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
@@ -657,6 +655,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
 
       <ShortcutsModal isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <FindReplaceModal isOpen={showFindReplace} onClose={() => setShowFindReplace(false)} editor={editor} />
+      <EditorTips />
       <PreviewModal isOpen={showPreviewModal} onClose={() => setShowPreviewModal(false)} loading={previewLoading} pages={previewPages} />
       <ValidationModal isOpen={showValidationModal} onClose={() => setShowValidationModal(false)} report={validationReport} />
       <UnreviewedAiModal items={unreviewedModal} onClose={() => setUnreviewedModal(null)} onApproveAll={handleApproveAllAi} reviewing={reviewingAi} />

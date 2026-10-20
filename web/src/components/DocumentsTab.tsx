@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { notify } from './common/Toaster';
 import {
   FileText,
   Search,
@@ -155,7 +156,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
       const doc = await api.documents.get(clubId, docId);
       setPreviewDoc(doc);
     } catch (err: any) {
-      alert(`Could not open document preview: ${err.message}`);
+      notify(`Could not open the preview: ${err.message}`, 'error');
     }
   };
 
@@ -378,9 +379,9 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
             </>
           ) : (
             <>
-              <h3 className="text-lg font-bold text-slate-800">No documents generated yet</h3>
+              <h3 className="text-lg font-bold text-slate-800">No documents yet</h3>
               <p className="text-slate-500 text-xs sm:text-sm mt-1 max-w-md mx-auto">
-                You haven't generated any documents for this club yet. Use the "Describe your event" flow in Events to batch generate packages or pick a template from the Template Gallery.
+                Open Create and describe your event in one line. ClubDocs picks the right documents, fills them in, and they appear here.
               </p>
               {onNavigateToEvents && (
                 <button
@@ -388,7 +389,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
                   onClick={onNavigateToEvents}
                   className="mt-4 px-4 py-2 bg-brand-700 hover:bg-brand-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                 >
-                  Start Event Workflow
+                  Create documents
                 </button>
               )}
             </>

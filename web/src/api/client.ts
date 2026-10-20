@@ -7,6 +7,44 @@ function getCookie(name: string): string | null {
   return null;
 }
 
+// The free backend host sleeps when idle and takes up to a minute to wake. While it does, the
+// proxy answers 502/503/504 or the connection fails. Safe (GET) requests wait and retry, and the
+// app shows a "waking up" notice instead of an error.
+const WAKE_DEADLINE_MS = 90_000;
+const WAKE_STATUSES = new Set([502, 503, 504]);
+export const SERVER_WAKING_EVENT = 'clubdocs-server-waking';
+
+function announceWaking(waking: boolean) {
+  window.dispatchEvent(new CustomEvent(SERVER_WAKING_EVENT, { detail: { waking } }));
+}
+
+async function fetchWithWake(url: string, init: RequestInit): Promise<Response> {
+  const method = (init.method || 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') return fetch(url, init);
+
+  const started = Date.now();
+  let attempt = 0;
+  let waking = false;
+  try {
+    for (;;) {
+      try {
+        const res = await fetch(url, init);
+        if (!WAKE_STATUSES.has(res.status) || Date.now() - started > WAKE_DEADLINE_MS) return res;
+      } catch (err) {
+        if (Date.now() - started > WAKE_DEADLINE_MS) throw err;
+      }
+      if (!waking) {
+        waking = true;
+        announceWaking(true);
+      }
+      attempt += 1;
+      await new Promise((r) => setTimeout(r, Math.min(2000 * attempt, 8000)));
+    }
+  } finally {
+    if (waking) announceWaking(false);
+  }
+}
+
 let refreshPromise: Promise<boolean> | null = null;
 
 async function attemptTokenRefresh(): Promise<boolean> {
@@ -43,7 +81,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     }
   }
 
-  let res = await fetch(`/api/v1${endpoint}`, {
+  let res = await fetchWithWake(`/api/v1${endpoint}`, {
     ...options,
     headers,
     credentials: 'include',
@@ -121,9 +159,6 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ credential, invite_code }),
       });
-      if (res.access_token) localStorage.setItem('access_token', res.access_token);
-      if (res.refresh_token) localStorage.setItem('refresh_token', res.refresh_token);
-      if (res.csrf_token) localStorage.setItem('csrf_token', res.csrf_token);
       return res;
     },
     login: async (formData: URLSearchParams) => {
@@ -132,9 +167,6 @@ export const api = {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString(),
       });
-      if (res.access_token) localStorage.setItem('access_token', res.access_token);
-      if (res.refresh_token) localStorage.setItem('refresh_token', res.refresh_token);
-      if (res.csrf_token) localStorage.setItem('csrf_token', res.csrf_token);
       return res;
     },
     register: async (data: { email: string; password: string; full_name: string; invite_code?: string }) => {
@@ -148,9 +180,6 @@ export const api = {
           invite_code: data.invite_code,
         }),
       });
-      if (res.access_token) localStorage.setItem('access_token', res.access_token);
-      if (res.refresh_token) localStorage.setItem('refresh_token', res.refresh_token);
-      if (res.csrf_token) localStorage.setItem('csrf_token', res.csrf_token);
       return res;
     },
     forgotPassword: (email: string) =>

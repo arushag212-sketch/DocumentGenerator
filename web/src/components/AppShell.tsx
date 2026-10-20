@@ -14,7 +14,9 @@ import {
   Menu,
   X,
   Plus,
+  LifeBuoy,
 } from 'lucide-react';
+import { WelcomeTour } from './onboarding/WelcomeTour';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 
@@ -157,6 +159,9 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             { to: '/settings/club', label: 'Settings', icon: Settings, match: ['/settings/club', '/settings/people', '/settings/audit'] },
           ],
         },
+        {
+          items: [{ to: '/help', label: 'Help & guide', icon: LifeBuoy }],
+        },
       ]
     : [];
 
@@ -167,7 +172,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     <div className="flex flex-col h-full">
       <div className="px-3 pt-4 pb-3">
         <Link to="/dashboard" className="flex items-center gap-2 px-2 mb-4">
-          <img src="/assets/svnit_crest.png" alt="" className="w-7 h-7 object-contain" />
+          <img src="/brand/svnit_crest.png" alt="" className="w-7 h-7 object-contain" />
           <span className="text-sm font-semibold text-slate-900">ClubDocs</span>
           <span className="text-xs text-slate-400">SVNIT</span>
         </Link>
@@ -258,6 +263,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         </header>
         <main className="flex-1">{children}</main>
       </div>
+      <WelcomeTour />
     </div>
   );
 };

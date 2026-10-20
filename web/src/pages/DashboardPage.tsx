@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { ClubAnalytics } from '../types';
 import { PageHeader } from '../components/AppShell';
+import { GettingStarted } from '../components/onboarding/GettingStarted';
 
 const STATUS_LABEL: Record<string, string> = {
   ready: 'Ready',
@@ -157,6 +158,8 @@ export const DashboardPage: React.FC = () => {
       />
 
       {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+
+      <GettingStarted stats={stats} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatTile label="This month" value={stats?.documents_this_month ?? '–'} hint="documents generated" icon={FilePlus2} />

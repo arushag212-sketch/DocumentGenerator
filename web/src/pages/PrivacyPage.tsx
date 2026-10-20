@@ -16,7 +16,7 @@ export const PrivacyPage: React.FC = () => {
             Back to sign in
           </Link>
           <div className="flex items-center gap-2">
-            <img src="/assets/svnit_crest.png" alt="SVNIT Crest" className="h-6 w-6 object-contain" />
+            <img src="/brand/svnit_crest.png" alt="SVNIT Crest" className="h-6 w-6 object-contain" />
             <span className="text-xs font-semibold text-slate-700">SVNIT ClubDocs</span>
           </div>
         </div>
