@@ -242,6 +242,8 @@ export const api = {
     getPermissions: (clubId: string | number) => apiFetch<ClubPermissions>(`/clubs/${clubId}/permissions`),
     getAuditLogs: (clubId: string | number) => apiFetch<AuditLog[]>(`/clubs/${clubId}/audit-logs`),
     getPeople: (clubId: string | number) => apiFetch<Person[]>(`/clubs/${clubId}/people`),
+    getPositions: (clubId: string | number) =>
+      apiFetch<{ key: string; label: string; group: 'faculty' | 'student' | 'staff' | 'other'; signs: boolean; help: string }[]>(`/clubs/${clubId}/positions`),
     addPerson: (clubId: string | number, person: Partial<Person>) =>
       apiFetch<Person>(`/clubs/${clubId}/people`, {
         method: 'POST',
@@ -315,6 +317,11 @@ export const api = {
         body: JSON.stringify(data),
       }),
     getAssets: (clubId: string | number) => apiFetch<Asset[]>(`/clubs/${clubId}/assets`),
+    setBranding: (clubId: string | number, data: { logo_asset_id?: string; letterhead_banner_asset_id?: string }) =>
+      apiFetch<{ logo_asset_id: string | null; letterhead_banner_asset_id: string | null }>(`/clubs/${clubId}/branding`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
     uploadLogo: async (clubId: string | number, file: File) => {
       const formData = new FormData();
       formData.append('file', file);

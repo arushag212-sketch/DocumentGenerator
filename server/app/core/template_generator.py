@@ -891,7 +891,8 @@ def generate_draft_template(
 
     # Resolve letterhead if logo resolved
     letterhead_id = None
-    letterhead_cfg = {}
+    # Default: the club's own banner (shown in the editor and swapped in at render time)
+    letterhead_cfg = {"banner_placeholder": True}
     if logo_res.get("status") == "resolved" and logo_res.get("asset_id"):
         lh = db.query(Letterhead).filter(Letterhead.club_id == club_id).first()
         if lh:

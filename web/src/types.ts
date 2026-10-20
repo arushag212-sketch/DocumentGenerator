@@ -260,6 +260,8 @@ export interface NumberingSeries {
   last_seq?: number;
   current_counter: number;
   description?: string;
+  /** Names of templates that number their documents with this series */
+  used_by?: string[];
 }
 
 export interface Letterhead {

@@ -51,6 +51,8 @@ interface CanvasProps {
   showSlashMenu: boolean;
   onCloseSlashMenu: () => void;
   onOpenAddField: () => void;
+  /** The printed letterhead and footer, so the page looks as it will be generated */
+  letterhead?: { header?: React.ReactNode; footer?: React.ReactNode };
 }
 
 export const Canvas: React.FC<CanvasProps> = ({
@@ -73,6 +75,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   showSlashMenu,
   onCloseSlashMenu,
   onOpenAddField,
+  letterhead,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [wordCount, setWordCount] = useState(0);
@@ -343,6 +346,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         headingFontFamily={designSettings?.headingFontFamily}
         tableHeaderBg={designSettings?.tableHeaderBg}
         tableHeaderTextColor={designSettings?.tableHeaderTextColor}
+        header={letterhead?.header}
+        footer={letterhead?.footer}
       >
         <EditorContent editor={editor} className="tiptap-editor-canvas focus:outline-none" />
       </A4Page>

@@ -231,6 +231,8 @@ class TemplateCompileRequest(BaseModel):
     numbering_series: Optional[str] = None
     design_settings: Optional[dict[str, Any]] = None
     for_publish: Optional[bool] = False
+    # Preview only: example values typed in the editor sidebar, by field key
+    sample_values: Optional[dict[str, Any]] = None
 
 
 class TemplateReviewAIRequest(BaseModel):
@@ -1396,7 +1398,8 @@ def compile_template(
     category = payload.category or tmpl.category
     description = payload.description if payload.description is not None else tmpl.description
 
-    letterhead_cfg = {}
+    # No letterhead chosen: the club's own banner (the one the editor canvas shows)
+    letterhead_cfg = {"banner_placeholder": True}
     letterhead_id = payload.letterhead_id or ver.letterhead_id
     if letterhead_id:
         lh = db.query(Letterhead).filter(Letterhead.id == letterhead_id).first()
@@ -1525,7 +1528,7 @@ def preview_template(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    letterhead_cfg = {}
+    letterhead_cfg = {"banner_placeholder": True}
     letterhead_id = payload.letterhead_id or (ver.letterhead_id if ver else None)
     if letterhead_id:
         lh = db.query(Letterhead).filter(Letterhead.id == letterhead_id).first()
@@ -1576,6 +1579,15 @@ def preview_template(
             schema_obj = TemplateSchema(**schema_dict)
             from server.app.core.template_compiler import _build_editor_dummy_context, safe_render_docx
             dummy_ctx = _build_editor_dummy_context(schema_obj, fields, editor_json)
+            # Example values from the sidebar (or a field's default) replace the [Label] placeholders.
+            for f in fields or []:
+                key = f.get("key") if isinstance(f, dict) else None
+                if key and f.get("default_value") not in (None, "") and f.get("type") != "table":
+                    dummy_ctx[key] = f.get("default_value")
+            for key, value in (payload.sample_values or {}).items():
+                if isinstance(key, str) and value not in (None, "") and key in dummy_ctx:
+                    dummy_ctx[key] = value if isinstance(value, (list, dict)) else str(value)[:2000]
+            doc = DocxTemplate(str(tmpl_docx))
             # Show the viewing club's own identity (name, footer, banner) in the preview.
             try:
                 club_cfg = build_club_config_from_db(db, ctx.club.slug)
@@ -1593,7 +1605,6 @@ def preview_template(
             except Exception:
                 pass
 
-            doc = DocxTemplate(str(tmpl_docx))
             safe_render_docx(doc, dummy_ctx, timeout=30.0, strict=False)
             rendered_docx = tmp_dir / "rendered.docx"
             doc.save(str(rendered_docx))
@@ -1709,6 +1720,7 @@ def publish_template(
             fields=fields,
             template_meta={"id": tmpl.id, "name": tmpl.name, "category": tmpl.category, "description": tmpl.description},
             club_slug=ctx.club.slug,
+            letterhead_cfg=None if ver.letterhead_id else {"banner_placeholder": True},
             design_settings=(ver.editor_json or {}).get("design_settings") if isinstance(ver.editor_json, dict) else None,
         )
         if not report["is_valid"]:

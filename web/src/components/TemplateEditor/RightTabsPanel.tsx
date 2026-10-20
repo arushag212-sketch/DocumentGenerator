@@ -17,7 +17,11 @@ interface RightTabsPanelProps {
   designSettings: DesignSettings;
   onDesignChange: (settings: Partial<DesignSettings>) => void;
   onAutoStyle?: () => void;
-  onApplyChatAction: (action: any) => void;
+  onApplyChatAction: (action: any, actionId?: string) => void;
+  onUndoChatAction?: (actionId: string) => boolean;
+  sampleValues?: Record<string, string>;
+  onSampleChange?: (key: string, value: string) => void;
+  onPreview?: () => void;
   isOpen: boolean;
   onToggle: () => void;
   isMobile?: boolean;
@@ -33,6 +37,10 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
   onDesignChange,
   onAutoStyle,
   onApplyChatAction,
+  onUndoChatAction,
+  sampleValues,
+  onSampleChange,
+  onPreview,
   isOpen,
   onToggle,
   isMobile = false,
@@ -131,13 +139,14 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
 
       {/* Tab Body with ErrorBoundary */}
       <div className="flex-1 overflow-hidden relative">
-        {activeTab === 'chat' && (
+        {/* Kept mounted so the conversation and its Undo buttons survive tab switches */}
+        <div className={activeTab === 'chat' ? 'h-full' : 'hidden'}>
           <EditorErrorBoundary title="AI Chat Copilot Error">
             <EditorChatPanel
               clubId={clubId}
               templateId={templateId}
               onApply={onApplyChatAction}
-              onUndo={() => editor?.commands?.undo()}
+              onUndo={onUndoChatAction}
               selectedText={
                 editor?.state?.selection && !editor.state.selection.empty
                   ? editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')
@@ -156,11 +165,18 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
               className="h-full border-none shadow-none"
             />
           </EditorErrorBoundary>
-        )}
+        </div>
 
         {activeTab === 'fields' && (
           <EditorErrorBoundary title="Fields Panel Error">
-            <FieldsPanel fields={fields} onAddField={onAddField} editor={editor} />
+            <FieldsPanel
+              fields={fields}
+              onAddField={onAddField}
+              editor={editor}
+              sampleValues={sampleValues}
+              onSampleChange={onSampleChange}
+              onPreview={onPreview}
+            />
           </EditorErrorBoundary>
         )}
 

@@ -17,6 +17,10 @@ interface A4PageProps {
   headingFontFamily?: string;
   tableHeaderBg?: string;
   tableHeaderTextColor?: string;
+  /** Printed letterhead, shown as on the page (not editable here) */
+  header?: React.ReactNode;
+  /** Printed footer line */
+  footer?: React.ReactNode;
 }
 
 export const A4Page: React.FC<A4PageProps> = ({
@@ -36,6 +40,8 @@ export const A4Page: React.FC<A4PageProps> = ({
   headingFontFamily = 'Tinos',
   tableHeaderBg = '#1e3a8a',
   tableHeaderTextColor = '#ffffff',
+  header,
+  footer,
 }) => {
   const sheetRef = useRef<HTMLDivElement>(null);
   const [sheetHeight, setSheetHeight] = useState<number | null>(null);
@@ -127,8 +133,14 @@ export const A4Page: React.FC<A4PageProps> = ({
           </div>
         )}
 
+        {header && <div className="relative z-10 -mt-4 mb-5 select-none">{header}</div>}
+
         {/* Page Content Container */}
-        <div className="relative z-10 w-full min-h-full">{children}</div>
+        <div className={`relative z-10 w-full min-h-full ${footer ? 'pb-10' : ''}`}>{children}</div>
+
+        {footer && (
+          <div className="pointer-events-none absolute left-0 right-0 bottom-5 z-10 px-14 text-center select-none">{footer}</div>
+        )}
       </div>
     </div>
   );

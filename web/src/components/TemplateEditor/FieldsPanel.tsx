@@ -21,9 +21,15 @@ interface FieldsPanelProps {
   fields: TemplateField[];
   onAddField: (field: TemplateField) => void;
   editor: any;
+  /** Example values used by Preview instead of [Label] placeholders */
+  sampleValues?: Record<string, string>;
+  onSampleChange?: (key: string, value: string) => void;
+  onPreview?: () => void;
 }
 
-export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, editor }) => {
+export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, editor, sampleValues = {}, onSampleChange, onPreview }) => {
+  const [showSamples, setShowSamples] = useState(false);
+  const sampleCount = Object.values(sampleValues).filter((v) => v && v.trim()).length;
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [newKey, setNewKey] = useState('');
@@ -124,6 +130,46 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({ fields, onAddField, ed
           />
         </div>
       </div>
+
+      {/* Sample data for Preview */}
+      {onSampleChange && fields.length > 0 && (
+        <div className="border-b border-slate-200 bg-white">
+          <button
+            type="button"
+            onClick={() => setShowSamples(!showSamples)}
+            aria-expanded={showSamples}
+            className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <span>Sample data for preview{sampleCount ? ` (${sampleCount})` : ''}</span>
+            <span className="text-slate-400">{showSamples ? 'Hide' : 'Fill in'}</span>
+          </button>
+          {showSamples && (
+            <div className="px-3 pb-3 space-y-2 max-h-72 overflow-y-auto">
+              <p className="text-[11px] text-slate-500">
+                Type example values to see how a filled-in document looks. They are only used for Preview and are not saved.
+              </p>
+              {fields
+                .filter((f) => f.type !== 'table')
+                .map((f) => (
+                  <label key={f.key} className="block">
+                    <span className="block text-[11px] font-medium text-slate-600 mb-0.5">{f.label || f.key}</span>
+                    <input
+                      className="w-full text-xs px-2 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-700/20 focus:border-brand-700"
+                      value={sampleValues[f.key] || ''}
+                      onChange={(e) => onSampleChange(f.key, e.target.value)}
+                      placeholder={`[${f.label || f.key}]`}
+                    />
+                  </label>
+                ))}
+              {onPreview && (
+                <button type="button" onClick={onPreview} className="btn-primary w-full justify-center !py-1.5 text-xs">
+                  Preview with these values
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Field List */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">

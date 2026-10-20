@@ -623,12 +623,17 @@ def test_w5_end_to_end_sponsorship_request_letter_from_text(client, auth_setup):
     assert "{{" not in full_text
     assert "None" not in full_text
 
-    # Header title wrap assertion: Institute title and chapter subtitle
-    lines = [line.strip() for line in full_text.splitlines() if line.strip()]
-    header_title_line = lines[0]
-    assert "SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT" in header_title_line, (
-        f"Letterhead title must fit on single line, got: {header_title_line}"
-    )
+    # Letterhead: AI-drafted templates carry the club's banner (an image across the top of
+    # page 1, the same one the editor canvas shows) rather than a text header that can wrap.
+    banner_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    first = banner_doc[0]
+    top_images = [
+        info for info in first.get_image_info()
+        if info["bbox"][1] < first.rect.height * 0.2 and (info["bbox"][2] - info["bbox"][0]) > first.rect.width * 0.5
+    ]
+    banner_doc.close()
+    assert top_images, "Expected the club letterhead banner across the top of page 1"
+    assert "Page 1 of 1" in full_text
 
 
 def test_w5_second_template_meeting_attendance_sheet(client, auth_setup):

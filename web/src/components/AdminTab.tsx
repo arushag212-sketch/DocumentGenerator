@@ -51,6 +51,8 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
   const [storageStats, setStorageStats] = useState<any>(null);
   const [cleaning, setCleaning] = useState(false);
   const [logoVersion, setLogoVersion] = useState(Date.now());
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [branding, setBranding] = useState<{ logo_asset_id?: string; letterhead_banner_asset_id?: string }>({});
 
   // General Settings state
   const [clubProfile, setClubProfile] = useState<{
@@ -112,6 +114,28 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
 
   const isAdmin = permissions?.can_edit_settings || permissions?.role === 'admin' || permissions?.role === 'owner' || permissions?.is_platform_admin;
 
+  const chooseBranding = async (field: 'logo_asset_id' | 'letterhead_banner_asset_id', assetId: string) => {
+    setError(null);
+    try {
+      const res = await api.clubs.setBranding(clubId, { [field]: assetId });
+      setBranding({
+        logo_asset_id: res.logo_asset_id || undefined,
+        letterhead_banner_asset_id: res.letterhead_banner_asset_id || undefined,
+      });
+      setLogoFailed(false);
+      setLogoVersion(Date.now());
+      setSuccess(
+        field === 'logo_asset_id'
+          ? 'Club logo updated. New documents use it.'
+          : assetId
+            ? 'Letter banner updated.'
+            : 'Banner removed; letters use a banner composed from the logo.'
+      );
+    } catch (err: any) {
+      setError(err?.detail || err?.message || 'Could not update branding.');
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -144,12 +168,15 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
         const data = await api.clubs.getNumberingSeries(clubId);
         setSeriesList(data);
       } else if (subTab === 'letterheads') {
-        const [lhs, asts] = await Promise.all([
+        const [lhs, asts, clubInfo] = await Promise.all([
           api.clubs.getLetterheads(clubId),
           api.clubs.getAssets(clubId),
+          api.clubs.get(clubId),
         ]);
         setLetterheads(lhs);
         setAssets(asts);
+        const st = (clubInfo as any).settings || {};
+        setBranding({ logo_asset_id: st.logo_asset_id, letterhead_banner_asset_id: st.letterhead_banner_asset_id });
         if (lhs.length > 0 && !previewLetterhead) {
           setPreviewLetterhead(lhs[0]);
         }
@@ -680,15 +707,18 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
             <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
               <div className="flex items-center gap-4">
                 <div className="h-16 w-16 bg-white border border-slate-200 rounded-xl p-1.5 flex items-center justify-center shadow-xs">
-                  <img
-                    src={`/api/v1/clubs/${clubId}/logo?v=${logoVersion}`}
-                    alt="Club Logo"
-                    className="max-h-full max-w-full object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
-                  <Building className="w-6 h-6 text-slate-300" />
+                  {logoFailed ? (
+                    <Building className="w-6 h-6 text-slate-300" aria-label="No logo uploaded" />
+                  ) : (
+                    <img
+                      key={logoVersion}
+                      src={`/api/v1/clubs/${clubId}/logo?v=${logoVersion}`}
+                      alt="Club logo"
+                      className="max-h-full max-w-full object-contain"
+                      onLoad={() => setLogoFailed(false)}
+                      onError={() => setLogoFailed(true)}
+                    />
+                  )}
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-slate-900">Active Club Logo</h4>
@@ -831,11 +861,20 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                 <div key={s.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between space-y-3">
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="font-mono font-bold text-sm bg-brand-50 text-brand-700 px-2.5 py-1 rounded border border-brand-200">
-                        {s.series_key || (s as any).key}
+                      <span className="min-w-0 flex items-center gap-2">
+                        <span className="font-mono font-bold text-sm bg-brand-50 text-brand-700 px-2.5 py-1 rounded border border-brand-200 flex-shrink-0">
+                          {s.series_key || (s as any).key}
+                        </span>
+                        <span className="text-sm font-medium text-slate-900 truncate" title={(s.used_by || []).join(', ') || s.description || ''}>
+                          {(() => {
+                            const names = s.used_by || [];
+                            if (names.length === 0) return s.description || 'Not used by any template';
+                            return names.length <= 2 ? names.join(', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+                          })()}
+                        </span>
                       </span>
-                      <span className="text-xs font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                        AY: {s.academic_year}
+                      <span className="text-xs font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0">
+                        AY {s.academic_year}
                       </span>
                     </div>
 
@@ -913,48 +952,23 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
               Official Letterhead Preview
             </div>
 
-            <div className="bg-white border border-slate-300 rounded-lg p-6 shadow-sm max-w-2xl mx-auto space-y-4">
-              {/* Header block with logos */}
-              <div className="flex items-center justify-between border-b-2 border-brand-700 pb-4">
-                <div className="h-16 w-16 flex items-center justify-center p-1 border border-slate-200 rounded bg-white">
-                  <img src="/assets/svnit_crest.png" alt="SVNIT Crest" className="max-h-full max-w-full object-contain" />
-                </div>
-
-                <div className="text-center px-4 flex-1">
-                  <h4 className="font-serif font-bold text-xs sm:text-sm text-slate-900">
-                    Sardar Vallabhbhai National Institute of Technology, Surat
-                  </h4>
-                  <p className="text-xs font-bold text-brand-700 mt-0.5">
-                    {previewLetterhead?.title_text || 'Student Chapter'}
-                  </p>
-                  <p className="text-xs text-slate-500 italic mt-0.5">
-                    Ichchhanath, Surat - 395007, Gujarat, India
-                  </p>
-                </div>
-
-                <div className="h-16 w-16 flex items-center justify-center p-1 border border-slate-200 rounded bg-white">
-                  <img
-                    src={`/api/v1/clubs/${clubId}/logo?v=${logoVersion}`}
-                    alt="Club Logo"
-                    className="max-h-full max-w-full object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
-                </div>
+            <div className="bg-white border border-slate-300 rounded-lg p-5 shadow-sm max-w-2xl mx-auto space-y-4">
+              {/* The banner generated documents actually print */}
+              <img
+                key={logoVersion}
+                src={`/api/v1/clubs/${clubId}/letterhead-banner?v=${logoVersion}`}
+                alt="Letterhead banner printed on this club's documents"
+                className="w-full h-auto"
+              />
+              <div className="py-4 space-y-2">
+                <div className="h-2 bg-slate-100 rounded w-3/4" />
+                <div className="h-2 bg-slate-100 rounded w-full" />
+                <div className="h-2 bg-slate-100 rounded w-2/3" />
               </div>
-
-              {/* Sample Document Body Placeholder */}
-              <div className="py-6 space-y-2 text-center text-slate-400 text-xs">
-                <p className="italic">Official dispatch document content renders here.</p>
-                <div className="h-2 bg-slate-100 rounded w-3/4 mx-auto"></div>
-                <div className="h-2 bg-slate-100 rounded w-1/2 mx-auto"></div>
-              </div>
-
-              {/* Footer */}
-              <div className="border-t border-slate-200 pt-3 text-center text-xs text-slate-500">
-                {previewLetterhead?.subtitle_text || 'Website: www.svnit.ac.in | Official Student Portal'}
-              </div>
+              <p className="border-t border-slate-200 pt-2 text-center text-xs text-slate-500">Club footer · Page 1 of 1</p>
+              <p className="text-xs text-slate-500">
+                Built from the club logo and letterhead colour, or the banner image you choose below.
+              </p>
             </div>
           </div>
 
@@ -989,23 +1003,64 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
               </div>
             </div>
 
-            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
-              <h4 className="text-xs font-bold text-slate-800">
-                Club Logo Assets ({assets.length})
-              </h4>
-              <div className="space-y-2 text-xs">
-                {assets.map((ast) => (
-                  <div key={ast.id} className="p-3 bg-white rounded-lg border border-slate-200 flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-slate-900">{ast.filename}</div>
-                      <div className="text-xs text-slate-400 font-mono mt-0.5">{ast.mime} • {ast.size ? `${Math.round(ast.size / 1024)} KB` : 'Normalized'}</div>
-                    </div>
-                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
-                      {ast.kind}
-                    </span>
-                  </div>
-                ))}
+            <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-900">Images ({assets.length})</h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Choose which image is the club logo and which banner heads your letters. Upload new ones from General &amp; Profile.
+                </p>
               </div>
+              <ul className="space-y-2">
+                {assets.map((ast) => {
+                  const isLogo = branding.logo_asset_id === ast.id;
+                  const isBanner = branding.letterhead_banner_asset_id === ast.id;
+                  return (
+                    <li key={ast.id} className={`p-2.5 rounded-lg border flex items-center gap-3 ${isLogo || isBanner ? 'border-brand-700 bg-brand-50' : 'border-slate-200'}`}>
+                      <div className="h-12 w-20 flex-shrink-0 bg-white border border-slate-200 rounded flex items-center justify-center overflow-hidden">
+                        <img
+                          src={`/api/v1/clubs/${clubId}/documents/assets/${ast.id}/content`}
+                          alt=""
+                          loading="lazy"
+                          className="max-h-full max-w-full object-contain"
+                          onError={(e) => ((e.target as HTMLElement).style.visibility = 'hidden')}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-900 truncate">{ast.filename}</p>
+                        <p className="text-xs text-slate-500">
+                          {ast.kind === 'letterhead' ? 'Banner' : 'Logo'}
+                          {ast.size ? ` · ${Math.round(ast.size / 1024)} KB` : ''}
+                          {!ast.club_id ? ' · shared' : ''}
+                        </p>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">
+                          {ast.kind !== 'letterhead' && (
+                            <button
+                              type="button"
+                              className={isLogo ? 'btn-primary !px-2.5 !py-1 text-xs' : 'btn-secondary !px-2.5 !py-1 text-xs'}
+                              disabled={isLogo}
+                              onClick={() => chooseBranding('logo_asset_id', ast.id)}
+                            >
+                              {isLogo ? 'Club logo' : 'Use as logo'}
+                            </button>
+                          )}
+                          {ast.kind === 'letterhead' && (
+                          <button
+                            type="button"
+                            className={isBanner ? 'btn-primary !px-2.5 !py-1 text-xs' : 'btn-secondary !px-2.5 !py-1 text-xs'}
+                            onClick={() => chooseBranding('letterhead_banner_asset_id', isBanner ? '' : ast.id)}
+                            title={isBanner ? 'Stop using this banner (a banner is then composed from the logo)' : undefined}
+                          >
+                            {isBanner ? 'Letter banner' : 'Use as banner'}
+                          </button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           </div>
         </div>

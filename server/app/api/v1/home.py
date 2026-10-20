@@ -119,6 +119,18 @@ class HomeGenerateResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+ORGANISER_KEYS = {
+    "organiser", "organizer", "organised_by", "organized_by", "organising_club", "organizing_club",
+    "organising_body", "organizing_body", "organising_department", "organizing_department",
+    "club", "club_name", "issuing_club", "hosted_by", "host_club", "organisers", "organizers",
+}
+
+
+def _is_organiser_key(key: str) -> bool:
+    """Field keys that name the organising club (filled with the member's club by default)."""
+    return (key or "").lower() in ORGANISER_KEYS
+
+
 def _clean_jargon(text: str) -> str:
     """Filter out internal engineering jargon from user-facing text."""
     replacements = [
@@ -241,6 +253,9 @@ def understand_user_need(
 
         # Check prefilled value
         curr_val = extracted.get(mf.key)
+        if not curr_val and _is_organiser_key(mf.key):
+            # The member's own club organises by default; they can change it.
+            curr_val = ctx.club.name
         if w_type == "time" and curr_val:
             curr_val = format_time_canonical_24h(curr_val)
 

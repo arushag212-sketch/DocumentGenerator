@@ -49,7 +49,14 @@ class GCReport:
 
 
 def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tuple[Set[str], Set[str]]:
-    """Return (all_referenced_keys, protected_latest_keys) resolved to canonical paths."""
+    """Return (all_referenced_keys, protected_latest_keys) resolved to canonical paths.
+
+    References are always collected for every club: the orphan scan walks the whole storage
+    folder, so a club-scoped reference set would make other clubs' files look orphaned.
+    ``club_id`` is accepted for compatibility and ignored here. Raises if the database cannot
+    be read, so the caller never deletes files on an empty reference set.
+    """
+    club_id = None
     referenced: Set[str] = set()
     protected: Set[str] = set()
 
@@ -120,7 +127,7 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
 
         db.close()
     except Exception as e:
-        print(f"[WARN] Failed to query database for GC references: {e}")
+        raise RuntimeError(f"Could not read file references from the database: {e}") from e
 
     # Shared fallback image used for templates without a rendered thumbnail.
     placeholder = active_storage.local_path("thumbnails/neutral_placeholder.png")
@@ -144,7 +151,12 @@ def run_storage_gc(apply: bool = False, club_id: Optional[str] = None) -> GCRepo
         report.logs.append("Storage directory storage/ does not exist. Nothing to clean.")
         return report
 
-    referenced_keys, protected_keys = get_db_protected_and_referenced_paths(club_id)
+    try:
+        referenced_keys, protected_keys = get_db_protected_and_referenced_paths(club_id)
+    except RuntimeError as exc:
+        # Without the reference set every file would look orphaned: delete nothing.
+        report.logs.append(f"Cleanup skipped: {exc}")
+        return report
     now = time.time()
     preview_ttl_seconds = PREVIEW_TTL_DAYS * 86400
     batch_ttl_seconds = BATCH_TTL_HOURS * 3600

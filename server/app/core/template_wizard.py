@@ -367,6 +367,7 @@ def create_wizard_template(
         fields=fields,
         template_meta={"name": title, "category": "Official Event Documents", "numbering_series": numbering_series},
         club_slug=club.slug if club else "club",
+        letterhead_cfg={"banner_placeholder": True},
         design_settings=design_settings,
     )
 

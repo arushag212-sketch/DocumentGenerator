@@ -44,6 +44,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
   const [inviteMaxUses, setInviteMaxUses] = useState(1);
   const [inviteExpiryDays, setInviteExpiryDays] = useState(7);
   const [creatingInvite, setCreatingInvite] = useState(false);
+  const [createdInvite, setCreatedInvite] = useState<{ code: string; role: string; max_uses: number } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const canEdit = permissions?.can_edit_members || permissions?.is_platform_admin || permissions?.role === 'admin' || permissions?.role === 'owner';
@@ -90,6 +91,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setCreatedInvite(null);
     setCreatingInvite(true);
 
     try {
@@ -98,7 +100,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
         max_uses: Number(inviteMaxUses),
         expiry_days: Number(inviteExpiryDays),
       });
-      setSuccess(`Invite code created: ${newInv.code} (${newInv.role}, ${newInv.max_uses} use(s))`);
+      setCreatedInvite({ code: newInv.code, role: newInv.role, max_uses: newInv.max_uses });
       await fetchInvites();
     } catch (err: any) {
       setError(err.message || 'Failed to create invite');
@@ -119,12 +121,24 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     }
   };
 
-  const handleCopyLink = (code: string) => {
-    const link = `${window.location.origin}/?invite=${code}`;
-    navigator.clipboard.writeText(link);
-    setCopiedCode(code);
+  const copyText = async (text: string, marker: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard API unavailable (e.g. plain http): fall back to a hidden textarea
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    setCopiedCode(marker);
     setTimeout(() => setCopiedCode(null), 2500);
   };
+
+  const inviteLink = (code: string) => `${window.location.origin}/login?invite=${encodeURIComponent(code)}`;
+  const handleCopyLink = (code: string) => copyText(inviteLink(code), code);
 
   const handleRemoveMember = async (memberId: string | number, memberName: string) => {
     if (!confirm(`Are you sure you want to remove ${memberName}?`)) return;
@@ -177,6 +191,30 @@ export const MembersTab: React.FC<MembersTabProps> = ({
         <div className="p-3 sm:p-4 bg-red-50 border border-red-200 rounded-xl text-xs sm:text-sm text-red-800 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-600" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {createdInvite && (
+        <div className="surface-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm text-slate-600">
+              Invite created for a <span className="font-medium text-slate-900">{createdInvite.role}</span>, usable {createdInvite.max_uses}{' '}
+              {createdInvite.max_uses === 1 ? 'time' : 'times'}. Share the code or the link.
+            </p>
+            <code className="mt-1.5 inline-block font-mono text-base font-semibold text-slate-900 bg-slate-100 border border-slate-200 rounded px-2 py-1 select-all break-all">
+              {createdInvite.code}
+            </code>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button type="button" className="btn-secondary" onClick={() => copyText(createdInvite.code, `code:${createdInvite.code}`)}>
+              <Copy className="w-4 h-4" />
+              {copiedCode === `code:${createdInvite.code}` ? 'Copied' : 'Copy code'}
+            </button>
+            <button type="button" className="btn-primary" onClick={() => handleCopyLink(createdInvite.code)}>
+              <Copy className="w-4 h-4" />
+              {copiedCode === createdInvite.code ? 'Copied' : 'Copy link'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -288,9 +326,16 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                       <div key={inv.id} className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono font-bold text-sm text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
+                            <button
+                              type="button"
+                              onClick={() => copyText(inv.code, `code:${inv.code}`)}
+                              title="Copy code"
+                              className="inline-flex items-center gap-1.5 font-mono font-semibold text-sm text-slate-900 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded border border-slate-200"
+                            >
                               {inv.code}
-                            </span>
+                              <Copy className="w-3.5 h-3.5 text-slate-500" />
+                              {copiedCode === `code:${inv.code}` && <span className="font-sans text-xs text-emerald-700">Copied</span>}
+                            </button>
                             <span
                               className={`text-xs font-semibold uppercase px-2 py-0.5 rounded border ${
                                 roleColors[inv.role] || 'bg-slate-100'
@@ -339,7 +384,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                               className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1.5 rounded-lg font-semibold transition-colors"
                             >
                               <Copy className="w-3.5 h-3.5" />
-                              <span>{copiedCode === inv.code ? 'Copied Link!' : 'Copy Link'}</span>
+                              <span>{copiedCode === inv.code ? 'Copied' : 'Copy link'}</span>
                             </button>
                           )}
 

@@ -19,7 +19,8 @@ if DATABASE_URL.startswith("sqlite:///"):
 
 connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
+    # Wait for a writer (e.g. a batch rendering PDFs) instead of failing with "database is locked"
+    connect_args = {"check_same_thread": False, "timeout": 30}
 
 engine = create_engine(
     DATABASE_URL,
@@ -34,6 +35,7 @@ if DATABASE_URL.startswith("sqlite"):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

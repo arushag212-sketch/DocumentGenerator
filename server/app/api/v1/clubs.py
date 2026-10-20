@@ -1213,6 +1213,14 @@ def remove_member(
 # ---------------- PEOPLE & SIGNATORIES (Field Encryption + ScopedRepository) ----------------
 
 
+@router.get("/{club_id}/positions")
+def list_positions(ctx: ClubContext = Depends(require_club_access(Role.VIEWER))):
+    """Club positions people can hold (who signs which documents). Separate from app access roles."""
+    from server.app.core.club_positions import POSITIONS
+
+    return POSITIONS
+
+
 @router.get("/{club_id}/people", response_model=list[PersonOut])
 def list_people(
     reveal: bool = Query(False, description="Reveal plaintext sensitive fields (requires admin)"),
@@ -1376,6 +1384,11 @@ def update_person(
         mobile=mask_sensitive_field(dec_mob) if dec_mob else None,
         email=person.email,
         notes=person.notes,
+        roles=[
+            RoleHeldOut(id=r.id, person_id=r.person_id, role_key=r.role_key, designation_label=r.designation_label,
+                        academic_year=r.academic_year, created_at=r.created_at)
+            for r in ScopedRepository(db, RoleHeld, club_id=ctx.club.id).all() if r.person_id == person.id
+        ],
         created_at=person.created_at,
     )
 
@@ -1872,6 +1885,71 @@ async def upload_club_logo(
     }
 
 
+class BrandingIn(BaseModel):
+    logo_asset_id: Optional[str] = None
+    letterhead_banner_asset_id: Optional[str] = None
+
+
+@router.put("/{club_id}/branding")
+def set_club_branding(
+    club_id: str,
+    payload: BrandingIn,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Choose the club logo and/or letterhead banner from images already uploaded (admin only)."""
+    from server.app.core.tenancy import get_asset_for_club
+
+    settings = dict(ctx.club.settings or {})
+    for field, value in (("logo_asset_id", payload.logo_asset_id),
+                         ("letterhead_banner_asset_id", payload.letterhead_banner_asset_id)):
+        if value is None:
+            continue
+        if value == "":
+            settings.pop(field, None)
+            continue
+        if not get_asset_for_club(db, value, ctx.club.id):
+            raise HTTPException(status_code=404, detail="Image not found for this club.")
+        settings[field] = value
+    ctx.club.settings = settings
+    db.commit()
+    log_audit(db=db, action="club_branding_updated", entity_type="club", entity_id=ctx.club.id, club_id=ctx.club.id,
+              user_id=ctx.user.id, meta=payload.model_dump(exclude_none=True),
+              ip=request.client.host if request.client else None)
+    return {"logo_asset_id": settings.get("logo_asset_id"),
+            "letterhead_banner_asset_id": settings.get("letterhead_banner_asset_id")}
+
+
+@router.get("/{club_id}/letterhead-banner")
+def get_club_letterhead_banner(
+    club_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """The letterhead banner this club's documents carry (uploaded, or composed from its logo)."""
+    import os
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+
+    from docgen.letterhead_banner import club_banner_path
+    from docgen.sources import build_club_config_from_db
+
+    cfg = build_club_config_from_db(db, ctx.club.slug)
+    banner = club_banner_path(
+        Path(os.environ.get("STORAGE_LOCAL_ROOT", "storage")).resolve() / "cache" / "banners",
+        cfg.club_name,
+        cfg.institute_name,
+        uploaded_banner=cfg.letterhead_banner_path,
+        logo_path=cfg.club_logo_path,
+        color=cfg.brand_color,
+    )
+    if not Path(banner).exists():
+        raise HTTPException(status_code=404, detail="Banner not available")
+    return FileResponse(str(banner), media_type="image/png", headers={"Cache-Control": "private, max-age=60"})
+
+
 @router.get("/{club_id}/logo")
 def get_club_logo(
     club_id: str,
@@ -1886,7 +1964,9 @@ def get_club_logo(
     logo_asset_id = (ctx.club.settings or {}).get("logo_asset_id")
     asset = None
     if logo_asset_id:
-        asset = db.query(Asset).filter(Asset.id == logo_asset_id, Asset.club_id == ctx.club.id).first()
+        asset = db.query(Asset).filter(
+            Asset.id == logo_asset_id, (Asset.club_id == ctx.club.id) | (Asset.club_id.is_(None))
+        ).first()
     if not asset:
         lh = db.query(Letterhead).filter(Letterhead.club_id == ctx.club.id).first()
         if lh and lh.right_logo_asset_id:
@@ -2262,6 +2342,7 @@ def list_numbering_series(
     """List all numbering series, current counter values, and format patterns (editors/viewers can view)."""
     series_repo = ScopedRepository(db, NumberingSeries, club_id=ctx.club.id)
     series = series_repo.all()
+    used_by = _series_template_names(db, ctx.club.id)
     return [
         NumberingSeriesOut(
             id=s.id,
@@ -2272,10 +2353,45 @@ def list_numbering_series(
             academic_year=s.academic_year,
             last_seq=s.last_seq,
             current_counter=s.last_seq,
+            description=", ".join(used_by.get(s.key.upper(), [])) or LEGACY_SERIES_NAMES.get(s.key.upper()),
+            used_by=used_by.get(s.key.upper(), []),
             created_at=s.created_at,
         )
         for s in series
     ]
+
+
+# Series keys that are not tied to one template's schema
+LEGACY_SERIES_NAMES = {
+    "DOC": "General documents",
+    "EVT": "Events",
+    "EVENT": "Events",
+}
+
+
+def _series_template_names(db: Session, club_id: str) -> dict[str, list[str]]:
+    """Series key (upper case) -> names of the club's and built-in templates that number with it."""
+    import yaml
+
+    from server.app.models import Template, TemplateVersion
+
+    out: dict[str, list[str]] = {}
+    templates = db.query(Template).filter(
+        (Template.club_id == club_id) | (Template.club_id.is_(None)), Template.status != "archived"
+    ).all()
+    for t in templates:
+        ver = db.query(TemplateVersion).filter(TemplateVersion.id == t.current_version_id).first()
+        try:
+            schema = yaml.safe_load(ver.schema_yaml) if ver and ver.schema_yaml else {}
+        except Exception:
+            schema = {}
+        # Some series are keyed by the template slug (e.g. approval_note numbers by event code)
+        key = ((schema or {}).get("numbering") or {}).get("series") or t.slug
+        if key:
+            names = out.setdefault(str(key).upper(), [])
+            if t.name not in names:
+                names.append(t.name)
+    return out
 
 
 @router.post("/{club_id}/numbering", response_model=NumberingSeriesOut, status_code=status.HTTP_201_CREATED)

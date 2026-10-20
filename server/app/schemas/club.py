@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Optional
-from pydantic import BaseModel, EmailStr, Field
+import re
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class ClubCreate(BaseModel):
@@ -176,6 +178,23 @@ class RoleHeldOut(BaseModel):
     created_at: datetime
 
 
+
+def normalize_mobile(value: Optional[str]) -> Optional[str]:
+    """A 10-digit Indian mobile number; spaces, dashes and a +91/0 prefix are dropped."""
+    if value is None:
+        return None
+    digits = re.sub(r"[\s\-()]", "", str(value))
+    if not digits:
+        return None
+    if digits.startswith("+91"):
+        digits = digits[3:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    if not re.fullmatch(r"[0-9]{10}", digits):
+        raise ValueError("Mobile number must be exactly 10 digits.")
+    return digits
+
+
 class PersonCreate(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=255)
     roll_no: Optional[str] = None
@@ -184,6 +203,11 @@ class PersonCreate(BaseModel):
     mobile: Optional[str] = None
     email: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator("mobile")
+    @classmethod
+    def _mobile(cls, v: Optional[str]) -> Optional[str]:
+        return normalize_mobile(v)
 
 
 class PersonUpdate(BaseModel):
@@ -194,6 +218,11 @@ class PersonUpdate(BaseModel):
     mobile: Optional[str] = None
     email: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator("mobile")
+    @classmethod
+    def _mobile(cls, v: Optional[str]) -> Optional[str]:
+        return normalize_mobile(v)
 
 
 class PersonOut(BaseModel):
@@ -278,6 +307,7 @@ class NumberingSeriesOut(BaseModel):
     last_seq: int
     current_counter: Optional[int] = None
     description: Optional[str] = None
+    used_by: list[str] = []
     created_at: datetime
 
 

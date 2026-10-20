@@ -63,7 +63,7 @@ def setup_isolated_test_database():
 
     test_engine = create_engine(
         f"sqlite:///{TEST_DB_PATH.as_posix()}",
-        connect_args={"check_same_thread": False},
+        connect_args={"check_same_thread": False, "timeout": 30},
     )
 
     @event.listens_for(test_engine, "connect")
@@ -71,6 +71,7 @@ def setup_isolated_test_database():
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
 
     # Rebind core database engine and SessionLocal

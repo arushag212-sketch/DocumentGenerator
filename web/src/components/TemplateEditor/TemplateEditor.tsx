@@ -70,6 +70,77 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [unreviewedModal, setUnreviewedModal] = useState<any[] | null>(null);
   const [unreviewedAiCount, setUnreviewedAiCount] = useState(0);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  // Letterhead and footer exactly as generated documents print them
+  const [clubFooter, setClubFooter] = useState('');
+  // Example values typed in the Fields sidebar, used only by Preview
+  const [sampleValues, setSampleValues] = useState<Record<string, string>>({});
+  const [bannerFailed, setBannerFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api.clubs
+      .get(clubId)
+      .then((club: any) => {
+        if (alive) setClubFooter((club?.settings?.footer_text || club?.name || '').trim());
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [clubId]);
+
+  // A template can use a specific letterhead (logo + titles + institute crest) instead of the banner
+  const [letterheads, setLetterheads] = useState<any[]>([]);
+  const [clubName, setClubName] = useState('');
+  useEffect(() => {
+    api.clubs.getLetterheads(clubId).then(setLetterheads).catch(() => setLetterheads([]));
+    api.clubs.get(clubId).then((c: any) => setClubName(c?.name || '')).catch(() => {});
+  }, [clubId]);
+  const chosenLetterhead = template?.letterhead_id ? letterheads.find((l) => l.id === template.letterhead_id) : null;
+  const letterheadLogoId = chosenLetterhead?.right_logo_asset_id || chosenLetterhead?.left_logo_asset_id;
+
+  const letterhead = {
+    header: chosenLetterhead ? (
+      <div className="grid grid-cols-[72px_1fr_72px] items-center gap-3 pb-2" title={`Letterhead: ${chosenLetterhead.name}`}>
+        <div className="h-16 flex items-center justify-center">
+          {letterheadLogoId && (
+            <img
+              src={`/api/v1/clubs/${clubId}/documents/assets/${letterheadLogoId}/content`}
+              alt=""
+              className="max-h-full max-w-full object-contain"
+              draggable={false}
+            />
+          )}
+        </div>
+        <div className="text-center leading-tight" style={{ fontFamily: 'Tinos, "Times New Roman", serif' }}>
+          <p className="font-bold text-[12.5px] text-slate-900">
+            {chosenLetterhead.title_text || 'SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT'}
+          </p>
+          <p className="font-bold text-[11.5px] text-[#1E5B94]">{chosenLetterhead.subtitle_text || clubName.toUpperCase()}</p>
+        </div>
+        <div className="h-16 flex items-center justify-center">
+          <img src="/assets/svnit_crest.png" alt="" className="max-h-full max-w-full object-contain" draggable={false} />
+        </div>
+      </div>
+    ) : bannerFailed ? null : (
+      <div className="group relative">
+        <img
+          src={`/api/v1/clubs/${clubId}/letterhead-banner`}
+          alt="Club letterhead"
+          className="w-full h-auto block"
+          draggable={false}
+          onError={() => setBannerFailed(true)}
+        />
+        <span className="absolute -top-3 right-0 rounded bg-slate-900/80 px-1.5 py-0.5 text-[11px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
+          Letterhead · change the logo, banner or colour in Club settings
+        </span>
+      </div>
+    ),
+    footer: (
+      <p className="text-[11px] text-slate-500 border-t border-slate-200 pt-1.5" style={{ fontFamily: 'inherit' }}>
+        {clubFooter ? `${clubFooter}  ·  ` : ''}Page 1 of 1
+      </p>
+    ),
+  };
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(null), 5000);
@@ -209,9 +280,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     }
   }, [editor, template]);
 
-  // AI Chat Copilot action applicator
+  // AI Chat Copilot: each applied suggestion keeps a snapshot of the whole template
+  // (content, fields, design) so its Undo restores exactly the state before it.
+  const chatSnapshotsRef = useRef(new Map<string, { content: any; fields: TemplateField[]; design: DesignSettings; template: any }>());
+
   const handleApplyChatAction = useCallback(
-    (action: any) => {
+    (action: any, actionId?: string) => {
+      if (actionId && editor) {
+        chatSnapshotsRef.current.set(actionId, {
+          content: editor.getJSON(),
+          fields: fields.map((f) => ({ ...f })),
+          design: { ...designSettings },
+          template: template ? { ...template } : template,
+        });
+      }
       applyChatAction({
         action,
         editor,
@@ -220,6 +302,21 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         setDesignSettings,
         markUnsaved,
       });
+    },
+    [editor, markUnsaved, setTemplate, setFields, setDesignSettings, fields, designSettings, template]
+  );
+
+  const handleUndoChatAction = useCallback(
+    (actionId: string): boolean => {
+      const snap = chatSnapshotsRef.current.get(actionId);
+      if (!snap || !editor) return false;
+      loadEditorContent(editor, snap.content);
+      setFields(snap.fields);
+      setDesignSettings(snap.design);
+      if (snap.template) setTemplate(snap.template);
+      chatSnapshotsRef.current.delete(actionId);
+      markUnsaved();
+      return true;
     },
     [editor, markUnsaved, setTemplate, setFields, setDesignSettings]
   );
@@ -237,6 +334,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         editor_json: editorJson,
         fields,
         design_settings: designSettings,
+        sample_values: Object.fromEntries(Object.entries(sampleValues).filter(([, v]) => v && v.trim())),
       });
       setPreviewPages(res.pages || []);
     } catch (err: any) {
@@ -413,6 +511,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             showSlashMenu={showSlashMenu}
             onCloseSlashMenu={() => setShowSlashMenu(false)}
             onOpenAddField={() => setRightOpen(true)}
+            letterhead={letterhead}
           />
         </EditorErrorBoundary>
 
@@ -451,6 +550,10 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             }
           }}
           onApplyChatAction={handleApplyChatAction}
+          onUndoChatAction={handleUndoChatAction}
+          sampleValues={sampleValues}
+          onSampleChange={(key, value) => setSampleValues((prev) => ({ ...prev, [key]: value }))}
+          onPreview={handlePreview}
           isOpen={rightOpen}
           onToggle={() => setRightOpen(!rightOpen)}
           isMobile={isMobile}

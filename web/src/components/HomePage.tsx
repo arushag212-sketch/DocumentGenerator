@@ -529,19 +529,20 @@ export const HomePage: React.FC<HomePageProps> = ({
   return (
     <div className="max-w-4xl mx-auto space-y-6 px-4 sm:px-8 py-8">
       <div className="surface-card p-5 sm:p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-          <div>
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <h1 className="page-title">Create documents</h1>
             <p className="page-subtitle">
               Describe the event or what you need in plain words. ClubDocs picks the documents, fills in what you said and asks for the rest.
             </p>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-600 self-start flex-shrink-0">
-            <span>Event</span>
+          <label className="flex items-center gap-2 text-sm text-slate-600 self-start md:w-64 w-full flex-shrink-0">
+            <span className="flex-shrink-0">Event</span>
             <select
               value={selectedEventId}
               onChange={(e) => handleEventChange(e.target.value)}
-              className="input-field !w-auto !py-1.5"
+              className="input-field !py-1.5 min-w-0 truncate"
+              title="Continue an existing event, or start a new one"
             >
               <option value="">New event</option>
               {activeEvents.map((ev) => (

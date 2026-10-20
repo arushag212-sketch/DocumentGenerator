@@ -39,8 +39,9 @@ export type EditorChatPanelProps = {
   templateId?: string;
   documentContext?: EditorAssistantDocumentContext;
   selectedText?: string;
-  onApply: (action: EditorAssistantAction) => void;
-  onUndo?: () => void;
+  onApply: (action: EditorAssistantAction, actionId?: string) => void;
+  /** Restore the template to before this suggestion; returns false when it cannot. */
+  onUndo?: (actionId: string) => boolean;
   requestAssistant?: EditorAssistantFetcher;
   onClose?: () => void;
   className?: string;
@@ -81,6 +82,7 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [lastRequest, setLastRequest] = useState<EditorAssistantRequest | null>(null);
   const [appliedActions, setAppliedActions] = useState<Set<string>>(new Set());
+  const appliedOrderRef = useRef<string[]>([]);
   const [rejectedActions, setRejectedActions] = useState<Set<string>>(new Set());
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -166,8 +168,24 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
   const applyAction = (msgId: string, idx: number, action: EditorAssistantAction) => {
     const actionId = `${msgId}:${idx}`;
     if (appliedActions.has(actionId)) return;
-    onApply(action);
+    onApply(action, actionId);
+    appliedOrderRef.current.push(actionId);
     setAppliedActions((prev) => new Set(prev).add(actionId));
+  };
+
+  // Undo restores the template to before this suggestion, so suggestions applied after
+  // it are undone too.
+  const undoAction = (actionId: string) => {
+    if (!onUndo || !onUndo(actionId)) return;
+    const order = appliedOrderRef.current;
+    const at = order.indexOf(actionId);
+    const undone = at >= 0 ? order.slice(at) : [actionId];
+    appliedOrderRef.current = at >= 0 ? order.slice(0, at) : order;
+    setAppliedActions((prev) => {
+      const next = new Set(prev);
+      undone.forEach((id) => next.delete(id));
+      return next;
+    });
   };
 
   const rejectAction = (msgId: string, idx: number) => {
@@ -262,7 +280,7 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
                         disabled={disabled}
                         onApply={() => applyAction(message.id, idx, action)}
                         onReject={() => rejectAction(message.id, idx)}
-                        onUndo={onUndo}
+                        onUndo={onUndo ? () => undoAction(actionId) : undefined}
                         onClarifySelect={(opt) => submitRequest({ instruction: opt })}
                       />
                     );

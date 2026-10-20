@@ -406,7 +406,7 @@ def test_people_and_signatories_crud_and_mobile_masking(client, owner_context, e
     res_editor_view = client.get(f"/api/v1/clubs/{club_id}/people?reveal=true", headers=editor_context["headers"])
     assert res_editor_view.status_code == 200
     p_editor = next(p for p in res_editor_view.json() if p["id"] == person_id)
-    assert p_editor["mobile"] != "+91 9876543210", "Editor must NEVER see plaintext mobile"
+    assert p_editor["mobile"] not in ("+91 9876543210", "9876543210"), "Editor must NEVER see plaintext mobile"
     assert "*" in p_editor["mobile"], "Editor must receive masked mobile"
 
     # 3. Admin views people with reveal=false -> masked
@@ -419,7 +419,7 @@ def test_people_and_signatories_crud_and_mobile_masking(client, owner_context, e
     res_admin_revealed = client.get(f"/api/v1/clubs/{club_id}/people?reveal=true", headers=owner_context["headers"])
     assert res_admin_revealed.status_code == 200
     p_admin_revealed = next(p for p in res_admin_revealed.json() if p["id"] == person_id)
-    assert p_admin_revealed["mobile"] == "+91 9876543210"
+    assert p_admin_revealed["mobile"] == "9876543210", "mobile is stored as 10 digits (prefix and spaces removed)"
 
     # 5. Editor cannot update or delete person (403)
     res_ed_upd = client.put(f"/api/v1/clubs/{club_id}/people/{person_id}", json={"full_name": "Hacked Name"}, headers=editor_context["headers"])
