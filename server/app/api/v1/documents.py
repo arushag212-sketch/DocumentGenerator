@@ -278,6 +278,7 @@ class TemplateCompileResponse(BaseModel):
 class TemplatePreviewResponse(BaseModel):
     pages: list[str]
     page_count: int
+    orientation: Optional[str] = "portrait"
 
 
 class TemplateDescribeRequest(BaseModel):
@@ -992,7 +993,7 @@ def create_blank_template(
     initial_json = {
         "type": "doc",
         "content": [
-            {"type": "heading", "attrs": {"level": 1, "textAlign": "center"}, "content": [{"type": "text", "text": unique_name}]},
+            {"type": "heading", "attrs": {"level": 1, "textAlign": "center"}, "content": [{"type": "text", "text": unique_name if len(unique_name.strip()) > 1 else "Official Document / Notice"}]},
             {"type": "paragraph", "content": [
                 {"type": "text", "text": "This document serves as an official communication for "},
                 {"type": "fieldChip", "attrs": {"fieldName": "event_name", "label": "Event Name", "fieldType": "text"}},
@@ -1632,13 +1633,15 @@ def preview_template(
             schema_obj = TemplateSchema(**schema_dict)
             from server.app.core.template_compiler import _build_editor_dummy_context, safe_render_docx
             dummy_ctx = _build_editor_dummy_context(schema_obj, fields, editor_json)
-            # Example values from the sidebar (or a field's default) replace the [Label] placeholders.
+            # Example values from the sidebar (or a field's default/example) replace the dummy placeholders.
             for f in fields or []:
-                key = f.get("key") if isinstance(f, dict) else None
-                if key and f.get("default_value") not in (None, "") and f.get("type") != "table":
-                    dummy_ctx[key] = f.get("default_value")
+                if isinstance(f, dict):
+                    k = f.get("key")
+                    val = f.get("default_value") if f.get("default_value") not in (None, "") else f.get("example") if f.get("example") not in (None, "") else f.get("sample_value")
+                    if k and val not in (None, "") and f.get("type") != "table":
+                        dummy_ctx[k] = val
             for key, value in (payload.sample_values or {}).items():
-                if isinstance(key, str) and value not in (None, "") and key in dummy_ctx:
+                if isinstance(key, str) and value not in (None, ""):
                     dummy_ctx[key] = value if isinstance(value, (list, dict)) else str(value)[:2000]
             doc = DocxTemplate(str(tmpl_docx))
             # Show the viewing club's own identity (name, footer, banner) in the preview.
@@ -1676,16 +1679,29 @@ def preview_template(
                     raise HTTPException(status_code=500, detail=f"PDF conversion failed: {e}")
 
             pdf_doc = pymupdf.open(str(pdf_path))
+            detected_orientation = "portrait"
             for page in pdf_doc:
-                pix = page.get_pixmap(dpi=150)
+                if page.rect.width > page.rect.height:
+                    detected_orientation = "landscape"
+                page_scale = max(1400.0 / max(page.rect.width, 1.0), 2.0)
+                pix = page.get_pixmap(matrix=pymupdf.Matrix(page_scale, page_scale))
                 png_bytes = pix.tobytes("png")
                 b64 = base64.b64encode(png_bytes).decode("ascii")
                 pages_base64.append(f"data:image/png;base64,{b64}")
             pdf_doc.close()
 
+        resolved_orientation = "portrait"
+        if preview_design_settings and preview_design_settings.get("orientation") in ("portrait", "landscape"):
+            resolved_orientation = preview_design_settings["orientation"]
+        elif isinstance(editor_json, dict) and editor_json.get("design_settings", {}).get("orientation") in ("portrait", "landscape"):
+            resolved_orientation = editor_json["design_settings"]["orientation"]
+        else:
+            resolved_orientation = detected_orientation
+
         return TemplatePreviewResponse(
             pages=pages_base64,
             page_count=len(pages_base64),
+            orientation=resolved_orientation,
         )
     except HTTPException:
         raise

@@ -40,29 +40,171 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
     if (next) onChange(next as Partial<DesignSettings>);
   };
 
+  const currentOrientation = settings.orientation || 'portrait';
+  const currentMargins = settings.margins || 'normal';
+  const currentBorder = settings.pageBorder || 'none';
+
   return (
     <div className="flex flex-col h-full bg-slate-50/50 overflow-y-auto p-4 space-y-5 text-xs">
       {/* AI Professional Quick-Action */}
-      <div className="bg-brand-50 p-3 rounded-xl border border-brand-200/80">
+      <div className="bg-brand-50 p-3.5 rounded-xl border border-brand-200/80 shadow-xs">
         <div className="flex items-center gap-2 mb-1.5">
           <Wand2 className="w-4 h-4 text-brand-600" />
-          <span className="font-bold text-slate-800 text-xs">Design Studio Copilot</span>
+          <span className="font-bold text-slate-800 text-xs">SVNIT Design Standards</span>
         </div>
-        <p className="text-xs text-slate-600 mb-2.5">
-          Harmonize fonts, margins, heading accents, and table borders for official institute standards.
+        <p className="text-xs text-slate-600 mb-2.5 leading-relaxed">
+          Instantly apply official SVNIT typography, colors, and margins.
         </p>
         <button
           onClick={onAutoStyle}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-sm transition"
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-xs transition focus:outline-none focus:ring-2 focus:ring-brand-500/20"
         >
           <Wand2 className="w-3.5 h-3.5" />
-          Make it Look Professional
+          <span>Apply Official Institute Style</span>
         </button>
+      </div>
+
+      {/* Page Setup & Orientation: Plain-Language Visual Cards */}
+      <div>
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mb-2">
+          <Layout className="w-3.5 h-3.5 text-brand-600" />
+          Page Orientation & Size
+        </label>
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* Portrait Card */}
+          <button
+            type="button"
+            onClick={() => onChange({ orientation: 'portrait' })}
+            className={`p-3 rounded-xl border text-left transition flex flex-col items-center gap-2 ${
+              currentOrientation === 'portrait'
+                ? 'border-brand-600 bg-white ring-2 ring-brand-500/20 shadow-xs'
+                : 'border-slate-200 bg-white hover:border-slate-300'
+            }`}
+          >
+            <div className="w-10 h-14 rounded border-2 border-dashed flex flex-col justify-between p-1 border-slate-300 bg-slate-50">
+              <div className="w-full h-1 bg-slate-200 rounded-xs" />
+              <div className="w-3/4 h-1 bg-slate-200 rounded-xs" />
+              <div className="w-1/2 h-1 bg-slate-200 rounded-xs" />
+            </div>
+            <div className="text-center">
+              <span className="font-bold text-slate-800 block text-xs">Portrait</span>
+              <span className="text-[10px] text-slate-500">210 × 297 mm</span>
+            </div>
+          </button>
+
+          {/* Landscape Card */}
+          <button
+            type="button"
+            onClick={() => onChange({ orientation: 'landscape' })}
+            className={`p-3 rounded-xl border text-left transition flex flex-col items-center gap-2 ${
+              currentOrientation === 'landscape'
+                ? 'border-brand-600 bg-white ring-2 ring-brand-500/20 shadow-xs'
+                : 'border-slate-200 bg-white hover:border-slate-300'
+            }`}
+          >
+            <div className="w-14 h-10 rounded border-2 border-dashed flex flex-col justify-between p-1 border-slate-300 bg-slate-50">
+              <div className="w-full h-1 bg-slate-200 rounded-xs" />
+              <div className="w-3/4 h-1 bg-slate-200 rounded-xs" />
+              <div className="w-1/2 h-1 bg-slate-200 rounded-xs" />
+            </div>
+            <div className="text-center">
+              <span className="font-bold text-slate-800 block text-xs">Landscape</span>
+              <span className="text-[10px] text-slate-500">297 × 210 mm</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Margins: Plain-Language Cards */}
+      <div>
+        <label className="block text-xs font-bold text-slate-800 mb-1.5">
+          Page Margins
+        </label>
+        <div className="grid grid-cols-3 gap-1.5">
+          {[
+            { id: 'compact', label: 'Narrow', desc: '15 mm' },
+            { id: 'normal', label: 'Normal', desc: '25 mm' },
+            { id: 'wide', label: 'Wide', desc: '32 mm' },
+          ].map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onChange({ margins: m.id as any })}
+              className={`p-2 rounded-lg border text-center transition ${
+                currentMargins === m.id
+                  ? 'border-brand-600 bg-brand-50 text-brand-900 font-bold shadow-xs'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              <div className="text-xs">{m.label}</div>
+              <div className="text-[10px] text-slate-500">{m.desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Layout Presets (Letter vs Certificate) */}
+      <div>
+        <label className="block text-xs font-bold text-slate-800 mb-1.5">
+          Document Layout
+        </label>
+        <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Page layout">
+          {(['document', 'certificate'] as const).map((l) => (
+            <button
+              key={l}
+              type="button"
+              role="radio"
+              aria-checked={(settings.layout || 'document') === l}
+              onClick={() => {
+                // Only default certificate layouts to landscape; don't silently flip existing letters
+                if (l === 'certificate') {
+                  onChange({ layout: l, orientation: 'landscape', pageBorder: 'double', margins: 'wide' });
+                } else {
+                  onChange({ layout: l });
+                }
+              }}
+              className={`px-2.5 py-2 rounded-lg border text-xs font-semibold transition ${
+                (settings.layout || 'document') === l
+                  ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-xs'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {l === 'document' ? 'Letter / Notice' : 'Certificate / Award'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Page Border: Plain-Language Cards */}
+      <div>
+        <label className="block text-xs font-bold text-slate-800 mb-1.5">
+          Page Border
+        </label>
+        <div className="grid grid-cols-3 gap-1.5">
+          {[
+            { id: 'none', label: 'None' },
+            { id: 'single', label: 'Single Line' },
+            { id: 'double', label: 'Double (Award)' },
+          ].map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => onChange({ pageBorder: b.id as any })}
+              className={`p-2 rounded-lg border text-center transition ${
+                currentBorder === b.id
+                  ? 'border-brand-600 bg-brand-50 text-brand-900 font-bold shadow-xs'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              <div className="text-xs truncate">{b.label}</div>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Preset Themes */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-2">
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mb-2">
           <Palette className="w-3.5 h-3.5 text-brand-600" />
           Curated Document Themes
         </label>
@@ -75,7 +217,7 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
                 onClick={() => handleThemeSelect(t.id)}
                 className={`p-2.5 rounded-lg border text-left transition flex flex-col gap-1.5 ${
                   isSelected
-                    ? 'border-brand-600 bg-white ring-2 ring-brand-500/20 shadow-sm'
+                    ? 'border-brand-600 bg-white ring-2 ring-brand-500/20 shadow-xs'
                     : 'border-slate-200 bg-white hover:border-slate-300'
                 }`}
               >
@@ -95,7 +237,7 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
 
       {/* Typography */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-2">
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mb-2">
           <Type className="w-3.5 h-3.5 text-brand-600" />
           Typography & Fonts
         </label>
@@ -162,7 +304,7 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
 
       {/* Colors & Palette Customization */}
       <div>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-2">
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mb-2">
           <Droplets className="w-3.5 h-3.5 text-brand-600" />
           Color Palette
         </label>
@@ -247,122 +389,38 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
         )}
         {inkHeavy && (
           <p className="text-[11px] text-amber-800 font-medium">
-            Caution: Dark background will consume significant ink and toner. Light backgrounds are recommended.
-          </p>
-        )}
-        {!isLowContrast && !inkHeavy && (
-          <p className="text-[11px] text-emerald-700">
-            Optimal print contrast. SVNIT letterhead slot remains locked and protected.
+            Caution: Dark background consumes significant printer ink.
           </p>
         )}
       </div>
 
-      {/* Page Setup & Layout */}
-      <div>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-2">
-          <Layout className="w-3.5 h-3.5 text-brand-600" />
-          Page Setup & Layout
+      {/* Watermark */}
+      <div className="space-y-2 pb-4">
+        <label className="block text-xs font-bold text-slate-800">
+          Document Watermark
         </label>
-        <div className="space-y-2.5">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="block text-xs font-medium text-slate-600 mb-1">Orientation</span>
-              <select
-                value={settings.orientation}
-                onChange={(e) => onChange({ orientation: e.target.value as any })}
-                className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none"
-              >
-                <option value="portrait">Portrait (A4)</option>
-                <option value="landscape">Landscape (A4)</option>
-              </select>
-            </div>
+        <input
+          type="text"
+          value={settings.watermark || ''}
+          onChange={(e) => onChange({ watermark: e.target.value })}
+          placeholder="e.g. DRAFT, CONFIDENTIAL, or SAMPLE"
+          className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none"
+        />
 
-            <div>
-              <span className="block text-xs font-medium text-slate-600 mb-1">Margins</span>
-              <select
-                value={settings.margins}
-                onChange={(e) => onChange({ margins: e.target.value as any })}
-                className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none"
-              >
-                <option value="compact">Compact (15mm)</option>
-                <option value="normal">Normal (25mm)</option>
-                <option value="wide">Wide (32mm)</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <span className="block text-xs font-medium text-slate-600 mb-1">Layout</span>
-            <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Page layout">
-              {(['document', 'certificate'] as const).map((l) => (
-                <button
-                  key={l}
-                  type="button"
-                  role="radio"
-                  aria-checked={(settings.layout || 'document') === l}
-                  onClick={() =>
-                    onChange(
-                      l === 'certificate'
-                        ? { layout: l, orientation: 'landscape', pageBorder: 'double', margins: 'wide' }
-                        : { layout: l }
-                    )
-                  }
-                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
-                    (settings.layout || 'document') === l
-                      ? 'border-brand-600 bg-brand-50 text-brand-700'
-                      : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  {l === 'document' ? 'Document / Letter' : 'Certificate / Award'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="block text-xs font-medium text-slate-600 mb-1">Page Border</span>
-              <select
-                value={settings.pageBorder || 'none'}
-                onChange={(e) => onChange({ pageBorder: e.target.value as any })}
-                className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none"
-              >
-                <option value="none">None</option>
-                <option value="single">Single Line</option>
-                <option value="double">Double Border (Certificate)</option>
-              </select>
-            </div>
-
-            <div>
-              <span className="block text-xs font-medium text-slate-600 mb-1">Watermark Opacity</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min="0.05"
-                  max="0.4"
-                  step="0.05"
-                  value={settings.watermarkOpacity ?? 0.15}
-                  onChange={(e) => onChange({ watermarkOpacity: parseFloat(e.target.value) })}
-                  className="w-full accent-brand-600 cursor-pointer"
-                />
-                <span className="text-[11px] text-slate-500 w-8 text-right font-mono">
-                  {Math.round((settings.watermarkOpacity ?? 0.15) * 100)}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <span className="block text-xs font-medium text-slate-600 mb-1">Document Watermark</span>
-            <input
-              type="text"
-              value={settings.watermark || ''}
-              onChange={(e) => onChange({ watermark: e.target.value })}
-              placeholder="e.g. DRAFT, CONFIDENTIAL, or SAMPLE"
-              className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-500 focus:outline-none"
-            >
-            </input>
-          </div>
+        <div className="flex items-center gap-2 pt-1">
+          <span className="text-[11px] text-slate-500 shrink-0">Opacity</span>
+          <input
+            type="range"
+            min="0.05"
+            max="0.4"
+            step="0.05"
+            value={settings.watermarkOpacity ?? 0.15}
+            onChange={(e) => onChange({ watermarkOpacity: parseFloat(e.target.value) })}
+            className="w-full accent-brand-600 cursor-pointer"
+          />
+          <span className="text-[11px] text-slate-500 w-8 text-right font-mono shrink-0">
+            {Math.round((settings.watermarkOpacity ?? 0.15) * 100)}%
+          </span>
         </div>
       </div>
     </div>

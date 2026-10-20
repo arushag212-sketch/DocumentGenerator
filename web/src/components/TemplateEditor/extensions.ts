@@ -134,7 +134,7 @@ export const FieldChip = Node.create({
     const fieldName = HTMLAttributes.fieldName || '';
     const label = HTMLAttributes.label || fieldName;
     const importance = HTMLAttributes.importance || (HTMLAttributes.required ? 'essential' : 'optional');
-    const badgeText = importance === 'essential' ? 'Essential' : 'Optional';
+    const isRequired = importance === 'essential' || HTMLAttributes.required;
     return [
       'span',
       mergeAttributes(HTMLAttributes, {
@@ -142,36 +142,37 @@ export const FieldChip = Node.create({
         'data-label': label,
         'data-field-type': HTMLAttributes.fieldType || 'text',
         'data-importance': importance,
-        'data-required': importance === 'essential' ? 'true' : 'false',
+        'data-required': isRequired ? 'true' : 'false',
         'data-sensitive': HTMLAttributes.sensitive ? 'true' : 'false',
         'data-ask': HTMLAttributes.ask || '',
         role: 'button',
         tabindex: '0',
-        title: `Dynamic field: ${label}`,
+        title: `Dynamic field: ${label} (${fieldName})`,
         class:
-          'field-chip inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-900 border border-indigo-300 shadow-sm mx-1 cursor-pointer select-none hover:bg-indigo-100',
+          'field-chip inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 text-brand-900 border border-brand-200 shadow-xs mx-0.5 cursor-pointer select-none hover:bg-brand-100 transition-colors',
       }),
       `⚡ ${label}`,
-      [
-        'span',
-        {
-          class: `text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ml-1 ${
-            importance === 'essential'
-              ? 'bg-rose-100 text-rose-700 border border-rose-300'
-              : 'bg-slate-100 text-slate-500 border border-slate-200'
-          }`,
-        },
-        badgeText,
-      ],
+      ...(isRequired
+        ? [
+            [
+              'span',
+              {
+                class: 'text-rose-600 font-bold ml-0.5 text-xs select-none',
+                title: 'Required field',
+              },
+              '*',
+            ],
+          ]
+        : []),
       ...(HTMLAttributes.sensitive
         ? [
             [
               'span',
               {
-                class:
-                  'text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ml-0.5 bg-amber-100 text-amber-800 border border-amber-300',
+                class: 'text-[11px] text-amber-700 ml-0.5 select-none',
+                title: 'Sensitive field',
               },
-              '🔒 Sensitive',
+              '🔒',
             ],
           ]
         : []),

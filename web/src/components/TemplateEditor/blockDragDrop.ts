@@ -1,3 +1,4 @@
+import { showEditorToast } from './editorToast';
 import { Node as PMNode } from '@tiptap/pm/model';
 import {
   createInfoTableNode,
@@ -250,7 +251,7 @@ function findSafeBlockInsertPos(doc: any, pos: number): number {
     if (file.type.startsWith('image/')) {
       event.preventDefault();
       if (file.size > 2 * 1024 * 1024) {
-        alert('Image exceeds the 2 MB limit.');
+        showEditorToast('Image exceeds the 2 MB limit.', 'error');
         return true;
       }
 

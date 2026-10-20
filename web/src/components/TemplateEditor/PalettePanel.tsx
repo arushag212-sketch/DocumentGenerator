@@ -12,6 +12,10 @@ import {
   ChevronRight,
   GripVertical,
   Wand2,
+  Tag,
+  Palette,
+  Layers,
+  FileText,
 } from 'lucide-react';
 import {
   insertInfoTable,
@@ -20,19 +24,41 @@ import {
   insertImageBlock,
   safeInsertBlock,
 } from './extensions';
+import { FieldsPanel, TemplateField } from './FieldsPanel';
+import { DesignPanel, DesignSettings } from './DesignPanel';
+
+export type LeftSidebarTab = 'blocks' | 'fields' | 'design';
 
 interface PalettePanelProps {
   editor: any;
   isOpen: boolean;
   onToggle: () => void;
+  fields?: TemplateField[];
+  onAddField?: (field: TemplateField) => void;
+  designSettings?: DesignSettings;
+  onDesignChange?: (settings: Partial<DesignSettings>) => void;
+  onAutoStyle?: () => void;
+  sampleValues?: Record<string, string>;
+  onSampleChange?: (key: string, value: string) => void;
+  onPreview?: () => void;
+  initialTab?: LeftSidebarTab;
 }
 
 export const PalettePanel: React.FC<PalettePanelProps> = ({
   editor,
   isOpen,
   onToggle,
+  fields = [],
+  onAddField = () => {},
+  designSettings,
+  onDesignChange = () => {},
+  onAutoStyle,
+  sampleValues = {},
+  onSampleChange,
+  onPreview,
+  initialTab = 'blocks',
 }) => {
-  const [activeCategory, setActiveCategory] = useState<'blocks' | 'clauses'>('blocks');
+  const [activeTab, setActiveTab] = useState<LeftSidebarTab>(initialTab);
 
   const handleDragStart = (e: React.DragEvent, blockType: string, customPayload?: any) => {
     e.dataTransfer.setData('text/plain', blockType);
@@ -62,266 +88,355 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
 
   const handleInsertDivider = () => {
     if (!editor) return;
-    const pageBreakNode = { type: 'pageBreak' };
-    safeInsertBlock(editor, pageBreakNode);
+    safeInsertBlock(editor, { type: 'pageBreak' });
   };
 
   if (!isOpen) {
     return (
-      <aside className="border-r border-slate-200 bg-slate-50 flex flex-col items-center py-3 px-1 transition-all">
+      <aside className="border-r border-slate-200 bg-slate-50 flex flex-col items-center py-3 px-1 transition-all select-none">
         <button
           onClick={onToggle}
           className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition"
-          title="Expand Blocks Palette"
+          title="Expand Left Panel"
+          aria-label="Expand sidebar"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
         <span
-          className="text-[11px] font-bold text-slate-400 mt-6 select-none cursor-pointer"
+          className="text-[11px] font-bold text-slate-400 mt-6 select-none cursor-pointer flex items-center gap-1.5"
           style={{ writingMode: 'vertical-rl' }}
           onClick={onToggle}
         >
-          Blocks Palette
+          <Layers className="w-3.5 h-3.5 text-brand-500" />
+          Blocks & Design
         </span>
       </aside>
     );
   }
 
   return (
-    <aside className="w-64 border-r border-slate-200 bg-slate-50/70 flex flex-col h-[calc(100vh-53px)] select-none transition-all">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-200 bg-white">
-        <span className="font-bold text-slate-800 text-xs tracking-wide uppercase">
-          Blocks Palette
-        </span>
+    <aside className="w-72 lg:w-80 border-r border-slate-200 bg-white flex flex-col h-[calc(100vh-53px)] select-none transition-all">
+      {/* Header with Navigation Tabs */}
+      <div className="border-b border-slate-200 bg-slate-50/80 px-2 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-1 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setActiveTab('blocks')}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition ${
+              activeTab === 'blocks'
+                ? 'bg-white text-brand-700 shadow-xs border border-slate-200/80 font-bold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+            title="Content blocks and layout elements"
+          >
+            <Layers className="w-3.5 h-3.5 text-brand-600" />
+            <span>Blocks</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('fields')}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition ${
+              activeTab === 'fields'
+                ? 'bg-white text-brand-700 shadow-xs border border-slate-200/80 font-bold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+            title="Dynamic template fields"
+          >
+            <Tag className="w-3.5 h-3.5 text-brand-600" />
+            <span>Fields</span>
+            {fields.length > 0 && (
+              <span className="text-[10px] font-mono px-1 rounded-full bg-slate-100 text-slate-600">
+                {fields.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('design')}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition ${
+              activeTab === 'design'
+                ? 'bg-white text-brand-700 shadow-xs border border-slate-200/80 font-bold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+            title="Page orientation, fonts, and theme"
+          >
+            <Palette className="w-3.5 h-3.5 text-brand-600" />
+            <span>Design</span>
+          </button>
+        </div>
+
         <button
+          type="button"
           onClick={onToggle}
           className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition"
-          title="Collapse Palette"
+          title="Collapse Panel"
+          aria-label="Collapse sidebar"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-200 bg-slate-100 p-1 gap-1 text-xs font-semibold">
-        <button
-          onClick={() => setActiveCategory('blocks')}
-          className={`flex-1 py-1 rounded transition text-center ${
-            activeCategory === 'blocks'
-              ? 'bg-white text-brand-700 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Blocks
-        </button>
-        <button
-          onClick={() => setActiveCategory('clauses')}
-          className={`flex-1 py-1 rounded transition text-center ${
-            activeCategory === 'clauses'
-              ? 'bg-white text-brand-700 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Preset Clauses
-        </button>
-      </div>
-
-      {/* Scrollable Items */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4 text-xs">
-        {activeCategory === 'blocks' ? (
-          <>
+      {/* Tab Contents */}
+      <div className="flex-1 overflow-hidden relative">
+        {activeTab === 'blocks' && (
+          <div className="h-full overflow-y-auto p-3 space-y-4 text-xs bg-slate-50/50">
             {/* Typography */}
             <div>
-              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1">
+              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1 uppercase tracking-wider">
                 Typography
               </div>
               <div className="space-y-1">
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'heading1')}
                   onClick={() => handleInsertHeading(1)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Heading1 className="w-4 h-4 text-brand-600" />
-                  <span className="font-semibold text-slate-800 text-xs">Title (Heading 1)</span>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <Heading1 className="w-4 h-4 text-brand-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-semibold text-slate-800 text-xs block truncate">Document Title</span>
+                    <span className="text-[10px] text-slate-400 block truncate">Heading 1 (18pt)</span>
+                  </div>
                 </button>
 
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'heading2')}
                   onClick={() => handleInsertHeading(2)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Heading2 className="w-4 h-4 text-brand-600" />
-                  <span className="font-semibold text-slate-800 text-xs">Section (Heading 2)</span>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <Heading2 className="w-4 h-4 text-brand-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-semibold text-slate-800 text-xs block truncate">Section Header</span>
+                    <span className="text-[10px] text-slate-400 block truncate">Heading 2 (14pt)</span>
+                  </div>
                 </button>
 
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'heading3')}
                   onClick={() => handleInsertHeading(3)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Heading3 className="w-4 h-4 text-brand-600" />
-                  <span className="font-semibold text-slate-800 text-xs">Sub-section (Heading 3)</span>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <Heading3 className="w-4 h-4 text-brand-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-semibold text-slate-800 text-xs block truncate">Sub-section</span>
+                    <span className="text-[10px] text-slate-400 block truncate">Heading 3 (12pt)</span>
+                  </div>
                 </button>
 
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'paragraph')}
                   onClick={handleInsertParagraph}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Pilcrow className="w-4 h-4 text-slate-600" />
-                  <span className="text-slate-700 text-xs">Paragraph Text</span>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <Pilcrow className="w-4 h-4 text-slate-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="text-slate-700 text-xs font-semibold block truncate">Paragraph Text</span>
+                    <span className="text-[10px] text-slate-400 block truncate">Standard body paragraph</span>
+                  </div>
                 </button>
               </div>
             </div>
 
             {/* Official Tables */}
             <div>
-              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1">
+              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1 uppercase tracking-wider">
                 Official Tables
               </div>
               <div className="space-y-1">
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'infoTable')}
                   onClick={() => insertInfoTable(editor)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Table className="w-4 h-4 text-emerald-600" />
-                  <div className="flex-1">
-                    <div className="font-semibold text-slate-800 text-xs">Info Table</div>
-                    <div className="text-[11px] text-slate-500">2-Column key-value details</div>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <Table className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-slate-800 text-xs truncate">Info Table</div>
+                    <div className="text-[10px] text-slate-500 truncate">2-Column key-value details</div>
                   </div>
                 </button>
 
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'repeatingTable')}
                   onClick={() => insertRepeatingTable(editor)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Rows className="w-4 h-4 text-emerald-600" />
-                  <div className="flex-1">
-                    <div className="font-semibold text-slate-800 text-xs">Repeating Table</div>
-                    <div className="text-[11px] text-slate-500">Items/budget with sum total</div>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <Rows className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-slate-800 text-xs truncate">Repeating Table</div>
+                    <div className="text-[10px] text-slate-500 truncate">Items / budget with sum total</div>
                   </div>
                 </button>
 
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'signatureGrid')}
                   onClick={() => insertSignatureGrid(editor, 2)}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <CheckSquare className="w-4 h-4 text-amber-600" />
-                  <div className="flex-1">
-                    <div className="font-semibold text-slate-800 text-xs">Signature Grid</div>
-                    <div className="text-[11px] text-slate-500">2-Column official sign-off</div>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <CheckSquare className="w-4 h-4 text-amber-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-slate-800 text-xs truncate">Signature Grid</div>
+                    <div className="text-[10px] text-slate-500 truncate">2-Column official sign-off</div>
                   </div>
                 </button>
               </div>
             </div>
 
-            {/* Layout & Assets */}
+            {/* Layout & Assets (keeps only club logo and college logo as required) */}
             <div>
-              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1">
+              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1 uppercase tracking-wider">
                 Layout & Assets
               </div>
               <div className="space-y-1">
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'clubLogo')}
                   onClick={() => insertImageBlock(editor, { imageType: 'club-logo', alt: 'Club logo' })}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Wand2 className="w-4 h-4 text-brand-600" />
-                  <span className="font-semibold text-slate-800 text-xs">Club Logo</span>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <Wand2 className="w-4 h-4 text-brand-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-slate-800 text-xs block truncate">Club Logo</span>
+                    <span className="text-[10px] text-slate-500 block truncate">Official club emblem</span>
+                  </div>
                 </button>
 
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'collegeLogo')}
                   onClick={() => insertImageBlock(editor, { imageType: 'college-logo', alt: 'College logo', width: '90px' })}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <img src="/assets/svnit_crest.png" alt="" className="w-4 h-4 object-contain" />
-                  <span className="font-semibold text-slate-800 text-xs">College Logo</span>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <img src="/assets/svnit_crest.png" alt="" className="w-4 h-4 object-contain shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-slate-800 text-xs block truncate">College Logo</span>
+                    <span className="text-[10px] text-slate-500 block truncate">SVNIT Institute crest</span>
+                  </div>
                 </button>
 
                 <button
+                  type="button"
                   draggable
                   onDragStart={(e) => handleDragStart(e, 'pageBreak')}
                   onClick={handleInsertDivider}
-                  className="w-full flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 hover:border-brand-300 hover:shadow-sm text-left transition group"
+                  className="w-full flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 hover:shadow-xs text-left transition group"
                 >
-                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500" />
-                  <Minus className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-700 text-xs">Page Break</span>
+                  <GripVertical className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+                  <Minus className="w-4 h-4 text-slate-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-slate-700 text-xs font-semibold block truncate">Page Break</span>
+                    <span className="text-[10px] text-slate-500 block truncate">Start new printed page</span>
+                  </div>
                 </button>
               </div>
             </div>
-          </>
-        ) : (
-          <div className="space-y-2">
-            <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1">
-              Official SVNIT Clauses
-            </div>
 
-            <div
-              onClick={() =>
-                handleInsertClause(
-                  'It is certified that the above expenditure was incurred in the interest of the institute/club and the rates are reasonable.'
-                )
-              }
-              className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-brand-500 hover:shadow-sm cursor-pointer transition"
-            >
-              <div className="font-semibold text-slate-800 text-xs mb-1">Expenditure Certification</div>
-              <div className="text-[11px] text-slate-500 line-clamp-2">
-                "It is certified that the above expenditure was incurred in the interest of the institute..."
+            {/* SVNIT Preset Clauses */}
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1 uppercase tracking-wider">
+                Official SVNIT Clauses
               </div>
-            </div>
+              <div className="space-y-1.5">
+                <div
+                  onClick={() =>
+                    handleInsertClause(
+                      'It is certified that the above expenditure was incurred in the interest of the institute/club and the rates are reasonable.'
+                    )
+                  }
+                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-brand-400 hover:shadow-xs cursor-pointer transition select-none"
+                  title="Click to insert clause"
+                >
+                  <div className="font-semibold text-slate-800 text-xs mb-0.5 flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-brand-600" />
+                    <span>Expenditure Certification</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 line-clamp-2">
+                    &ldquo;It is certified that the above expenditure was incurred in the interest of the institute...&rdquo;
+                  </div>
+                </div>
 
-            <div
-              onClick={() =>
-                handleInsertClause(
-                  'Submitted for kind approval and administrative sanction please.'
-                )
-              }
-              className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-brand-500 hover:shadow-sm cursor-pointer transition"
-            >
-              <div className="font-semibold text-slate-800 text-xs mb-1">Sanction Request</div>
-              <div className="text-[11px] text-slate-500 line-clamp-2">
-                "Submitted for kind approval and administrative sanction please."
-              </div>
-            </div>
+                <div
+                  onClick={() =>
+                    handleInsertClause(
+                      'Submitted for kind approval and administrative sanction please.'
+                    )
+                  }
+                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-brand-400 hover:shadow-xs cursor-pointer transition select-none"
+                  title="Click to insert clause"
+                >
+                  <div className="font-semibold text-slate-800 text-xs mb-0.5 flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-brand-600" />
+                    <span>Sanction Request</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 line-clamp-2">
+                    &ldquo;Submitted for kind approval and administrative sanction please.&rdquo;
+                  </div>
+                </div>
 
-            <div
-              onClick={() =>
-                handleInsertClause(
-                  'The students and organizing committee undertake to maintain discipline and institute decorum during the event.'
-                )
-              }
-              className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-brand-500 hover:shadow-sm cursor-pointer transition"
-            >
-              <div className="font-semibold text-slate-800 text-xs mb-1">Discipline Undertaking</div>
-              <div className="text-[11px] text-slate-500 line-clamp-2">
-                "The students and organizing committee undertake to maintain discipline..."
+                <div
+                  onClick={() =>
+                    handleInsertClause(
+                      'The students and organizing committee undertake to maintain discipline and institute decorum during the event.'
+                    )
+                  }
+                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:border-brand-400 hover:shadow-xs cursor-pointer transition select-none"
+                  title="Click to insert clause"
+                >
+                  <div className="font-semibold text-slate-800 text-xs mb-0.5 flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-brand-600" />
+                    <span>Discipline Undertaking</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 line-clamp-2">
+                    &ldquo;The students and organizing committee undertake to maintain discipline...&rdquo;
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'fields' && (
+          <FieldsPanel
+            fields={fields}
+            onAddField={onAddField}
+            editor={editor}
+            sampleValues={sampleValues}
+            onSampleChange={onSampleChange}
+            onPreview={onPreview}
+          />
+        )}
+
+        {activeTab === 'design' && designSettings && (
+          <DesignPanel
+            settings={designSettings}
+            onChange={onDesignChange}
+            onAutoStyle={onAutoStyle}
+          />
         )}
       </div>
     </aside>

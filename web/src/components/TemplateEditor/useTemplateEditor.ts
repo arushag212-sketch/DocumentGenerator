@@ -17,6 +17,13 @@ import {
 } from './extensions';
 import { handleEditorDrop, moveTopLevelBlock } from './blockDragDrop';
 
+export interface InlinePickerState {
+  type: 'slash' | 'field';
+  top: number;
+  left: number;
+  range: { from: number; to: number };
+}
+
 interface UseTemplateEditorOptions {
   onDocChange?: () => void;
   clubId?: string;
@@ -35,6 +42,7 @@ function findChipPos(doc: any, pos: number, fieldName?: string): number | null {
 export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOptions = {}) {
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null);
   const [chipPopover, setChipPopover] = useState<any>(null);
   const [selectedImageBlock, setSelectedImageBlock] = useState<any>(null);
 
@@ -131,6 +139,7 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
           setChipPopover(null);
           setSelectedImageBlock(null);
           setShowSlashMenu(false);
+          setInlinePicker(null);
           return true;
         }
         if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
@@ -166,13 +175,40 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
     onUpdate: ({ editor: currentEditor, transaction }: any) => {
       if (onDocChange) onDocChange();
 
-      // Check for slash command at the start of empty line
+      // Check for inline trigger: '{{' or '/'
       const { selection } = currentEditor.state;
       const { $from } = selection;
       const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc');
-      if (textBefore === '/') {
-        setShowSlashMenu(true);
-      } else if (showSlashMenu) {
+
+      if (textBefore.endsWith('{{')) {
+        try {
+          const coords = currentEditor.view.coordsAtPos(selection.from);
+          setInlinePicker({
+            type: 'field',
+            top: coords.bottom + 6,
+            left: Math.min(Math.max(coords.left, 20), Math.max(20, window.innerWidth - 300)),
+            range: { from: selection.from - 2, to: selection.from },
+          });
+          setShowSlashMenu(false);
+        } catch {
+          setInlinePicker(null);
+        }
+      } else if (textBefore === '/' || textBefore.endsWith(' /')) {
+        try {
+          const coords = currentEditor.view.coordsAtPos(selection.from);
+          const slashStart = textBefore.endsWith(' /') ? selection.from - 1 : selection.from - 1;
+          setInlinePicker({
+            type: 'slash',
+            top: coords.bottom + 6,
+            left: Math.min(Math.max(coords.left, 20), Math.max(20, window.innerWidth - 300)),
+            range: { from: slashStart, to: selection.from },
+          });
+          setShowSlashMenu(true);
+        } catch {
+          setShowSlashMenu(true);
+        }
+      } else if (inlinePicker && !textBefore.includes('{{') && !textBefore.includes('/')) {
+        setInlinePicker(null);
         setShowSlashMenu(false);
       }
 
@@ -236,6 +272,8 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
     setBubblePos,
     showSlashMenu,
     setShowSlashMenu,
+    inlinePicker,
+    setInlinePicker,
     chipPopover,
     setChipPopover,
     selectedImageBlock,

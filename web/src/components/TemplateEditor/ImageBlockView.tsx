@@ -1,3 +1,4 @@
+import { showEditorToast } from './editorToast';
 import React, { useState, useRef, useCallback } from 'react';
 import { NodeViewWrapper, NodeViewProps } from '@tiptap/react';
 import { useAuth } from '../../context/AuthContext';
@@ -121,12 +122,12 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file (PNG, JPG, SVG, WebP).');
+      showEditorToast('Please select an image file (PNG, JPG, SVG, WebP).', 'error');
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      alert('Image exceeds the 2 MB limit.');
+      showEditorToast('Image exceeds the 2 MB limit.', 'error');
       return;
     }
 

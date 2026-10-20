@@ -7,16 +7,21 @@ import {
   Copy,
   Trash2,
   Lock,
+  MoreVertical,
+  AlertCircle,
 } from 'lucide-react';
 import { isLockedNode, moveTopLevelBlock } from './blockDragDrop';
 
 interface BlockDragHandleProps {
   editor: any;
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export const BlockDragHandle: React.FC<BlockDragHandleProps> = ({ editor, containerRef }) => {
   const [handlePos, setHandlePos] = useState<{ top: number; left: number } | null>(null);
+  const [hoveredRect, setHoveredRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [activeNodeInfo, setActiveNodeInfo] = useState<{
     pos: number;
     index: number;
@@ -63,7 +68,14 @@ export const BlockDragHandle: React.FC<BlockDragHandleProps> = ({ editor, contai
 
       setHandlePos({
         top: rect.top - containerRect.top + 4,
-        left: Math.max(10, rect.left - containerRect.left - 52),
+        left: Math.max(10, rect.left - containerRect.left - 48),
+      });
+
+      setHoveredRect({
+        top: rect.top - containerRect.top,
+        left: rect.left - containerRect.left,
+        width: rect.width,
+        height: rect.height,
       });
 
       setActiveNodeInfo({
@@ -119,6 +131,7 @@ export const BlockDragHandle: React.FC<BlockDragHandleProps> = ({ editor, contai
     const cloned = node.type.create(newAttrs, node.content, node.marks);
     const insertPos = activeNodeInfo.pos + node.nodeSize;
     view.dispatch(state.tr.insert(insertPos, cloned));
+    setShowMenu(false);
   };
 
   const handleDelete = () => {
@@ -126,13 +139,15 @@ export const BlockDragHandle: React.FC<BlockDragHandleProps> = ({ editor, contai
     const { state, view } = editor;
     const node = state.doc.child(activeNodeInfo.index);
     view.dispatch(state.tr.delete(activeNodeInfo.pos, activeNodeInfo.pos + node.nodeSize));
+    setShowMenu(false);
+    setConfirmDelete(false);
   };
 
   if (activeNodeInfo.isLocked) {
     return (
       <div
         style={{ top: `${handlePos.top}px`, left: `${handlePos.left}px` }}
-        className="absolute z-30 flex items-center gap-1 bg-amber-50 border border-amber-300 text-amber-800 text-[11px] font-bold px-2 py-1 rounded-md shadow-sm select-none"
+        className="absolute z-30 flex items-center gap-1 bg-amber-50 border border-amber-300 text-amber-800 text-[11px] font-bold px-2 py-1 rounded-md shadow-xs select-none"
         title="SVNIT Letterhead Slot (Locked, cannot be moved or deleted)"
       >
         <Lock className="w-3 h-3 text-amber-600" />
@@ -142,59 +157,128 @@ export const BlockDragHandle: React.FC<BlockDragHandleProps> = ({ editor, contai
   }
 
   return (
-    <div
-      style={{ top: `${handlePos.top}px`, left: `${handlePos.left}px` }}
-      className="absolute z-30 flex items-center gap-0.5 bg-white/95 backdrop-blur border border-slate-200 rounded-lg shadow-md px-1 py-0.5 select-none transition-all group"
-    >
-      {/* Drag handle grip */}
+    <>
+      {/* Faint outline hovering around active block */}
+      {hoveredRect && (
+        <div
+          style={{
+            top: `${hoveredRect.top - 2}px`,
+            left: `${hoveredRect.left - 4}px`,
+            width: `${hoveredRect.width + 8}px`,
+            height: `${hoveredRect.height + 4}px`,
+          }}
+          className="pointer-events-none absolute rounded-lg border border-brand-300/30 bg-brand-50/5 transition-all duration-75 z-10"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Floating block handle */}
       <div
-        draggable
-        onDragStart={handleDragStart}
-        className="p-1 rounded cursor-grab active:cursor-grabbing text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition"
-        title="Drag block to reorder"
+        style={{ top: `${handlePos.top}px`, left: `${handlePos.left}px` }}
+        className="absolute z-30 flex items-center gap-0.5 bg-white/95 backdrop-blur border border-slate-200 rounded-lg shadow-md p-0.5 select-none transition-all group"
       >
-        <GripVertical className="w-3.5 h-3.5" />
+        {/* Drag handle grip */}
+        <div
+          draggable
+          onDragStart={handleDragStart}
+          className="p-1 rounded cursor-grab active:cursor-grabbing text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition"
+          title="Drag block to reorder"
+          aria-label="Drag block to reorder"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </div>
+
+        {/* '⋮' Context Menu Button */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => {
+              setShowMenu(!showMenu);
+              setConfirmDelete(false);
+            }}
+            className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition"
+            title="Block options"
+            aria-label="Block options"
+          >
+            <MoreVertical className="w-3.5 h-3.5" />
+          </button>
+
+          {showMenu && (
+            <div className="absolute left-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl py-1 z-50 text-xs animate-in fade-in zoom-in-95">
+              <button
+                type="button"
+                onClick={() => {
+                  moveTopLevelBlock(editor, 'up');
+                  setShowMenu(false);
+                }}
+                disabled={activeNodeInfo.index === 0}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent text-left"
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+                <span>Move up (Alt+↑)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  moveTopLevelBlock(editor, 'down');
+                  setShowMenu(false);
+                }}
+                disabled={activeNodeInfo.index >= editor.state.doc.childCount - 1}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent text-left"
+              >
+                <ArrowDown className="w-3.5 h-3.5" />
+                <span>Move down (Alt+↓)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDuplicate}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-slate-700 hover:bg-slate-50 text-left"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Duplicate block</span>
+              </button>
+
+              <div className="my-1 border-t border-slate-100" />
+
+              {confirmDelete ? (
+                <div className="px-3 py-1.5 bg-rose-50 border border-rose-200 rounded-md mx-1 space-y-1">
+                  <div className="text-[11px] font-semibold text-rose-800 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 text-rose-600" />
+                    <span>Delete this block?</span>
+                  </div>
+                  <div className="flex gap-1 justify-end pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      className="px-2 py-0.5 text-[11px] text-slate-600 hover:bg-white rounded"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      className="px-2 py-0.5 text-[11px] bg-rose-600 text-white font-semibold rounded hover:bg-rose-700"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-rose-600 hover:bg-rose-50 text-left font-medium"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete block</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Move Up */}
-      <button
-        onClick={() => moveTopLevelBlock(editor, 'up')}
-        disabled={activeNodeInfo.index === 0}
-        className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition"
-        title="Move block up (Alt+Up)"
-      >
-        <ArrowUp className="w-3 h-3" />
-      </button>
-
-      {/* Move Down */}
-      <button
-        onClick={() => moveTopLevelBlock(editor, 'down')}
-        disabled={activeNodeInfo.index >= editor.state.doc.childCount - 1}
-        className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition"
-        title="Move block down (Alt+Down)"
-      >
-        <ArrowDown className="w-3 h-3" />
-      </button>
-
-      <div className="w-px h-3 bg-slate-200 mx-0.5" />
-
-      {/* Duplicate */}
-      <button
-        onClick={handleDuplicate}
-        className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition"
-        title="Duplicate block"
-      >
-        <Copy className="w-3 h-3" />
-      </button>
-
-      {/* Delete */}
-      <button
-        onClick={handleDelete}
-        className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-        title="Delete block"
-      >
-        <Trash2 className="w-3 h-3" />
-      </button>
-    </div>
+    </>
   );
 };

@@ -738,8 +738,11 @@ class TipTapDocxCompiler:
             section.left_margin = Inches(margin_in)
             section.right_margin = Inches(margin_in)
 
+            from docx.oxml.ns import qn
             # Page border
             page_border = self.design_settings.get("pageBorder") or self.design_settings.get("border_style") or "none"
+            for existing_b in section._sectPr.findall(qn("w:pgBorders")):
+                section._sectPr.remove(existing_b)
             if page_border in ("single", "double"):
                 val = "double" if page_border == "double" else "single"
                 sz = "12" if page_border == "double" else "8"
@@ -756,7 +759,8 @@ class TipTapDocxCompiler:
 
             # Watermark text in header
             watermark_text = self.design_settings.get("watermark") or ""
-            if watermark_text.strip():
+            has_wm = any(p.text.startswith("[") and p.text.endswith("]") for p in section.header.paragraphs)
+            if watermark_text.strip() and not has_wm:
                 p_wm = section.header.add_paragraph()
                 p_wm.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p_wm.paragraph_format.space_before = Pt(4)
@@ -798,6 +802,9 @@ class TipTapDocxCompiler:
             self._add_block(block)
             if condition:
                 self._add_control_paragraph("{%p endif %}")
+
+        # 3. Ensure page configuration (orientation, dimensions, margins, borders) applies to all sections
+        self._configure_page()
 
         return self.doc
 
@@ -907,7 +914,12 @@ class TipTapDocxCompiler:
             color = self.heading_color_rgb or RGBColor(0x37, 0x41, 0x51)
 
         size, color, font = self._block_style(attrs, font_size, color, self.heading_font, p)
-        self._render_inline_content(p, block.get("content", []), default_size=size,
+        raw_content = block.get("content", [])
+        if isinstance(raw_content, str):
+            raw_content = [{"type": "text", "text": raw_content}]
+        elif not raw_content and block.get("text"):
+            raw_content = [{"type": "text", "text": str(block["text"])}]
+        self._render_inline_content(p, raw_content, default_size=size,
                                    default_bold=True, default_color=color, font_name=font)
 
     def _block_style(self, attrs: dict[str, Any], size: int, color, font, paragraph):
@@ -1240,12 +1252,6 @@ class TipTapDocxCompiler:
         # Break signatures into rows of cols_count
         chunked = [signatures[i:i + cols_count] for i in range(0, len(signatures), cols_count)]
 
-        # Preceding spacing
-        p_lead = self.doc.add_paragraph()
-        p_lead.paragraph_format.space_before = Pt(30 if self.is_certificate else 14)
-        p_lead.paragraph_format.space_after = Pt(4)
-        set_paragraph_keep_with_next(p_lead)
-
         table = self.doc.add_table(rows=len(chunked) * 2, cols=cols_count)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         table.autofit = False
@@ -1265,7 +1271,7 @@ class TipTapDocxCompiler:
                                 start={"val": "none", "sz": "0"},
                                 end={"val": "none", "sz": "0"})
                 p = cell.paragraphs[0]
-                p.paragraph_format.space_before = Pt(36) # Vertical space above signature labels per Requirement 4
+                p.paragraph_format.space_before = Pt(22)
                 p.paragraph_format.space_after = Pt(2)
                 set_paragraph_keep_with_next(p)
 
@@ -1486,11 +1492,6 @@ class TipTapDocxCompiler:
         cols_count = max(len(cells), 1)
         cell_width = Inches(6.67 / cols_count)
 
-        p_lead = self.doc.add_paragraph()
-        p_lead.paragraph_format.space_before = Pt(30 if self.is_certificate else 14)
-        p_lead.paragraph_format.space_after = Pt(4)
-        set_paragraph_keep_with_next(p_lead)
-
         table = self.doc.add_table(rows=2, cols=cols_count)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         table.autofit = False
@@ -1507,7 +1508,7 @@ class TipTapDocxCompiler:
                             start={"val": "none", "sz": "0"},
                             end={"val": "none", "sz": "0"})
             p = cell.paragraphs[0]
-            p.paragraph_format.space_before = Pt(36)
+            p.paragraph_format.space_before = Pt(22)
             p.paragraph_format.space_after = Pt(2)
             set_paragraph_keep_with_next(p)
 
@@ -2057,6 +2058,73 @@ def rename_field_in_editor_json(editor_json: dict[str, Any], old_key: str, new_k
     return updated
 
 
+def _realistic_dummy_value(key: str, label: str = "", field_type: str = "text") -> Any:
+    k = (key or "").lower().strip()
+    lbl = (label or "").lower().strip()
+
+    if any(w in k or w in lbl for w in ("event_name", "event_title", "activity")):
+        return "Annual Photography Walk"
+    if "notice_title" in k or "notice_title" in lbl:
+        return "Annual Photography Walk & Exhibition Notice"
+    if "title" in k or "title" in lbl:
+        return "Annual Photography Walk"
+    if any(w in k or w in lbl for w in ("venue", "location", "place", "room")):
+        return "Central Lawn, SVNIT"
+    if any(w in k or w in lbl for w in ("recipient", "participant", "student_name", "student")):
+        return "Aarav Sharma"
+    if any(w in k or w in lbl for w in ("roll_no", "roll_number", "admission_no", "registration_no")):
+        return "U24CS001"
+    if any(w in k or w in lbl for w in ("dates", "date")):
+        return "15/10/2026"
+    if any(w in k or w in lbl for w in ("time", "timing")):
+        return "10:00 AM to 05:00 PM"
+    if any(w in k or w in lbl for w in ("link", "url", "website")):
+        return "https://svnit.ac.in/events/register"
+    if any(w in k or w in lbl for w in ("position", "rank", "award")):
+        return "First Place"
+    if any(w in k or w in lbl for w in ("company", "firm", "sponsor", "agency")):
+        return "Yamaha Music India Pvt. Ltd."
+    if any(w in k or w in lbl for w in ("address",)):
+        return "Surat, Gujarat"
+    if any(w in k or w in lbl for w in ("contact", "coordinator", "head", "secretary", "faculty", "convenor")):
+        return "Dr. K. N. Mehta"
+    if any(w in k or w in lbl for w in ("email",)):
+        return "convenor@svnit.ac.in"
+    if any(w in k or w in lbl for w in ("phone", "mobile", "contact_no")):
+        return "9876543210"
+    if any(w in k or w in lbl for w in ("notice_body", "circular_body", "body")):
+        return "All students and club members are hereby informed that the Annual Photography Walk will be held on the institute campus. Interested students should assemble near the Central Lawn."
+    if any(w in k or w in lbl for w in ("description", "purpose", "details")):
+        return "Conducting hands-on training sessions and interactive workshops for registered students."
+    if any(w in k or w in lbl for w in ("objective", "goals")):
+        return "To provide practical skills and foster peer collaboration across branches."
+    if any(w in k or w in lbl for w in ("department", "branch")):
+        return "Computer Science and Engineering"
+    if any(w in k or w in lbl for w in ("designation",)):
+        return "Student Coordinator"
+    if any(w in k or w in lbl for w in ("submitted_to", "addressee")):
+        return "The Dean (Student Welfare), SVNIT"
+
+    if field_type == "int":
+        return 100
+    if field_type == "money":
+        return fn_format_inr(Decimal("50000"))
+    if field_type == "date":
+        return "15/10/2026"
+    if field_type == "date_range":
+        return "15/10/2026 - 16/10/2026"
+    if field_type == "time_range":
+        return "10:00 AM to 05:00 PM"
+    if field_type == "person_ref":
+        return "Aarav Sharma (Student Coordinator)"
+    if field_type == "longtext":
+        clean_lbl = label or key.replace("_", " ").title()
+        return f"Comprehensive details and description regarding {clean_lbl}."
+
+    clean_lbl = label or key.replace("_", " ").title()
+    return f"Sample {clean_lbl}"
+
+
 def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, Any]],
                                editor_json: dict[str, Any]) -> dict[str, Any]:
     """Generate comprehensive synthetic dummy context to safely dry-render compiled templates."""
@@ -2086,10 +2154,11 @@ def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, A
             continue
 
         label = f.get("label") or f_key.replace("_", " ").title()
-        if f_type == "text":
-            ctx[f_key] = f"[{label}]"
-        elif f_type == "longtext":
-            ctx[f_key] = f"[{label}: text entered when the document is created]"
+        val = f.get("default_value") if f.get("default_value") not in (None, "") else f.get("example") if f.get("example") not in (None, "") else f.get("sample_value")
+        if val not in (None, "") and f_type != "table":
+            ctx[f_key] = val
+        elif f_type in ("text", "longtext"):
+            ctx[f_key] = _realistic_dummy_value(f_key, label, f_type)
         elif f_type == "int":
             ctx[f_key] = 100
         elif f_type == "money":
@@ -2201,9 +2270,10 @@ def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, A
             return
         if node.get("type") == "fieldChip":
             fn = node.get("attrs", {}).get("fieldName")
-            if fn and (fn not in ctx or ctx[fn] is None):
+            if fn and (fn not in ctx or ctx[fn] is None or (isinstance(ctx[fn], str) and ctx[fn].startswith("[") and ctx[fn].endswith("]"))):
                 label = node.get("attrs", {}).get("label") or fn.replace("_", " ").title()
-                ctx[fn] = f"[{label}]"
+                f_type = node.get("attrs", {}).get("fieldType", "text")
+                ctx[fn] = _realistic_dummy_value(fn, label, f_type)
         for child in node.get("content", []):
             _extract_chips(child)
 

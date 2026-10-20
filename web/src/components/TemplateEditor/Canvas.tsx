@@ -15,6 +15,10 @@ import {
   Heading1,
   Heading2,
   Wand2,
+  Search,
+  Plus,
+  Tag,
+  Lock,
 } from 'lucide-react';
 import { FONT_OPTIONS } from './themes';
 import { EditorContextMenu } from './EditorContextMenu';
@@ -33,6 +37,8 @@ import {
   safeInsertBlock,
 } from './extensions';
 import { DesignSettings } from './DesignPanel';
+import { TemplateField } from './FieldsPanel';
+import { InlinePickerState } from './useTemplateEditor';
 
 interface CanvasProps {
   editor: any;
@@ -54,6 +60,10 @@ interface CanvasProps {
   showSlashMenu: boolean;
   onCloseSlashMenu: () => void;
   onOpenAddField: () => void;
+  fields?: TemplateField[];
+  inlinePicker?: InlinePickerState | null;
+  onCloseInlinePicker?: () => void;
+  onAddNewField?: (field: TemplateField) => void;
   /** The printed letterhead and footer, so the page looks as it will be generated */
   letterhead?: { header?: React.ReactNode; footer?: React.ReactNode };
 }
@@ -78,12 +88,23 @@ export const Canvas: React.FC<CanvasProps> = ({
   showSlashMenu,
   onCloseSlashMenu,
   onOpenAddField,
+  fields = [],
+  inlinePicker,
+  onCloseInlinePicker = () => {},
+  onAddNewField = () => {},
   letterhead,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
   const [blockCount, setBlockCount] = useState(0);
+  const [fieldSearch, setFieldSearch] = useState('');
+
+  // Inline new field form state
+  const [showInlineNewField, setShowInlineNewField] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [newType, setNewType] = useState('text');
+  const [newRequired, setNewRequired] = useState(true);
 
   // Update statistics
   useEffect(() => {
@@ -107,66 +128,126 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Slash commands list
   const slashItems = [
     {
+      title: 'Dynamic Field ({{)',
+      icon: <Wand2 className="w-4 h-4 text-brand-600" />,
+      action: () => {
+        if (inlinePicker?.range) {
+          editor?.chain().focus().deleteRange(inlinePicker.range).run();
+        } else {
+          editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).run();
+        }
+        onOpenAddField();
+        onCloseSlashMenu();
+        onCloseInlinePicker();
+      },
+    },
+    {
       title: 'Heading 1',
       icon: <Heading1 className="w-4 h-4 text-brand-600" />,
       action: () => {
-        editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).setHeading({ level: 1 }).run();
+        const range = inlinePicker?.range || { from: editor.state.selection.from - 1, to: editor.state.selection.from };
+        editor?.chain().focus().deleteRange(range).setHeading({ level: 1 }).run();
         onCloseSlashMenu();
+        onCloseInlinePicker();
       },
     },
     {
       title: 'Heading 2',
       icon: <Heading2 className="w-4 h-4 text-brand-600" />,
       action: () => {
-        editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).setHeading({ level: 2 }).run();
+        const range = inlinePicker?.range || { from: editor.state.selection.from - 1, to: editor.state.selection.from };
+        editor?.chain().focus().deleteRange(range).setHeading({ level: 2 }).run();
         onCloseSlashMenu();
+        onCloseInlinePicker();
       },
     },
     {
       title: 'Info Table (Key-Value)',
       icon: <TableIcon className="w-4 h-4 text-emerald-600" />,
       action: () => {
-        editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).run();
+        const range = inlinePicker?.range || { from: editor.state.selection.from - 1, to: editor.state.selection.from };
+        editor?.chain().focus().deleteRange(range).run();
         insertInfoTable(editor);
         onCloseSlashMenu();
+        onCloseInlinePicker();
       },
     },
     {
       title: 'Repeating Table (Items & Sum)',
       icon: <Rows className="w-4 h-4 text-brand-600" />,
       action: () => {
-        editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).run();
+        const range = inlinePicker?.range || { from: editor.state.selection.from - 1, to: editor.state.selection.from };
+        editor?.chain().focus().deleteRange(range).run();
         insertRepeatingTable(editor);
         onCloseSlashMenu();
+        onCloseInlinePicker();
       },
     },
     {
       title: 'Signature Grid (Signatures)',
       icon: <CheckSquare className="w-4 h-4 text-amber-600" />,
       action: () => {
-        editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).run();
+        const range = inlinePicker?.range || { from: editor.state.selection.from - 1, to: editor.state.selection.from };
+        editor?.chain().focus().deleteRange(range).run();
         insertSignatureGrid(editor, 2);
         onCloseSlashMenu();
-      },
-    },
-    {
-      title: 'Insert Field Chip',
-      icon: <Wand2 className="w-4 h-4 text-brand-600" />,
-      action: () => {
-        editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).run();
-        onOpenAddField();
-        onCloseSlashMenu();
+        onCloseInlinePicker();
       },
     },
     {
       title: 'Page Break',
       icon: <SplitSquareVertical className="w-4 h-4 text-rose-500" />,
       action: () => {
-        editor?.chain().focus().deleteRange({ from: editor.state.selection.from - 1, to: editor.state.selection.from }).insertContent({ type: 'pageBreak' }).run();
+        const range = inlinePicker?.range || { from: editor.state.selection.from - 1, to: editor.state.selection.from };
+        editor?.chain().focus().deleteRange(range).insertContent({ type: 'pageBreak' }).run();
         onCloseSlashMenu();
+        onCloseInlinePicker();
       },
     },
   ];
+
+  const handleSelectFieldInline = (field: TemplateField) => {
+    if (!editor) return;
+    if (inlinePicker?.range) {
+      editor.chain().focus().deleteRange(inlinePicker.range).run();
+    }
+    insertFieldChip(
+      editor,
+      field.key,
+      field.label,
+      field.type,
+      field.ask || `Please enter ${field.label}`,
+      field.required ? 'essential' : 'optional',
+      field.required,
+      field.sensitive || false
+    );
+    onCloseInlinePicker();
+    setFieldSearch('');
+    setShowInlineNewField(false);
+  };
+
+  const handleCreateFieldInline = (e: React.FormEvent) => {
+    e.preventDefault();
+    const label = newLabel.trim();
+    if (!label) return;
+
+    let key = label.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (!/^[a-z]/.test(key)) key = `field_${key}`;
+
+    const newField: TemplateField = {
+      key,
+      label,
+      type: newType,
+      required: newRequired,
+      importance: newRequired ? 'essential' : 'optional',
+      ask: `Please enter ${label}`,
+    };
+
+    onAddNewField(newField);
+    handleSelectFieldInline(newField);
+    setNewLabel('');
+    setShowInlineNewField(false);
+  };
 
   // Drag and drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -218,6 +299,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   };
 
+  const filteredFieldsInline = fields.filter(
+    (f) =>
+      f.label.toLowerCase().includes(fieldSearch.toLowerCase()) ||
+      f.key.toLowerCase().includes(fieldSearch.toLowerCase())
+  );
+
   return (
     <div
       ref={containerRef}
@@ -263,25 +350,26 @@ export const Canvas: React.FC<CanvasProps> = ({
             value={currentBlockStyle(editor).fontFamily}
             onMouseDown={(e) => e.stopPropagation()}
             onChange={(e) => applyBlockStyle(editor, { fontFamily: e.target.value || null })}
-            className="bg-slate-800 text-slate-100 text-[11px] rounded px-1 py-0.5 max-w-[110px] border border-slate-700"
+            className="bg-transparent text-white text-xs rounded px-1 py-0.5 max-w-[90px] border-none focus:outline-none cursor-pointer"
           >
-            <option value="">Template font</option>
+            <option value="" className="bg-slate-900 text-white">Default</option>
             {FONT_OPTIONS.map((f) => (
-              <option key={f.id} value={f.id}>{f.name}</option>
+              <option key={f.id} value={f.id} className="bg-slate-900 text-white">{f.name}</option>
             ))}
           </select>
+
           <label className="sr-only" htmlFor="bubble-size">Size</label>
           <select
             id="bubble-size"
-            title="Font size (pt)"
+            title="Size"
             value={currentBlockStyle(editor).fontSize}
             onMouseDown={(e) => e.stopPropagation()}
             onChange={(e) => applyBlockStyle(editor, { fontSize: e.target.value ? `${e.target.value}pt` : null })}
-            className="bg-slate-800 text-slate-100 text-[11px] rounded px-1 py-0.5 w-12 border border-slate-700"
+            className="bg-transparent text-white text-xs rounded px-1 py-0.5 w-12 border-none focus:outline-none cursor-pointer"
           >
-            <option value="">Size</option>
+            <option value="" className="bg-slate-900 text-white">Size</option>
             {FONT_SIZES.map((sz) => (
-              <option key={sz} value={sz}>{sz}</option>
+              <option key={sz} value={sz} className="bg-slate-900 text-white">{sz}</option>
             ))}
           </select>
 
@@ -318,10 +406,147 @@ export const Canvas: React.FC<CanvasProps> = ({
         </div>
       )}
 
-      {/* Slash Command Popover Menu */}
-      {showSlashMenu && (
-        <div className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-2xl w-64 p-1.5 animate-in fade-in zoom-in-95">
-          <div className="text-[11px] font-bold text-slate-400 px-2 py-1">
+      {/* Inline Field Picker (triggered by typing '{{') */}
+      {inlinePicker && inlinePicker.type === 'field' && (
+        <div
+          style={{ top: `${inlinePicker.top}px`, left: `${inlinePicker.left}px` }}
+          className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-2xl w-72 p-2 animate-in fade-in zoom-in-95"
+        >
+          {!showInlineNewField ? (
+            <>
+              <div className="flex items-center gap-1.5 px-2 py-1 mb-1.5 border-b border-slate-100">
+                <Tag className="w-3.5 h-3.5 text-brand-600" />
+                <span className="font-bold text-slate-800 text-xs">Insert Field</span>
+              </div>
+
+              <div className="relative mb-2">
+                <Search className="w-3 h-3 text-slate-400 absolute left-2 top-2" />
+                <input
+                  type="text"
+                  value={fieldSearch}
+                  onChange={(e) => setFieldSearch(e.target.value)}
+                  placeholder="Filter fields…"
+                  className="w-full text-xs pl-7 pr-2 py-1 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  autoFocus
+                />
+              </div>
+
+              <div className="max-h-48 overflow-y-auto space-y-0.5">
+                {filteredFieldsInline.length === 0 ? (
+                  <div className="text-center py-3 text-slate-400 text-xs">
+                    No matching fields.
+                  </div>
+                ) : (
+                  filteredFieldsInline.map((f) => (
+                    <button
+                      key={f.key}
+                      onClick={() => handleSelectFieldInline(f)}
+                      className="w-full flex items-center justify-between p-1.5 rounded-lg text-left text-xs hover:bg-brand-50 hover:text-brand-800 transition"
+                    >
+                      <div className="min-w-0">
+                        <span className="font-semibold text-slate-800 block truncate">{f.label}</span>
+                        <span className="text-[10px] font-mono text-slate-400 block truncate">{`{{ ${f.key} }}`}</span>
+                      </div>
+                      <span className="text-[9px] uppercase px-1 py-0.5 rounded bg-slate-100 text-slate-500 font-medium shrink-0">
+                        {f.type}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="pt-2 mt-1 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowInlineNewField(true)}
+                  className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-semibold px-1 py-0.5 rounded transition"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Create new field</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onCloseInlinePicker}
+                  className="text-xs text-slate-400 hover:text-slate-600 px-1 py-0.5"
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <form onSubmit={handleCreateFieldInline} className="p-1 space-y-2 text-xs">
+              <div className="font-bold text-slate-800 pb-1 border-b border-slate-100">
+                New Template Field
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-600 mb-0.5">Label</label>
+                <input
+                  type="text"
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  placeholder="e.g. Venue"
+                  className="w-full text-xs px-2 py-1 border border-slate-300 rounded focus:ring-1 focus:ring-brand-500 focus:outline-none"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-600 mb-0.5">Type</label>
+                <select
+                  value={newType}
+                  onChange={(e) => setNewType(e.target.value)}
+                  className="w-full text-xs px-2 py-1 border border-slate-300 rounded focus:ring-1 focus:ring-brand-500 focus:outline-none"
+                >
+                  <option value="text">Text</option>
+                  <option value="date">Date</option>
+                  <option value="time">Time</option>
+                  <option value="money">Money (INR)</option>
+                  <option value="number">Number</option>
+                </select>
+              </div>
+
+              <label className="flex items-center gap-1.5 cursor-pointer pt-0.5">
+                <input
+                  type="checkbox"
+                  checked={newRequired}
+                  onChange={(e) => setNewRequired(e.target.checked)}
+                  className="rounded border-slate-300 text-brand-600"
+                />
+                <span className="text-[11px] text-slate-700">Required field</span>
+              </label>
+
+              <div className="flex justify-end gap-1.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowInlineNewField(false)}
+                  className="px-2 py-1 text-slate-500 hover:bg-slate-100 rounded text-xs"
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs font-semibold"
+                >
+                  Insert
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* Slash Command Popover Menu (triggered by typing '/') */}
+      {(showSlashMenu || (inlinePicker && inlinePicker.type === 'slash')) && (
+        <div
+          style={
+            inlinePicker
+              ? { top: `${inlinePicker.top}px`, left: `${inlinePicker.left}px` }
+              : undefined
+          }
+          className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-2xl w-64 p-1.5 animate-in fade-in zoom-in-95"
+        >
+          <div className="text-[11px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider">
             Insert Block
           </div>
           <div className="space-y-0.5">
@@ -384,7 +609,18 @@ export const Canvas: React.FC<CanvasProps> = ({
         headingFontFamily={designSettings?.headingFontFamily}
         tableHeaderBg={designSettings?.tableHeaderBg}
         tableHeaderTextColor={designSettings?.tableHeaderTextColor}
-        header={letterhead?.header}
+        header={
+          <div className="relative mb-4 group select-none">
+            <div className="flex items-center justify-between px-2.5 py-1 mb-1.5 rounded-md bg-slate-100/90 border border-slate-200/80 text-[11px] text-slate-500 font-medium select-none">
+              <span className="flex items-center gap-1.5 font-semibold text-slate-700">
+                <Lock className="w-3 h-3 text-slate-400" />
+                Club letterhead — edit in Club Settings
+              </span>
+              <span className="text-[10px] text-slate-400">Locked area</span>
+            </div>
+            {letterhead?.header}
+          </div>
+        }
         footer={letterhead?.footer}
       >
         <EditorContent editor={editor} className="tiptap-editor-canvas focus:outline-none" />

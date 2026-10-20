@@ -70,11 +70,29 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [unreviewedModal, setUnreviewedModal] = useState<any[] | null>(null);
   const [unreviewedAiCount, setUnreviewedAiCount] = useState(0);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+
+  // In-app toast dispatcher helper
+  const showToast = useCallback((text: string, tone: 'success' | 'error' = 'success') => {
+    setNotice({ tone, text });
+  }, []);
+
+  // Listen for custom toast events from child components (e.g. ImageBlockView, blockDragDrop)
+  useEffect(() => {
+    const handleToastEvent = (e: any) => {
+      if (e.detail?.text) {
+        setNotice({ tone: e.detail.tone === 'error' ? 'error' : 'success', text: e.detail.text });
+      }
+    };
+    window.addEventListener('clubdocs-toast', handleToastEvent);
+    return () => window.removeEventListener('clubdocs-toast', handleToastEvent);
+  }, []);
+
   // Letterhead and footer exactly as generated documents print them
   const [clubFooter, setClubFooter] = useState('');
   // Example values typed in the Fields sidebar, used only by Preview
   const [sampleValues, setSampleValues] = useState<Record<string, string>>({});
   const [bannerFailed, setBannerFailed] = useState(false);
+
   useEffect(() => {
     let alive = true;
     api.clubs
@@ -89,19 +107,18 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   }, [clubId]);
 
   const letterhead = {
-    header: bannerFailed ? null : (
-      <div className="group relative">
-        <img
-          src={`/api/v1/clubs/${clubId}/letterhead-banner`}
-          alt="Club letterhead"
-          className="w-full h-auto block"
-          draggable={false}
-          onError={() => setBannerFailed(true)}
-        />
-        <span className="absolute -top-3 right-0 rounded bg-slate-900/80 px-1.5 py-0.5 text-[11px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
-          Letterhead · change its text, logo or colour in Club settings
-        </span>
+    header: bannerFailed ? (
+      <div className="w-full h-14 rounded border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-xs text-slate-400 font-medium">
+        SVNIT Club Letterhead (Configure in Club Settings)
       </div>
+    ) : (
+      <img
+        src={`/api/v1/clubs/${clubId}/letterhead-banner`}
+        alt="Club letterhead"
+        className="w-full h-auto block rounded-xs shadow-2xs"
+        draggable={false}
+        onError={() => setBannerFailed(true)}
+      />
     ),
     footer: (
       <p className="text-[11px] text-slate-500 border-t border-slate-200 pt-1.5" style={{ fontFamily: 'inherit' }}>
@@ -109,15 +126,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       </p>
     ),
   };
+
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(null), 5000);
     return () => clearTimeout(t);
   }, [notice]);
+
   const [reviewingAi, setReviewingAi] = useState(false);
-
   const [designSettings, setDesignSettings] = useState<DesignSettings>(DEFAULT_DESIGN_SETTINGS);
-
   const contentLoadedRef = useRef<boolean>(false);
 
   // Responsive breakpoint detector
@@ -146,7 +163,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     const fit = () => {
       if (userZoomRef.current) return;
       const pageWidth = designSettings.orientation === 'landscape' ? 1123 : 794;
-      const side = (leftOpen ? 256 : 48) + (rightOpen && !isMobile ? 384 : 48);
+      const side = (leftOpen ? 288 : 48) + (rightOpen && !isMobile ? 360 : 48);
       const available = window.innerWidth - side - 48;
       const next = Math.max(0.3, Math.min(1, Math.floor((available / pageWidth) * 20) / 20));
       setZoom(next);
@@ -161,6 +178,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     bubblePos,
     showSlashMenu,
     setShowSlashMenu,
+    inlinePicker,
+    setInlinePicker,
     chipPopover,
     setChipPopover,
     selectedImageBlock,
@@ -190,6 +209,56 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     fields,
     onSaveSuccess: (updated) => setTemplate(updated),
   });
+
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (saveStatus === 'unsaved') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [saveStatus]);
+
+  const handleBackSafe = () => {
+    if (saveStatus === 'unsaved') {
+      const confirmLeave = window.confirm('You have unsaved changes in this template. Are you sure you want to leave?');
+      if (!confirmLeave) return;
+    }
+    onBack();
+  };
+
+  // Global Keyboard Shortcuts (Ctrl+S, Ctrl+P, Esc)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S / Cmd+S
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveNow();
+        showToast('Template saved successfully.', 'success');
+      }
+      // Ctrl+P / Cmd+P
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePreview();
+      }
+      // Esc closes popovers / modals
+      if (e.key === 'Escape') {
+        setShowShortcuts(false);
+        setShowFindReplace(false);
+        setShowPreviewModal(false);
+        setShowValidationModal(false);
+        setUnreviewedModal(null);
+        setChipPopover(null);
+        setInlinePicker(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [saveNow, showToast]);
 
   // Fetch template draft data
   useEffect(() => {
@@ -248,18 +317,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     }
   }, [editor, template]);
 
-  // AI Chat Copilot: each applied suggestion keeps a snapshot of the whole template
-  // (content, fields, design) so its Undo restores exactly the state before it.
-  const chatSnapshotsRef = useRef(new Map<string, { content: any; fields: TemplateField[]; design: DesignSettings; template: any }>());
+  // Keep a snapshot before each applied action so onUndo can restore it cleanly
+  const chatSnapshotsRef = useRef<Map<string, { content: any; fields: any[]; design: any; template: any }>>(
+    new Map()
+  );
 
   const handleApplyChatAction = useCallback(
     (action: any, actionId?: string): ApplyResult => {
-      if (actionId && editor) {
+      if (!editor) return { ok: false, message: 'Editor not ready' };
+      if (actionId) {
         chatSnapshotsRef.current.set(actionId, {
           content: editor.getJSON(),
-          fields: fields.map((f) => ({ ...f })),
+          fields: JSON.parse(JSON.stringify(fields)),
           design: { ...designSettings },
-          template: template ? { ...template } : template,
+          template: template ? { ...template } : null,
         });
       }
       const result = applyChatAction({
@@ -309,7 +380,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       });
       setPreviewPages(res.pages || []);
     } catch (err: any) {
-      alert(err.message || 'Preview generation failed');
+      showToast(err.message || 'Preview generation failed', 'error');
       setShowPreviewModal(false);
     } finally {
       setPreviewLoading(false);
@@ -341,12 +412,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       const res = await api.documents.publishTemplate(clubId, templateId);
       setTemplate((prev: any) => ({ ...prev, status: 'published' }));
       setUnreviewedAiCount(0);
-      setNotice({ tone: 'success', text: `"${res.name}" is published. Click "Create document" to fill it in.` });
+      showToast(`"${res.name}" is published. Click "Use template" to fill it in.`, 'success');
     } catch (err: any) {
       if (err.status === 409 && err.detail?.unreviewed_items) {
         setUnreviewedModal(err.detail.unreviewed_items);
       } else {
-        setNotice({ tone: 'error', text: err.message || 'Publishing failed' });
+        showToast(err.message || 'Publishing failed', 'error');
       }
     }
   };
@@ -355,8 +426,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     setReviewingAi(true);
     try {
       await api.documents.reviewAiTemplate(clubId, templateId, { all: true });
-      // Mirror the server-side review locally; otherwise the autosave in handlePublish
-      // would write the AI flags back and publishing would be refused again.
       if (editor) {
         editor.commands.command(({ tr }: any) => {
           tr.doc.descendants((node: any, pos: number) => {
@@ -367,11 +436,10 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       }
       setFields((prev) => prev.map((f) => ({ ...f, ai_suggested: false })));
       setUnreviewedModal(null);
-      // Let React commit the cleared fields before publish saves them.
       await new Promise((resolve) => setTimeout(resolve, 0));
       await handlePublish();
     } catch (err: any) {
-      alert(err.message || 'Failed to approve AI content');
+      showToast(err.message || 'Failed to approve AI content', 'error');
     } finally {
       setReviewingAi(false);
     }
@@ -395,9 +463,10 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           }));
         }
         markUnsaved();
+        showToast(`Template translated to ${targetLang === 'hi' ? 'Hindi' : 'Gujarati'}.`, 'success');
       }
     } catch (err: any) {
-      alert(err.message || 'Translation failed');
+      showToast(err.message || 'Translation failed', 'error');
     } finally {
       setTranslating(false);
     }
@@ -422,7 +491,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         version={template?.version}
         saveStatus={saveStatus}
         conflictMessage={conflictMessage}
-        onBack={onBack}
+        onBack={handleBackSafe}
         editor={editor}
         zoom={zoom}
         onZoomChange={handleZoomChange}
@@ -430,24 +499,33 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         onOpenShortcuts={() => setShowShortcuts(true)}
         onPreview={handlePreview}
         onPublish={handlePublish}
+        onOpenAddField={() => setLeftOpen(true)}
         previewLoading={previewLoading}
-        onTranslate={handleTranslate}
-        translating={translating}
         unreviewedAiCount={unreviewedAiCount}
         isPublished={template?.status === 'published'}
         onCreateDocument={onCreateDocument}
+        onTranslate={handleTranslate}
+        translating={translating}
       />
 
+      {/* In-app Toast / Notice Notification */}
       {notice && (
         <div
           role="status"
-          className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl shadow-lg text-xs font-semibold border ${
+          className={`fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl shadow-xl text-xs font-semibold border flex items-center gap-2 animate-in fade-in slide-in-from-top-2 ${
             notice.tone === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-red-50 text-red-700 border-red-200'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+              : 'bg-rose-50 text-rose-800 border-rose-300'
           }`}
         >
-          {notice.text}
+          <span>{notice.text}</span>
+          <button
+            onClick={() => setNotice(null)}
+            className="p-0.5 rounded hover:bg-black/5 text-slate-400 hover:text-slate-600"
+            aria-label="Dismiss notice"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -457,6 +535,40 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             editor={editor}
             isOpen={leftOpen}
             onToggle={() => setLeftOpen(!leftOpen)}
+            fields={fields}
+            onAddField={(newField) => {
+              setFields((prev) => [...prev, newField]);
+              markUnsaved();
+            }}
+            designSettings={designSettings}
+            onDesignChange={(updates) => {
+              setDesignSettings((prev) => ({ ...prev, ...updates }));
+              markUnsaved();
+            }}
+            onAutoStyle={() => {
+              const svnit = THEMES.find((t) => t.id === 'svnit_gold');
+              if (svnit) {
+                setDesignSettings((prev) => ({
+                  ...prev,
+                  theme: svnit.id,
+                  headingColor: svnit.heading_color,
+                  textColor: svnit.text_color,
+                  tableHeaderBg: svnit.table_header_bg,
+                  tableHeaderTextColor: svnit.table_header_text,
+                  borderColor: svnit.border_color,
+                  dividerColor: svnit.divider_color,
+                  fontFamily: svnit.body_font,
+                  headingFontFamily: svnit.heading_font,
+                  pageBorder: svnit.border_style,
+                  pageBg: svnit.page_bg,
+                }));
+                markUnsaved();
+                showToast('Applied official SVNIT style standards.', 'success');
+              }
+            }}
+            sampleValues={sampleValues}
+            onSampleChange={(key, value) => setSampleValues((prev) => ({ ...prev, [key]: value }))}
+            onPreview={handlePreview}
           />
         </EditorErrorBoundary>
 
@@ -485,7 +597,14 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             clubLogoOptions={clubLogoOptions}
             showSlashMenu={showSlashMenu}
             onCloseSlashMenu={() => setShowSlashMenu(false)}
-            onOpenAddField={() => setRightOpen(true)}
+            onOpenAddField={() => setLeftOpen(true)}
+            fields={fields}
+            inlinePicker={inlinePicker}
+            onCloseInlinePicker={() => setInlinePicker(null)}
+            onAddNewField={(newField) => {
+              setFields((prev) => [...prev, newField]);
+              markUnsaved();
+            }}
             letterhead={letterhead}
           />
         </EditorErrorBoundary>
@@ -522,6 +641,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
                 pageBg: svnit.page_bg,
               }));
               markUnsaved();
+              showToast('Applied official SVNIT style standards.', 'success');
             }
           }}
           onApplyChatAction={handleApplyChatAction}

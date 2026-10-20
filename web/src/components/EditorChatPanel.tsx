@@ -51,13 +51,10 @@ export type EditorChatPanelProps = {
 };
 
 const QUICK_ACTION_CHIPS = [
-  'Make it formal',
-  'Fix spelling',
+  'Make this a formal letter',
+  'Add a table for expenses',
+  'Change the theme to blue',
   'Add signature box',
-  'Make a table',
-  'Make it look professional',
-  'Translate to Hindi',
-  'Translate to Gujarati',
 ];
 
 function messageId(prefix: string): string {
