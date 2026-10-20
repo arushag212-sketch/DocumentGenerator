@@ -1,4 +1,4 @@
-import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Letterhead, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse, ClubAnalytics, VerificationResult } from '../types';
+import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse, ClubAnalytics, VerificationResult } from '../types';
 
 function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`;
@@ -305,20 +305,9 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
-    getLetterheads: (clubId: string | number) => apiFetch<Letterhead[]>(`/clubs/${clubId}/letterheads`),
-    createLetterhead: (clubId: string | number, data: Partial<Letterhead>) =>
-      apiFetch<Letterhead>(`/clubs/${clubId}/letterheads`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    updateLetterhead: (clubId: string | number, letterheadId: string, data: Partial<Letterhead>) =>
-      apiFetch<Letterhead>(`/clubs/${clubId}/letterheads/${letterheadId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      }),
     getAssets: (clubId: string | number) => apiFetch<Asset[]>(`/clubs/${clubId}/assets`),
-    setBranding: (clubId: string | number, data: { logo_asset_id?: string; letterhead_banner_asset_id?: string }) =>
-      apiFetch<{ logo_asset_id: string | null; letterhead_banner_asset_id: string | null }>(`/clubs/${clubId}/branding`, {
+    setBranding: (clubId: string | number, data: { logo_asset_id?: string }) =>
+      apiFetch<{ logo_asset_id: string | null }>(`/clubs/${clubId}/branding`, {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
@@ -549,8 +538,6 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
-    listLetterheads: (clubId: string | number) =>
-      apiFetch<any[]>(`/clubs/${clubId}/documents/letterheads`),
     aiDraftTemplate: (
       clubId: string | number,
       data: { description: string }

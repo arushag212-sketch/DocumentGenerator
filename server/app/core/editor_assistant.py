@@ -21,7 +21,7 @@ from docgen.llm import (
     LLMClient,
     get_llm_client,
 )
-from server.app.core.template_compiler import escape_jinja_delimiters, validate_identifier
+from server.app.core.template_compiler import ALLOWED_FONTS, escape_jinja_delimiters, validate_identifier
 from server.app.core.template_generator import strip_pii_from_text
 
 
@@ -83,32 +83,14 @@ _ALLOWED_ALIGNMENTS = {"left", "center", "right", "justify"}
 
 _ALLOWED_THEMES = {
     "official_navy",
-    "svnit_blue_gold",
+    "svnit_gold",
     "classic_bw",
     "modern_green",
     "warm_sunset",
     "minimal_grey",
 }
 
-_ALLOWED_FONTS = {
-    "Liberation Serif",
-    "Tinos",
-    "Merriweather",
-    "Playfair Display",
-    "Open Sans",
-    "Roboto",
-    "Lato",
-    "Montserrat",
-    "Poppins",
-    "Noto Sans",
-    "Noto Serif Devanagari",
-    "Noto Sans Devanagari",
-    "Noto Sans Gujarati",
-    "Courier New",
-    "Georgia",
-    "Arial",
-    "Times New Roman",
-}
+_ALLOWED_FONTS = ALLOWED_FONTS  # one list, shared with the compiler
 
 _HEX_COLOR_RE = re.compile(r"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$")
 _ALLOWED_COLOR_NAMES = {
@@ -568,7 +550,7 @@ def build_local_assistant_response(
     if any(phrase in lower for phrase in ("formal", "professional", "navy theme", "blue and gold", "dark theme")):
         theme_name = "official_navy"
         if "blue and gold" in lower or "svnit" in lower:
-            theme_name = "svnit_blue_gold"
+            theme_name = "svnit_gold"
         elif "classic" in lower or "black and white" in lower:
             theme_name = "classic_bw"
         actions.append(
@@ -710,7 +692,14 @@ def _safe_action(action: EditorAssistantAction) -> Optional[EditorAssistantActio
         attrs = payload.get("attrs")
         if not isinstance(attrs, dict):
             attrs = {}
+        # Models sometimes put the new wording at the top level
+        if not attrs.get("text") and isinstance(payload.get("text"), str):
+            attrs = {**attrs, "text": payload["text"]}
         clean_attrs = _sanitize_block_node(attrs)
+        if isinstance(clean_attrs.get("text"), str):
+            clean_attrs["text"] = escape_jinja_delimiters(_clean_text(clean_attrs["text"], 4000))
+        if not any(k for k in clean_attrs if k != "ai_suggested"):
+            return None
         clean_attrs["ai_suggested"] = True
         return _make_action(action.type, action.summary, {"block_id": block_id, "attrs": clean_attrs})
 
@@ -784,6 +773,7 @@ def _safe_action(action: EditorAssistantAction) -> Optional[EditorAssistantActio
 
     if action.type == "set_theme":
         theme = _clean_text(payload.get("theme"), 60)
+        theme = {"svnit_blue_gold": "svnit_gold", "svnit": "svnit_gold", "navy": "official_navy"}.get(theme, theme)
         if theme not in _ALLOWED_THEMES:
             theme = "official_navy"
         return _make_action(action.type, action.summary, {"theme": theme})
@@ -907,6 +897,7 @@ def _safe_action(action: EditorAssistantAction) -> Optional[EditorAssistantActio
             {
                 "text": rewritten,
                 "original_text": escape_jinja_delimiters(_clean_text(payload.get("original_text"), 12000)) or None,
+                "block_id": _clean_text(payload.get("block_id"), 64) or None,
                 "requires_review": True,
                 "ai_suggested": True,
             },
@@ -915,8 +906,11 @@ def _safe_action(action: EditorAssistantAction) -> Optional[EditorAssistantActio
     if action.type == "translate_text":
         trans = escape_jinja_delimiters(_clean_text(payload.get("text"), 12000))
         lang = _clean_text(payload.get("language") or "Hindi", 40)
+        if not trans:
+            return None
         return _make_action(action.type, action.summary, {
             "language": lang,
+            "block_id": _clean_text(payload.get("block_id"), 64) or None,
             "text": trans,
             "original_text": escape_jinja_delimiters(_clean_text(payload.get("original_text"), 12000)) or None,
             "requires_review": True,
@@ -930,8 +924,11 @@ def _safe_action(action: EditorAssistantAction) -> Optional[EditorAssistantActio
             escape_jinja_delimiters(_clean_text(c, 200))
             for c in (raw_corr if isinstance(raw_corr, list) else [])[:10]
         ]
+        if not proofed:
+            return None
         return _make_action(action.type, action.summary, {
             "text": proofed,
+            "block_id": _clean_text(payload.get("block_id"), 64) or None,
             "corrections": corrections,
             "original_text": escape_jinja_delimiters(_clean_text(payload.get("original_text"), 12000)) or None,
             "requires_review": True,
@@ -1055,22 +1052,30 @@ Allowed action types:
     {{"type": "signatureGrid", "signatures": [{{"label": "Faculty Advisor", "designation": "..."}}, ...]}}
     {{"type": "pageBreak"}}
   Use repeatingTable (not infoTable/table) for budgets, expense lists and anything that needs a total row.
-- update_block / delete_block / move_block / duplicate_block: using block_id
-- set_text_style: {{"color": "#hex", "alignment": "left|center|right|justify", "bold": true, "font": "...", "size": "..."}}
-- set_block_style: {{"background": "#hex", "border": "...", "padding": "..."}}
-- set_theme: {{"theme": "official_navy|svnit_blue_gold|classic_bw|modern_green|warm_sunset|minimal_grey"}}
-- set_page: {{"orientation": "portrait|landscape", "margins": "normal|compact|wide", "background": "...", "watermark": "..."}}
+- update_block: {{"block_id": "...", "attrs": {{"text": "new text of the block", "textAlign": "center"}}}}
+- delete_block / duplicate_block: {{"block_id": "..."}}
+- move_block: {{"block_id": "...", "target_block_id": "...", "position": "before|after"}}
+- set_text_style: {{"block_id": "... (omit for the selected block)", "color": "#hex", "alignment": "left|center|right|justify", "bold": true, "italic": false, "underline": false, "font": "...", "size": "14pt"}}
+- set_block_style: {{"block_id": "...", "background": "#hex"}}
+- set_theme: {{"theme": "official_navy|svnit_gold|classic_bw|modern_green|warm_sunset|minimal_grey"}}
+- set_page: {{"orientation": "portrait|landscape", "margins": "normal|compact|wide", "background": "#hex", "watermark": "...", "border": "none|thin|double"}}
 - add_field: {{"field": {{"key": "identifier", "label": "...", "type": "text|longtext|int|money|date|table", "required": false}}}}
 - rename_field: {{"old_key": "...", "new_key": "...", "new_label": "..."}}
 - set_field_property: {{"key": "...", "property": "...", "value": "..."}}
-- insert_chip: {{"field_key": "..."}}
-- insert_clause: {{"clause_name": "...", "text": "..."}}
-- set_letterhead / update_logo: {{"instruction": "...", "align": "left|center|right"}}
-- rewrite_text / rewrite_selected_text: {{"text": "...", "requires_review": true}}
-- translate_text: {{"language": "Hindi|Gujarati", "text": "...", "requires_review": true}}
-- proofread_text: {{"text": "...", "corrections": ["..."], "requires_review": true}}
-- add_table_column / add_table_row / set_table_total
+- insert_chip: {{"field_key": "...", "block_id": "... (block to add it to; omit for the cursor)"}}
+- insert_clause: {{"clause_name": "...", "text": "...", "block_id": "... (insert after this block)"}}
+- set_letterhead / update_logo: {{"instruction": "...", "align": "left|center|right"}}  (places the club logo; its size is the width in the image block)
+- rewrite_text / rewrite_selected_text: {{"text": "...", "original_text": "exact text being replaced", "requires_review": true}}
+- translate_text: {{"language": "Hindi|Gujarati", "text": "...", "original_text": "...", "requires_review": true}}
+- proofread_text: {{"text": "...", "original_text": "...", "corrections": ["..."], "requires_review": true}}
+- add_table_column: {{"block_id": "table block id", "column_name": "..."}}
+- add_table_row: {{"block_id": "table block id", "values": ["label", "value"]}}
+- set_table_total: {{"block_id": "table block id", "enabled": true, "total_label": "Total"}}
 - ask_clarifying_question: {{"question": "...", "options": ["...", "..."]}}
+
+Every block_id / target_block_id must be copied exactly from a blockId in CURRENT DOCUMENT CONTEXT
+(for "the table", "the title", "the last paragraph" pick the matching block there). Never invent ids.
+If the document has nothing matching the request (e.g. no table), say so in the message instead.
 
 Only suggest actions that directly answer the user's request. Keep every
 suggestion reviewable and preserve missing facts as placeholders/questions.
@@ -1086,6 +1091,73 @@ USER REQUEST (DATA):
 
 Prepare a short helpful message and zero or more safe actions.
 """
+
+
+_REQUIRES_BLOCK = {"update_block", "delete_block", "duplicate_block", "move_block"}
+_INDEX_REF = re.compile(r"^(?:b|blk|block)?[-_ ]?(\d{1,3})$", re.IGNORECASE)
+
+
+def _resolve_block_ref(ref: Optional[str], blocks: list[dict[str, Any]]) -> Optional[str]:
+    """Map a block reference the model made up ("b2", "block-3", "repeatingTable", "last") to a
+    real blockId from the editor context; None when it cannot be resolved."""
+    if not ref:
+        return None
+    ids = [b.get("blockId") for b in blocks]
+    if ref in ids:
+        return ref
+    if not blocks:
+        return None
+    text = str(ref).strip()
+    m = _INDEX_REF.match(text)
+    if m:
+        idx = int(m.group(1))
+        return ids[idx] if 0 <= idx < len(ids) else None
+    lowered = text.lower()
+    if lowered in ("last", "end", "last_block"):
+        return ids[-1]
+    if lowered in ("first", "start", "first_block"):
+        return ids[0]
+    kinds = [str(b.get("type") or "").lower() for b in blocks]
+    for words, test in (
+        (("repeat", "item", "budget"), lambda k: "repeating" in k),
+        (("info", "detail"), lambda k: "infotable" in k),
+        (("signature", "sign"), lambda k: "signature" in k),
+        (("table",), lambda k: "table" in k and "signature" not in k),
+        (("title", "heading", "header"), lambda k: k.startswith("heading")),
+        (("logo", "image"), lambda k: "image" in k),
+        (("paragraph", "intro", "text", "body"), lambda k: k == "paragraph"),
+    ):
+        if any(w in lowered for w in words):
+            for block_id, kind in zip(ids, kinds):
+                if test(kind):
+                    return block_id
+    return None
+
+
+def _resolve_actions(response: EditorAssistantResponse, context: EditorAssistantDocumentContext) -> EditorAssistantResponse:
+    """Point every action at real blocks; drop structural edits whose target does not exist."""
+    blocks = [b for b in context.blocks if isinstance(b, dict) and b.get("blockId")]
+    if not blocks:
+        return response
+    kept: list[EditorAssistantAction] = []
+    for action in response.actions:
+        payload = dict(action.payload or {})
+        ok = True
+        for key in ("block_id", "target_block_id"):
+            if payload.get(key):
+                resolved = _resolve_block_ref(payload[key], blocks)
+                if resolved:
+                    payload[key] = resolved
+                elif action.type in _REQUIRES_BLOCK:
+                    ok = False
+                else:
+                    payload[key] = None  # fall back to the cursor / first matching block in the editor
+        if ok:
+            kept.append(action.model_copy(update={"payload": payload}))
+    dropped = len(response.actions) - len(kept)
+    if dropped:
+        response.warnings.append(f"{dropped} suggestion(s) referred to a part of the document that does not exist and were left out.")
+    return response.model_copy(update={"actions": kept})
 
 
 def create_assistant_response(
@@ -1108,7 +1180,7 @@ def create_assistant_response(
         )
         normalized = normalize_model_response(raw)
         if normalized is not None:
-            return normalized
+            return _resolve_actions(normalized, context)
         local.warnings.insert(0, "AI suggestions could not be applied safely; doing a simple edit.")
     except AIServiceError as exc:
         local.warnings.insert(0, f"AI service error ({exc.message}); doing a simple edit.")

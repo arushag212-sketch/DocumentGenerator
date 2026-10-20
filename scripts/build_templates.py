@@ -79,134 +79,16 @@ def add_paragraph_with_tag(doc_or_cell, text: str, style=None, bold=False,
     return p
 
 
-def add_header_logos(section, left_img=None, right_img=None, title_line1="", title_line2=""):
-    """Add dual-logo header with centered text."""
+def add_svnit_header(section):
+    """Club letterhead: a placeholder banner the renderer swaps for the rendering club's own
+    generated banner (institute crest, club name, college name, club logo)."""
     header = section.header
     header.is_linked_to_previous = False
-    
-    # Create a table for header layout: logo | text | logo
-    htable = header.add_table(rows=1, cols=3, width=Inches(6.5))
-    htable.alignment = WD_TABLE_ALIGNMENT.CENTER
-    
-    # Left logo
-    left_cell = htable.cell(0, 0)
-    left_cell.width = Inches(1.0)
-    if left_img and left_img.exists():
-        lp = left_cell.paragraphs[0]
-        lp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = lp.add_run()
-        run.add_picture(str(left_img), width=Inches(0.8))
-    
-    # Center text
-    center_cell = htable.cell(0, 1)
-    center_cell.width = Inches(4.5)
-    cp = center_cell.paragraphs[0]
-    cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    if title_line1:
-        run1 = cp.add_run(title_line1)
-        run1.bold = True
-        run1.font.size = Pt(14)
-        run1.font.name = "Times New Roman"
-        run1.font.color.rgb = RGBColor(0x1E, 0x5B, 0x94)
-    if title_line2:
-        run_br = cp.add_run()
-        run_br.add_break()
-        run2 = cp.add_run(title_line2)
-        run2.font.size = Pt(9)
-        run2.font.name = "Arial"
-        run2.font.color.rgb = RGBColor(0x1E, 0x5B, 0x94)
-    
-    # Right logo
-    right_cell = htable.cell(0, 2)
-    right_cell.width = Inches(1.0)
-    if right_img and right_img.exists():
-        rp = right_cell.paragraphs[0]
-        rp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = rp.add_run()
-        run.add_picture(str(right_img), width=Inches(0.8))
-
-    # Remove table borders
-    for row in htable.rows:
-        for cell in row.cells:
-            set_cell_border(cell,
-                top={"val": "none", "sz": "0"},
-                bottom={"val": "none", "sz": "0"},
-                start={"val": "none", "sz": "0"},
-                end={"val": "none", "sz": "0"})
+    hp = header.paragraphs[0]
+    hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    hp.add_run().add_picture(str(ASSETS / "club_banner_placeholder.png"), width=Inches(6.8))
 
 
-def add_svnit_header(section, header_img_name="clean_svnit_approval_header.png", crest_img=None):
-    """Add SVNIT-style header using clean extracted logo+title band image from sample PDF."""
-    header = section.header
-    header.is_linked_to_previous = False
-    
-    clean_img = ASSETS / header_img_name
-    if not clean_img.exists():
-        clean_img = ASSETS / "clean_svnit_approval_header.png"
-    if not clean_img.exists():
-        clean_img = ASSETS / "svnit_bilingual_header.png"
-
-    if clean_img.exists():
-        hp = header.paragraphs[0]
-        hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = hp.add_run()
-        run.add_picture(str(clean_img), width=Inches(6.8))
-    else:
-        htable = header.add_table(rows=1, cols=3, width=Inches(6.5))
-        htable.alignment = WD_TABLE_ALIGNMENT.CENTER
-        
-        # Left: crest
-        left_cell = htable.cell(0, 0)
-        left_cell.width = Inches(1.2)
-        if crest_img and crest_img.exists():
-            lp = left_cell.paragraphs[0]
-            lp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = lp.add_run()
-            run.add_picture(str(crest_img), width=Inches(0.9))
-        
-        # Center text
-        center_cell = htable.cell(0, 1)
-        center_cell.width = Inches(4.6)
-        cp = center_cell.paragraphs[0]
-        cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        lines = [
-            ("SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT", 11, True, "000000"),
-            ("Ichchhanath, Surat - 395007 (Gujarat)", 9, False, "000000"),
-        ]
-        for i, (text, size, bold, color) in enumerate(lines):
-            if i > 0:
-                run = cp.add_run()
-                run.add_break()
-            run = cp.add_run(text)
-            run.bold = bold
-            run.font.size = Pt(size)
-            run.font.name = "Times New Roman"
-            run.font.color.rgb = RGBColor.from_string(color)
-
-        # Right: club short code
-        right_cell = htable.cell(0, 2)
-        right_cell.width = Inches(0.7)
-        rp = right_cell.paragraphs[0]
-        rp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = rp.add_run("{{ club_short }}")
-        run.bold = True
-        run.font.size = Pt(14)
-        run.font.name = "Times New Roman"
-        
-        # Remove borders
-        for row in htable.rows:
-            for cell in row.cells:
-                set_cell_border(cell,
-                    top={"val": "none", "sz": "0"},
-                    bottom={"val": "none", "sz": "0"},
-                    start={"val": "none", "sz": "0"},
-                    end={"val": "none", "sz": "0"})
-
-
-# ====================================================================
-# TEMPLATE 1: PERMISSION LETTER
-# ====================================================================
 def build_permission_letter():
     doc = Document()
     section = doc.sections[0]
@@ -217,26 +99,8 @@ def build_permission_letter():
     section.top_margin = Inches(0.6)
     section.bottom_margin = Inches(0.6)
 
-    # Header: Single-line letterhead with both logos (cropped pure logo+title band, no REF NO or date)
-    header = section.header
-    header.is_linked_to_previous = False
-    hp = header.paragraphs[0]
-    hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    # Placeholder banner; the renderer swaps in the club's own banner (docgen.letterhead_banner).
-    perm_header_img = ASSETS / "club_banner_placeholder.png"
-    if perm_header_img.exists():
-        run_h = hp.add_run()
-        run_h.add_picture(str(perm_header_img), width=Inches(6.8))
-    else:
-        svnit_crest = ASSETS / "permission_page1_img1.png"
-        acm_logo = ASSETS / "permission_page1_img2.png"
-        add_header_logos(
-            section,
-            left_img=svnit_crest,
-            right_img=acm_logo,
-            title_line1="{{ club_name | upper }}",
-            title_line2="SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT",
-        )
+    # Header: the club's generated letterhead
+    add_svnit_header(section)
 
     # REF NO and DATE
     p = doc.add_paragraph()
@@ -368,8 +232,7 @@ def build_prize_money_receipt():
     section.bottom_margin = Inches(0.5)
 
     # SVNIT clean logo+title header
-    crest = ASSETS / "prize_page1_img1.png"
-    add_svnit_header(section, header_img_name="clean_svnit_prize_header.png", crest_img=crest)
+    add_svnit_header(section)
 
     # Title: Prize Money Receipt
     add_paragraph_with_tag(doc, "Prize Money Receipt", bold=True,
@@ -472,8 +335,7 @@ def build_approval_note():
     section.bottom_margin = Inches(0.4)
 
     # Clean SVNIT header image (no ref no / date)
-    crest = ASSETS / "approval_page1_img1.png"
-    add_svnit_header(section, header_img_name="clean_svnit_approval_header.png", crest_img=crest)
+    add_svnit_header(section)
 
     # Header line: No : and Date : exactly matching sample
     p = doc.add_paragraph()
@@ -738,16 +600,8 @@ def build_bill_summary():
     section.top_margin = Inches(0.5)
     section.bottom_margin = Inches(0.5)
 
-    # Club text header (this sample uses text, not logos)
-    add_paragraph_with_tag(doc, "{{ club_name }}", bold=True,
-                           font_size=14, font_name="Times New Roman",
-                           alignment=WD_ALIGN_PARAGRAPH.CENTER, space_after=2)
-    add_paragraph_with_tag(
-        doc,
-        "Sardar Vallabhbhai National Institute of Technology, Surat",
-        font_size=10, font_name="Times New Roman",
-        alignment=WD_ALIGN_PARAGRAPH.CENTER, space_after=8
-    )
+    # Header: the club's generated letterhead (same as every other document)
+    add_svnit_header(section)
 
     # Date
     p = doc.add_paragraph()
@@ -957,8 +811,7 @@ def build_bill_certificate():
     section.bottom_margin = Inches(0.4)
 
     # Clean SVNIT Bill Certificate header image
-    crest = ASSETS / "billcert_page1_img1.png"
-    add_svnit_header(section, header_img_name="clean_svnit_billcert_header.png", crest_img=crest)
+    add_svnit_header(section)
 
     # Header Titles matching sample PDF exactly (No invented subtitle!)
     p_hdr = doc.add_paragraph()
@@ -1206,26 +1059,8 @@ def build_mom():
     section.top_margin = Inches(0.6)
     section.bottom_margin = Inches(0.6)
 
-    # Header: Single-line letterhead with both logos (clean pure logo+title band, no wrapping)
-    header = section.header
-    header.is_linked_to_previous = False
-    hp = header.paragraphs[0]
-    hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    # Placeholder banner; the renderer swaps in the club's own banner (docgen.letterhead_banner).
-    mom_header_img = ASSETS / "club_banner_placeholder.png"
-    if mom_header_img.exists():
-        run_h = hp.add_run()
-        run_h.add_picture(str(mom_header_img), width=Inches(6.8))
-    else:
-        svnit_crest = ASSETS / "permission_page1_img1.png"
-        acm_logo = ASSETS / "permission_page1_img2.png"
-        add_header_logos(
-            section,
-            left_img=svnit_crest,
-            right_img=acm_logo,
-            title_line1="{{ club_name | upper }}",
-            title_line2="SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT",
-        )
+    # Header: the club's generated letterhead
+    add_svnit_header(section)
 
 
     # Title

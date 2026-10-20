@@ -13,6 +13,8 @@ export interface EditorActionItemProps {
   onReject: () => void;
   onUndo?: () => void;
   onClarifySelect: (option: string) => void;
+  /** Why the last Apply did not work */
+  error?: string;
 }
 
 export const EditorActionItem: React.FC<EditorActionItemProps> = ({
@@ -25,6 +27,7 @@ export const EditorActionItem: React.FC<EditorActionItemProps> = ({
   onReject,
   onUndo,
   onClarifySelect,
+  error,
 }) => {
   if (action.type === 'ask_clarifying_question') {
     return (
@@ -87,6 +90,7 @@ export const EditorActionItem: React.FC<EditorActionItemProps> = ({
         )}
         {rejected && <span className="text-xs text-slate-400 italic">Dismissed</span>}
       </div>
+      {error && !applied && <p className="mt-1 text-xs text-red-600" role="alert">{error}</p>}
     </div>
   );
 };

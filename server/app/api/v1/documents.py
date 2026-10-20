@@ -221,6 +221,32 @@ class TemplateDraftSaveRequest(BaseModel):
     design_settings: Optional[dict[str, Any]] = None
 
 
+def chip_labels_from_editor(editor_json: Any) -> dict[str, str]:
+    """fieldName -> label of the field chips in a template's editor content."""
+    out: dict[str, str] = {}
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "fieldChip":
+                attrs = node.get("attrs") or {}
+                if attrs.get("fieldName") and attrs.get("label"):
+                    out.setdefault(attrs["fieldName"], attrs["label"])
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(editor_json or {})
+    return out
+
+
+def field_label(f: dict[str, Any], chip_labels: Optional[dict[str, str]] = None) -> str:
+    """A field's short label ("Event Name"), not its question ("What is the event name?")."""
+    key = f.get("key") or ""
+    return f.get("label") or (chip_labels or {}).get(key) or key.replace("_", " ").title()
+
+
 class TemplateCompileRequest(BaseModel):
     editor_json: Optional[dict[str, Any]] = None
     fields: Optional[list[dict[str, Any]]] = None
@@ -493,9 +519,12 @@ def get_template_thumbnail(
 
     thumbnails_dir = local_storage.base_dir / "thumbnails"
     thumbnails_dir.mkdir(parents=True, exist_ok=True)
-    thumb_path = thumbnails_dir / f"{ver.id}.webp"
+    from server.app.core.dummy_thumbnail import thumbnail_stem
+
+    stem = thumbnail_stem(tmpl, ver, ctx.club.id)
+    thumb_path = thumbnails_dir / f"{stem}.webp"
     if not thumb_path.exists():
-        thumb_path_png = thumbnails_dir / f"{ver.id}.png"
+        thumb_path_png = thumbnails_dir / f"{stem}.png"
         if thumb_path_png.exists():
             thumb_path = thumb_path_png
 
@@ -510,8 +539,9 @@ def get_template_thumbnail(
                 .first()
             )
             if src_ver:
-                src_webp = thumbnails_dir / f"{src_ver.id}.webp"
-                src_png = thumbnails_dir / f"{src_ver.id}.png"
+                src_stem = thumbnail_stem(src_tmpl, src_ver, ctx.club.id)
+                src_webp = thumbnails_dir / f"{src_stem}.webp"
+                src_png = thumbnails_dir / f"{src_stem}.png"
                 if src_webp.exists():
                     return FileResponse(src_webp, media_type="image/webp")
                 elif src_png.exists():
@@ -523,6 +553,7 @@ def get_template_thumbnail(
             tmpl=tmpl,
             ver=ver,
             club_slug=ctx.club.slug,
+            club_id=ctx.club.id,
         )
 
     media_type = "image/webp" if str(thumb_path).endswith(".webp") else "image/png"
@@ -649,8 +680,8 @@ def fork_template(
             for f in fields_for_editor:
                 f_key = f.get("key")
                 if f_key:
-                    chips.append({"type": "text", "text": f" {f.get('ask') or f_key.replace('_', ' ').title()}: "})
-                    chips.append({"type": "fieldChip", "attrs": {"fieldName": f_key, "label": f.get("ask") or f_key.replace("_", " ").title(), "fieldType": f.get("type", "text")}})
+                    chips.append({"type": "text", "text": f" {field_label(f)}: "})
+                    chips.append({"type": "fieldChip", "attrs": {"fieldName": f_key, "label": field_label(f), "fieldType": f.get("type", "text")}})
                     chips.append({"type": "text", "text": " | "})
             doc_content.append({"type": "paragraph", "content": chips})
 
@@ -1009,6 +1040,7 @@ def ai_draft_template(
         db=db,
     )
     fields_list = []
+    chip_labels = chip_labels_from_editor(ver.editor_json)
     if ver.schema_yaml:
         try:
             s_dict = yaml.safe_load(ver.schema_yaml)
@@ -1016,7 +1048,7 @@ def ai_draft_template(
                 for f in s_dict["fields"]:
                     fields_list.append({
                         "key": f.get("key"),
-                        "label": f.get("ask") or f.get("key", "").replace("_", " ").title(),
+                        "label": field_label(f, chip_labels),
                         "type": f.get("type", "text"),
                         "required": bool(f.get("required", False)),
                         "ask": f.get("ask"),
@@ -1108,6 +1140,7 @@ def get_template_draft(
 
     editor_json = migrate_template_content(ver.editor_json) if ver.editor_json else {"type": "doc", "content": []}
     fields_list = []
+    chip_labels = chip_labels_from_editor(ver.editor_json)
     if ver.schema_yaml:
         try:
             s_dict = yaml.safe_load(ver.schema_yaml)
@@ -1115,7 +1148,7 @@ def get_template_draft(
                 for f in s_dict["fields"]:
                     fields_list.append({
                         "key": f.get("key"),
-                        "label": f.get("ask") or f.get("key", "").replace("_", " ").title(),
+                        "label": field_label(f, chip_labels),
                         "type": f.get("type", "text"),
                         "required": bool(f.get("required", False)),
                         "ask": f.get("ask"),
@@ -1260,12 +1293,8 @@ def save_template_draft(
             target_ver.editor_json["design_settings"] = payload.design_settings
     elif payload.design_settings is not None and target_ver.editor_json and isinstance(target_ver.editor_json, dict):
         target_ver.editor_json["design_settings"] = payload.design_settings
-    if payload.letterhead_id is not None:
-        selected_lh = db.query(Letterhead).filter(Letterhead.id == payload.letterhead_id).first()
-        if not selected_lh:
-            raise HTTPException(status_code=404, detail="Letterhead not found")
-        validate_letterhead_asset_refs(db, ctx.club.id, letterhead=selected_lh)
-        target_ver.letterhead_id = payload.letterhead_id
+    # Letterheads are generated per club; a template no longer picks one
+    target_ver.letterhead_id = None
 
     fields_to_return = payload.fields or []
     if payload.fields is not None:
@@ -1284,7 +1313,7 @@ def save_template_draft(
             "category": tmpl.category,
             "description": tmpl.description or "",
             "stage": tmpl.stage or "custom",
-            "letterhead": "acm",
+            "letterhead": "club",
             "numbering": prev_num or {
                 "series": "DOC",
                 "format": f"{ctx.club.slug.upper()}/{{short_year}}/DOC/{{seq:03d}}",
@@ -1398,28 +1427,9 @@ def compile_template(
     category = payload.category or tmpl.category
     description = payload.description if payload.description is not None else tmpl.description
 
-    # No letterhead chosen: the club's own banner (the one the editor canvas shows)
+    # Every template prints the club's generated letterhead
     letterhead_cfg = {"banner_placeholder": True}
-    letterhead_id = payload.letterhead_id or ver.letterhead_id
-    if letterhead_id:
-        lh = db.query(Letterhead).filter(Letterhead.id == letterhead_id).first()
-        if not lh:
-            raise HTTPException(status_code=404, detail="Letterhead not found")
-        validate_letterhead_asset_refs(db, ctx.club.id, letterhead=lh)
-        letterhead_cfg = {
-            "title_text": lh.title_text,
-            "subtitle_text": lh.subtitle_text,
-        }
-        target_asset_id = lh.right_logo_asset_id or lh.left_logo_asset_id
-        if target_asset_id:
-            asset_rec = get_asset_for_club(db, target_asset_id, ctx.club.id)
-            if asset_rec:
-                active_storage = get_storage()
-                if isinstance(active_storage, LocalDiskStorage):
-                    asset_path = active_storage.local_path(asset_rec.storage_key)
-                    if asset_path.exists():
-                        letterhead_cfg["club_logo_path"] = str(asset_path)
-
+    letterhead_id = None
     existing_series = None
     if ver.schema_yaml:
         try:
@@ -1528,27 +1538,9 @@ def preview_template(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
+    # Every template prints the club's generated letterhead
     letterhead_cfg = {"banner_placeholder": True}
-    letterhead_id = payload.letterhead_id or (ver.letterhead_id if ver else None)
-    if letterhead_id:
-        lh = db.query(Letterhead).filter(Letterhead.id == letterhead_id).first()
-        if not lh:
-            raise HTTPException(status_code=404, detail="Letterhead not found")
-        validate_letterhead_asset_refs(db, ctx.club.id, letterhead=lh)
-        letterhead_cfg = {
-            "title_text": lh.title_text,
-            "subtitle_text": lh.subtitle_text,
-        }
-        target_asset_id = lh.right_logo_asset_id or lh.left_logo_asset_id
-        if target_asset_id:
-            asset_rec = get_asset_for_club(db, target_asset_id, ctx.club.id)
-            if asset_rec:
-                active_storage = get_storage()
-                if isinstance(active_storage, LocalDiskStorage):
-                    asset_path = active_storage.local_path(asset_rec.storage_key)
-                    if asset_path.exists():
-                        letterhead_cfg["club_logo_path"] = str(asset_path)
-
+    letterhead_id = None
     preview_design_settings = payload.design_settings
     if not preview_design_settings and isinstance(editor_json, dict):
         preview_design_settings = editor_json.get("design_settings")
@@ -1601,15 +1593,16 @@ def preview_template(
                     "department_short": club_cfg.department_short or club_cfg.department,
                     "club_footer": club_cfg.footer_text or " · ".join(x for x in (club_cfg.club_name, inst) if x),
                 })
-                Renderer(config=club_cfg)._apply_club_banner(doc)
-            except Exception:
-                pass
+                club_renderer = Renderer(config=club_cfg)
+                club_renderer._apply_club_banner(doc)
+                club_renderer._apply_club_logo(doc)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Preview could not apply the club's letterhead: %s", exc)
 
             safe_render_docx(doc, dummy_ctx, timeout=30.0, strict=False)
             rendered_docx = tmp_dir / "rendered.docx"
             doc.save(str(rendered_docx))
 
-            from docgen.renderer import Renderer
             renderer = Renderer()
             try:
                 pdf_path, _ = renderer._convert_to_pdf(rendered_docx)
@@ -1839,74 +1832,6 @@ def review_ai_template_content(
         "remaining_unreviewed_count": len(remaining),
         "unreviewed_items": remaining,
     }
-
-
-@router.get("/letterheads", response_model=list[LetterheadOut])
-def list_letterheads(
-    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
-    db: Session = Depends(get_db),
-):
-    """List available letterheads for the club (system + club custom)."""
-    letterheads = db.query(Letterhead).filter(
-        (Letterhead.club_id.is_(None)) | (Letterhead.club_id == ctx.club.id)
-    ).all()
-    out = []
-
-    # Check if club has an active logo asset
-    club_custom_logo = (
-        db.query(Asset)
-        .filter(Asset.club_id == ctx.club.id, Asset.kind == "logo")
-        .first()
-    )
-
-    for lh in letterheads:
-        if not letterhead_is_visible_to_club(lh, ctx.club.id):
-            continue
-        try:
-            validate_letterhead_asset_refs(db, ctx.club.id, letterhead=lh)
-        except HTTPException:
-            # Do not expose a malformed cross-club reference in the picker.
-            continue
-        # Determine club logo url: right_logo_asset_id or club's logo asset or fallback
-        target_asset_id = lh.right_logo_asset_id
-        club_asset = None
-        if target_asset_id:
-            club_asset = get_asset_for_club(db, target_asset_id, ctx.club.id)
-        elif club_custom_logo:
-            club_asset = club_custom_logo
-
-        if club_asset:
-            if club_asset.filename in ("permission_page1_img2.png", "permission_page2_img1.png", "permission_page2_img2.png"):
-                club_logo_url = f"/assets/{club_asset.filename}"
-            else:
-                club_logo_url = f"/api/v1/assets/{club_asset.id}/content"
-        else:
-            club_logo_url = "/assets/permission_page1_img2.png"
-
-        # SVNIT logo is locked to SVNIT emblem
-        svnit_asset_id = lh.institute_logo_asset_id or lh.left_logo_asset_id
-        svnit_logo_url = "/assets/permission_page1_img1.png"
-        if svnit_asset_id:
-            svnit_asset = get_asset_for_club(db, svnit_asset_id, ctx.club.id)
-            if svnit_asset:
-                if svnit_asset.filename == "permission_page1_img1.png":
-                    svnit_logo_url = f"/assets/{svnit_asset.filename}"
-                else:
-                    svnit_logo_url = f"/api/v1/assets/{svnit_asset.id}/content"
-
-        out.append(
-            LetterheadOut(
-                id=lh.id,
-                name=lh.name,
-                title_text=lh.title_text,
-                subtitle_text=lh.subtitle_text,
-                is_system=(lh.club_id is None),
-                svnit_logo_locked=True,
-                club_logo_url=club_logo_url,
-                svnit_logo_url=svnit_logo_url,
-            )
-        )
-    return out
 
 
 @router.get("/assets/{asset_id}/content")

@@ -122,6 +122,7 @@ class Renderer:
         else:
             doc = DocxTemplate(str(docx_source))
         self._apply_club_banner(doc)
+        self._apply_club_logo(doc)
         safe_render_docx(doc, context, timeout=30.0)
 
         # Output path
@@ -174,15 +175,59 @@ class Renderer:
 
         banner = club_banner_path(
             Path(os.environ.get("STORAGE_LOCAL_ROOT", "storage")).resolve() / "cache" / "banners",
-            self.config.club_name,
-            self.config.institute_name,
-            uploaded_banner=self.config.letterhead_banner_path,
+            self.config.letterhead_title or self.config.club_name,
+            self.config.letterhead_subtitle or self.config.institute_name.split("(")[0],
             logo_path=self.config.club_logo_path,
             color=self.config.brand_color,
         )
         data = Path(banner).read_bytes()
         for image_part in targets:
             image_part._blob = data
+
+    def _apply_club_logo(self, doc: DocxTemplate) -> None:
+        """Swap "club logo" placeholders (logo blocks with no image chosen) for this club's logo,
+        keeping the logo's own proportions."""
+        from docx.oxml.ns import qn
+        from docgen.letterhead_banner import LOGO_PLACEHOLDER_NAME
+
+        logo = Path(self.config.club_logo_path) if self.config.club_logo_path else None
+        doc.init_docx()
+        parts = [doc.docx.part]
+        for section in doc.docx.sections:
+            for header in (section.header, section.first_page_header, section.even_page_header):
+                if not header.is_linked_to_previous:
+                    parts.append(header.part)
+        for part in parts:
+            for inline in list(part.element.iter(qn("wp:inline"))) + list(part.element.iter(qn("wp:anchor"))):
+                pic = next(inline.iter(qn("pic:pic")), None)
+                if pic is None:
+                    continue
+                c_nv = pic.find(f"{qn('pic:nvPicPr')}/{qn('pic:cNvPr')}")
+                blip = pic.find(f"{qn('pic:blipFill')}/{qn('a:blip')}")
+                if c_nv is None or blip is None or c_nv.get("name") != LOGO_PLACEHOLDER_NAME:
+                    continue
+                if not logo or not logo.exists():
+                    inline.getparent().remove(inline)  # no logo: print nothing rather than a grey box
+                    continue
+                rid = blip.get(qn("r:embed"))
+                if rid not in part.related_parts:
+                    continue
+                part.related_parts[rid]._blob = logo.read_bytes()
+                try:
+                    from PIL import Image
+
+                    with Image.open(logo) as im:
+                        w, h = im.size
+                    extent = inline.find(qn("wp:extent"))
+                    ext = pic.find(f"{qn('pic:spPr')}/{qn('a:xfrm')}/{qn('a:ext')}")
+                    if extent is not None and w:
+                        cx = int(extent.get("cx"))
+                        cy = str(int(cx * h / w))
+                        extent.set("cy", cy)
+                        if ext is not None:
+                            ext.set("cy", cy)
+                except Exception:
+                    pass
 
     def _build_context(self, event: EventRecord, schema: TemplateSchema,
                        extra_context: dict[str, Any] | None = None,

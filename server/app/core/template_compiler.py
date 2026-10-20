@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import io
+import logging
 import keyword
 import os
 import re
@@ -53,6 +54,30 @@ from server.app.core.config import settings
 # ---------------------------------------------------------------------------
 # Identifier Whitelist & Jinja Tag Sanitizer
 # ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
+
+# Fonts a block may be set to (the editor's font list; also used by the AI assistant)
+ALLOWED_FONTS = {
+    "Arial",
+    "Courier New",
+    "Georgia",
+    "Lato",
+    "Liberation Serif",
+    "Merriweather",
+    "Montserrat",
+    "Noto Sans",
+    "Noto Sans Devanagari",
+    "Noto Sans Gujarati",
+    "Noto Serif Devanagari",
+    "Open Sans",
+    "Playfair Display",
+    "Poppins",
+    "Roboto",
+    "Roboto Mono",
+    "Times New Roman",
+    "Tinos",
+}
 
 _SANDBOX = SandboxedEnvironment(autoescape=True, undefined=StrictUndefined)
 
@@ -288,7 +313,39 @@ def migrate_template_content(content: dict[str, Any]) -> dict[str, Any]:
 
     migrated = dict(content)
     migrated["content"] = new_blocks
+    ensure_block_ids(migrated)
     return migrated
+
+
+# Same node types and id format as the editor's BlockIdExtension, so ids made here survive
+BLOCK_ID_TYPES = {"paragraph", "heading", "table", "imageBlock", "pageBreak", "infoTable", "repeatingTable", "signatureGrid"}
+
+
+def ensure_block_ids(doc: dict[str, Any]) -> dict[str, Any]:
+    """Give every block a stable, unique blockId (the AI copilot targets blocks by id)."""
+    import uuid as _uuid
+
+    seen: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") in BLOCK_ID_TYPES:
+                attrs = node.setdefault("attrs", {}) if isinstance(node.get("attrs"), dict) or "attrs" not in node else node["attrs"]
+                if not isinstance(attrs, dict):
+                    attrs = node["attrs"] = {}
+                bid = attrs.get("blockId")
+                if not bid or bid in seen:
+                    bid = f"b_{_uuid.uuid4().hex[:12]}"
+                    attrs["blockId"] = bid
+                seen.add(bid)
+            for child in node.get("content") or []:
+                walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+
+    walk(doc)
+    return doc
 
 
 def validate_template_identifiers(editor_json: dict[str, Any] | None, fields: list[dict[str, Any]] | None) -> None:
@@ -810,95 +867,18 @@ class TipTapDocxCompiler:
         _field("NUMPAGES")
 
     def _build_header(self):
-        """Build document header: SVNIT logo on right (locked), club logo on left, centered titles."""
+        """Every template carries the club's generated letterhead: a placeholder banner the
+        renderer swaps for the rendering club's own (docgen.letterhead_banner)."""
+        from docgen.letterhead_banner import PLACEHOLDER_NAME
+
         section = self.doc.sections[0]
         header = section.header
         header.is_linked_to_previous = False
-
-        if self.letterhead_cfg.get("banner_placeholder"):
-            # Shared library templates: a placeholder banner the renderer swaps for the
-            # rendering club's own banner (docgen.letterhead_banner).
-            from docgen.letterhead_banner import PLACEHOLDER_NAME
-
-            placeholder = Path("assets") / PLACEHOLDER_NAME
-            if placeholder.exists():
-                usable = section.page_width - section.left_margin - section.right_margin
-                hp = header.paragraphs[0]
-                hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                hp.add_run().add_picture(str(placeholder), width=min(usable, Inches(7.0)))
-                return
-
-        table = header.add_table(rows=1, cols=3, width=Inches(6.67))
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        table.autofit = False
-        table.columns[0].width = Inches(0.85)
-        table.columns[1].width = Inches(4.97)
-        table.columns[2].width = Inches(0.85)
-
-        # Left logo (club logo from assets)
-        left_cell = table.cell(0, 0)
-        left_cell.width = Inches(0.85)
-        lp = left_cell.paragraphs[0]
-        lp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        # The club's own logo only; no logo rather than another club's.
-        club_logo_path = Path(self.letterhead_cfg.get("club_logo_path") or "")
-        if self.letterhead_cfg.get("club_logo_path") and club_logo_path.exists():
-            l_run = lp.add_run()
-            l_run.add_picture(str(club_logo_path), width=Inches(0.75))
-
-        # Center titles
-        center_cell = table.cell(0, 1)
-        center_cell.width = Inches(4.97)
-        cp = center_cell.paragraphs[0]
-        cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        title1 = self.letterhead_cfg.get("title_text", "SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT")
-        # Without a configured letterhead, print the rendering club's own name.
-        subtitle = self.letterhead_cfg.get("subtitle_text") or "{{ club_name | upper }}"
-
-        r1 = cp.add_run(title1)
-        r1.bold = True
-        r1.font.name = "Times New Roman"
-        r1.font.size = Pt(9.5)
-        r1.font.color.rgb = RGBColor(0x11, 0x18, 0x27)
-
-        if subtitle:
-            cp.add_run().add_break()
-            r2 = cp.add_run(subtitle)
-            r2.bold = True
-            r2.font.name = "Times New Roman"
-            r2.font.size = Pt(8.5)
-            r2.font.color.rgb = RGBColor(0x1E, 0x5B, 0x94)
-
-        # Right logo (SVNIT Emblem - permanently locked)
-        right_cell = table.cell(0, 2)
-        right_cell.width = Inches(0.85)
-        rp = right_cell.paragraphs[0]
-        rp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        svnit_crest = Path("assets/svnit_crest.png")
-        if not svnit_crest.exists():
-            svnit_crest = Path("assets/permission_page1_img1.png")
-        if svnit_crest.exists():
-            r_run = rp.add_run()
-            r_run.add_picture(str(svnit_crest), width=Inches(0.75))
-
-        # Remove header table borders
-        for row in table.rows:
-            for cell in row.cells:
-                set_cell_border(cell,
-                                top={"val": "none", "sz": "0"},
-                                bottom={"val": "none", "sz": "0"},
-                                start={"val": "none", "sz": "0"},
-                                end={"val": "none", "sz": "0"})
-
-        # Thin divider below header
-        p_div = self.doc.add_paragraph()
-        p_div.paragraph_format.space_before = Pt(4)
-        p_div.paragraph_format.space_after = Pt(8)
-        run_div = p_div.add_run("—" * 52)
-        run_div.font.size = Pt(8)
-        run_div.font.color.rgb = RGBColor(0x9C, 0xA3, 0xAF)
-        p_div.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        placeholder = Path("assets") / PLACEHOLDER_NAME
+        usable = section.page_width - section.left_margin - section.right_margin
+        hp = header.paragraphs[0]
+        hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        hp.add_run().add_picture(str(placeholder), width=min(usable, Inches(7.0)))
 
     def _add_heading(self, block: dict[str, Any]):
         """Render heading block (H1, H2, H3) with institute typography."""
@@ -926,8 +906,33 @@ class TipTapDocxCompiler:
             font_size = 13 if self.is_certificate else 11
             color = self.heading_color_rgb or RGBColor(0x37, 0x41, 0x51)
 
-        self._render_inline_content(p, block.get("content", []), default_size=font_size,
-                                   default_bold=True, default_color=color, font_name=self.heading_font)
+        size, color, font = self._block_style(attrs, font_size, color, self.heading_font, p)
+        self._render_inline_content(p, block.get("content", []), default_size=size,
+                                   default_bold=True, default_color=color, font_name=font)
+
+    def _block_style(self, attrs: dict[str, Any], size: int, color, font, paragraph):
+        """Per-block style set in the editor: text colour, size (pt), font and background."""
+        if attrs.get("textColor"):
+            rgb = hex_to_rgb(attrs.get("textColor"))
+            if rgb:
+                color = rgb
+        try:
+            if attrs.get("fontSize"):
+                size = max(6, min(int(float(str(attrs["fontSize"]).replace("pt", "").replace("px", ""))), 72))
+        except (TypeError, ValueError):
+            pass
+        if attrs.get("fontFamily") and str(attrs["fontFamily"]) in ALLOWED_FONTS:
+            font = str(attrs["fontFamily"])
+        bg = str(attrs.get("backgroundColor") or "").lstrip("#")
+        if len(bg) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in bg):
+            from docx.oxml import parse_xml
+
+            ppr = paragraph._p.get_or_add_pPr()
+            ppr.append(parse_xml(
+                f'<w:shd xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+                f'w:val="clear" w:color="auto" w:fill="{bg.upper()}"/>'
+            ))
+        return size, color, font
 
     def _add_paragraph(self, block: dict[str, Any]):
         """Render paragraph block with inline text, marks, and field chips."""
@@ -940,7 +945,8 @@ class TipTapDocxCompiler:
         p.paragraph_format.line_spacing = 1.4 if self.is_certificate else 1.15
         self._apply_alignment(p, align_str)
 
-        self._render_inline_content(p, block.get("content", []), default_size=self.body_size)
+        size, color, font = self._block_style(attrs, self.body_size, None, None, p)
+        self._render_inline_content(p, block.get("content", []), default_size=size, default_color=color, font_name=font)
 
     def _add_image_block(self, block: dict[str, Any]):
         """Render image block or figure into DOCX."""
@@ -948,7 +954,7 @@ class TipTapDocxCompiler:
         src = attrs.get("src") or ""
         caption = attrs.get("caption")
         width_str = attrs.get("width") or "240px"
-        alignment = attrs.get("alignment") or "center"
+        alignment = attrs.get("alignment") or attrs.get("placement") or "center"  # the editor stores "placement"
 
         width_in = Inches(2.5)
         if "px" in str(width_str):
@@ -976,28 +982,44 @@ class TipTapDocxCompiler:
                 image_data = base64.b64decode(b64_part)
             except Exception:
                 pass
-        elif attrs.get("assetId"):
+        if image_data is None and attrs.get("imageType") == "college-logo":
+            crest = Path("assets/svnit_crest.png")
+            if crest.exists():
+                image_data = crest.read_bytes()
+                if "px" not in str(width_str):
+                    width_in = Inches(0.95)
+        asset_id = attrs.get("assetId") or attrs.get("logoAssetId") or attrs.get("clubLogoAssetId")
+        if image_data is None and asset_id:
             try:
-                from server.app.core.storage import get_storage, LocalDiskStorage
-                from server.app.models.club import ClubAsset
-                from server.app.db.session import SessionLocal
+                from server.app.core.database import SessionLocal
+                from server.app.core.storage import LocalDiskStorage, get_storage
+                from server.app.models import Asset
+
                 with SessionLocal() as db:
-                    asset = db.query(ClubAsset).filter(ClubAsset.id == attrs["assetId"]).first()
+                    asset = db.query(Asset).filter(Asset.id == asset_id).first()
                     if asset:
                         active_storage = get_storage()
                         if isinstance(active_storage, LocalDiskStorage):
                             p_asset = active_storage.local_path(asset.storage_key)
                             if p_asset.exists():
                                 image_data = p_asset.read_bytes()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Image block asset %s could not be loaded: %s", asset_id, exc)
 
         if image_data:
             try:
                 img_stream = io.BytesIO(image_data)
                 p.add_run().add_picture(img_stream, width=width_in)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Image block could not be added: %s", exc)
+        elif attrs.get("imageType") == "club-logo":
+            # No logo chosen: print the rendering club's own logo (swapped in by the renderer)
+            from docgen.letterhead_banner import LOGO_PLACEHOLDER_NAME
+
+            placeholder = Path("assets") / LOGO_PLACEHOLDER_NAME
+            if placeholder.exists():
+                logo_w = width_in if "px" in str(width_str) else Inches(1.1)
+                p.add_run().add_picture(str(placeholder), width=logo_w)
 
         if caption:
             p_cap = self.doc.add_paragraph()
@@ -1753,12 +1775,30 @@ class TemplateCompiler:
         if isinstance(template_meta.get("recommend"), dict):
             schema_dict["recommend"] = template_meta["recommend"]
 
+        chip_labels: dict[str, str] = {}
+
+        def _collect_labels(node: Any) -> None:
+            if isinstance(node, dict):
+                if node.get("type") == "fieldChip":
+                    attrs = node.get("attrs") or {}
+                    if attrs.get("fieldName") and attrs.get("label"):
+                        chip_labels.setdefault(attrs["fieldName"], attrs["label"])
+                for v in node.values():
+                    _collect_labels(v)
+            elif isinstance(node, list):
+                for v in node:
+                    _collect_labels(v)
+
+        _collect_labels(editor_json)
         for f in enriched_fields:
             f_entry: dict[str, Any] = {
                 "key": f.get("key"),
                 "type": f.get("type", "text"),
                 "required": bool(f.get("required", False)),
             }
+            label = f.get("label") or chip_labels.get(f.get("key") or "")
+            if label:
+                f_entry["label"] = label
             if f.get("ask"):
                 f_entry["ask"] = f["ask"]
             if f.get("defer_ok"):
@@ -2120,7 +2160,22 @@ def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, A
         if is_repeat:
             list_var = attrs.get("listVariable") or "budget_items"
             if list_var not in ctx or not isinstance(ctx[list_var], list):
-                cols = attrs.get("columns") or [
+                cols = attrs.get("columns")
+                if not isinstance(cols, list):
+                    # Editor tables store a column count; read the columns from the row's chips
+                    keys: list[str] = []
+
+                    def _row_keys(node: Any) -> None:
+                        if isinstance(node, dict):
+                            fname = (node.get("attrs") or {}).get("fieldName") if node.get("type") == "fieldChip" else None
+                            if isinstance(fname, str) and fname.startswith(f"{list_var}.") and fname not in keys:
+                                keys.append(fname)
+                            for ch in node.get("content") or []:
+                                _row_keys(ch)
+
+                    _row_keys(b)
+                    cols = [{"key": k.split(".", 1)[1]} for k in keys]
+                cols = cols or [
                     {"key": "description", "label": "Item Description"},
                     {"key": "amount", "label": "Amount (INR)"},
                 ]
@@ -2148,7 +2203,7 @@ def _build_editor_dummy_context(schema: TemplateSchema, fields: list[dict[str, A
             fn = node.get("attrs", {}).get("fieldName")
             if fn and (fn not in ctx or ctx[fn] is None):
                 label = node.get("attrs", {}).get("label") or fn.replace("_", " ").title()
-                ctx[fn] = f"Demo {label}"
+                ctx[fn] = f"[{label}]"
         for child in node.get("content", []):
             _extract_chips(child)
 

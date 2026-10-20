@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Optional
 
 PLACEHOLDER_NAME = "club_banner_placeholder.png"
+# A "club logo" block with no image chosen prints this; the renderer swaps in the club's logo
+LOGO_PLACEHOLDER_NAME = "club_logo_placeholder.png"
 BANNER_SIZE = (2550, 348)
 TITLE_COLOR = (79, 129, 189)
 
@@ -101,17 +103,14 @@ def compose_banner(
 
 def club_banner_path(
     cache_dir: Path,
-    club_name: str,
-    institute_name: str,
-    uploaded_banner: Optional[str] = None,
+    title: str,
+    subtitle: str,
     logo_path: Optional[str] = None,
     color: Optional[str] = None,
 ) -> Path:
-    """The banner to use for a club: its uploaded banner, else a cached composed one."""
-    if uploaded_banner and Path(uploaded_banner).exists():
-        return Path(uploaded_banner)
-    title = (club_name or "Club").upper()
-    subtitle = (institute_name or "").split("(")[0].strip().upper()
+    """The club's letterhead: institute crest, its title and subtitle lines, its logo (cached)."""
+    title = (title or "Club").strip().upper()
+    subtitle = (subtitle or "").strip().upper()
     logo = Path(logo_path) if logo_path else None
     logo_sig = ""
     if logo and logo.exists():

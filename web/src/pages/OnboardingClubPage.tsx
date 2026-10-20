@@ -54,6 +54,29 @@ const parseServerDate = (iso: string) => new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(is
 // Free-text positions are stored as "Other: <title>" for signatory bookkeeping.
 const displayPosition = (position: string) => position.replace(/^Other:\s*/, '');
 
+/** The club's own uploaded logo; initials only when it has none (or it fails to load). */
+function ClubCardLogo({ club }: { club: ClubSearchResult }) {
+  const [failed, setFailed] = React.useState(false);
+  if (club.has_logo && !failed) {
+    return (
+      <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 p-1 flex items-center justify-center flex-shrink-0">
+        <img
+          src={`/api/v1/clubs/${club.id}/public-logo`}
+          alt=""
+          loading="lazy"
+          className="max-w-full max-h-full object-contain"
+          onError={() => setFailed(true)}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="w-11 h-11 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+      {clubInitials(club)}
+    </div>
+  );
+}
+
 function clubInitials(club: ClubSearchResult) {
   const short = (club.short_name || '').replace(/[^A-Za-z0-9]/g, '');
   if (short && short.length <= 4) return short.toUpperCase();
@@ -101,6 +124,16 @@ export const OnboardingClubPage: React.FC = () => {
   const [newClubShortName, setNewClubShortName] = useState('');
   const [newClubChapterCode, setNewClubChapterCode] = useState('');
   const [newClubLogo, setNewClubLogo] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!newClubLogo) {
+      setLogoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(newClubLogo);
+    setLogoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [newClubLogo]);
   const [myPositionInNewClub, setMyPositionInNewClub] = useState('Student Head/Chairperson');
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -411,9 +444,7 @@ export const OnboardingClubPage: React.FC = () => {
                             : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                         }`}
                       >
-                        <div className="w-11 h-11 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
-                          {clubInitials(club)}
-                        </div>
+                        <ClubCardLogo club={club} />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-bold text-slate-900 truncate">{club.name}</p>
                           <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1 whitespace-nowrap">
@@ -616,9 +647,17 @@ export const OnboardingClubPage: React.FC = () => {
                 accept="image/png,image/jpeg,image/webp"
                 required
                 onChange={(e) => setNewClubLogo(e.target.files?.[0] || null)}
-                className="w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-emerald-700 hover:file:bg-emerald-100"
+                className="w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border file:border-slate-300 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-800 hover:file:bg-slate-50"
               />
-              <p className="text-xs text-slate-400 mt-1">PNG, JPEG or WebP, up to 2 MB. Used on the club letterhead.</p>
+              {logoPreview && (
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-xl bg-white border border-slate-200 p-1 flex items-center justify-center">
+                    <img src={logoPreview} alt="Selected club logo" className="max-w-full max-h-full object-contain" />
+                  </div>
+                  <p className="text-xs text-slate-500">Shown on the club list, the sidebar and every document letterhead.</p>
+                </div>
+              )}
+              <p className="text-xs text-slate-500 mt-1">Required. PNG, JPEG or WebP, up to 2 MB.</p>
             </div>
 
             <div>

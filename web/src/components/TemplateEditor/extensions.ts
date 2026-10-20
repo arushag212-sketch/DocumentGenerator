@@ -53,6 +53,35 @@ export const AiSuggestedBlock = Extension.create({
               return { 'data-official-wording': 'true' };
             },
           },
+          // Per-block style (set from the toolbar or the AI copilot); the compiler prints the same
+          textColor: {
+            default: null,
+            parseHTML: (element: any) => element.getAttribute('data-text-color'),
+            renderHTML: (attributes: any) =>
+              attributes.textColor ? { 'data-text-color': attributes.textColor, style: `color: ${attributes.textColor}` } : {},
+          },
+          fontSize: {
+            default: null,
+            parseHTML: (element: any) => element.getAttribute('data-font-size'),
+            renderHTML: (attributes: any) =>
+              attributes.fontSize
+                ? { 'data-font-size': attributes.fontSize, style: `font-size: ${String(attributes.fontSize).replace(/pt$/, '')}pt` }
+                : {},
+          },
+          fontFamily: {
+            default: null,
+            parseHTML: (element: any) => element.getAttribute('data-font-family'),
+            renderHTML: (attributes: any) =>
+              attributes.fontFamily ? { 'data-font-family': attributes.fontFamily, style: `font-family: "${attributes.fontFamily}"` } : {},
+          },
+          backgroundColor: {
+            default: null,
+            parseHTML: (element: any) => element.getAttribute('data-bg-color'),
+            renderHTML: (attributes: any) =>
+              attributes.backgroundColor
+                ? { 'data-bg-color': attributes.backgroundColor, style: `background-color: ${attributes.backgroundColor}; padding: 2px 4px` }
+                : {},
+          },
         },
       },
     ];
@@ -321,11 +350,20 @@ export function migrateTipTapContent(content: any): any {
   };
 
   const newContent: any[] = [];
+  // Converted tables keep their blockId (and condition) so the AI copilot's references stay valid
+  const keep = (node: any, from: any) => ({
+    ...node,
+    attrs: {
+      ...(node.attrs || {}),
+      ...(from.attrs?.blockId ? { blockId: from.attrs.blockId } : {}),
+      ...(from.attrs?.showIf ? { showIf: from.attrs.showIf } : {}),
+    },
+  });
   for (const rawBlock of content.content) {
     const block = migrateNode(rawBlock);
     if (block.type === 'infoTable') {
       const rows = block.attrs?.rows || [];
-      newContent.push(createInfoTableNode(rows));
+      newContent.push(keep(createInfoTableNode(rows), block));
     } else if (block.type === 'repeatingTable') {
       const cols = block.attrs?.columns || [];
       const listVar = block.attrs?.listVariable || 'budget_items';
@@ -333,11 +371,11 @@ export function migrateTipTapContent(content: any): any {
       const hasTotal = block.attrs?.hasTotal ?? true;
       const totalLabel = block.attrs?.totalLabel || 'Total';
       const totalVar = block.attrs?.totalVarName || `total_${listVar}_amount`;
-      newContent.push(createRepeatingTableNode(cols, listVar, itemAlias, hasTotal, totalLabel, totalVar));
+      newContent.push(keep(createRepeatingTableNode(cols, listVar, itemAlias, hasTotal, totalLabel, totalVar), block));
     } else if (block.type === 'signatureGrid') {
       const signs = block.attrs?.signatures || [];
       const count = block.attrs?.columns || (signs.length > 0 ? signs.length : 2);
-      newContent.push(createSignatureGridNode(count, signs));
+      newContent.push(keep(createSignatureGridNode(count, signs), block));
     } else {
       newContent.push(block);
     }

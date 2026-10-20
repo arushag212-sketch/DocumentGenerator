@@ -9,7 +9,7 @@ recommend:
   requires: [meeting]
   reason: "Official record of the meeting's discussion and decisions."
   reason_not: "Needed only for meetings."
-letterhead: acm
+letterhead: club
 numbering:
   series: MOM
   format: "{club_code}/{short_year}/{series}/{seq:03d}"

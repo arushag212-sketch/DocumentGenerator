@@ -1,6 +1,6 @@
 import React from 'react';
 import { Palette, Type, Layout, ShieldAlert, Check, AlertTriangle, Droplets, Wand2 } from 'lucide-react';
-import { THEMES, FONT_OPTIONS, calculateContrastRatio, isInkHeavy } from './themes';
+import { THEMES, FONT_OPTIONS, calculateContrastRatio, isInkHeavy, themeDesignSettings } from './themes';
 
 export interface DesignSettings {
   theme: string;
@@ -36,21 +36,8 @@ export const DesignPanel: React.FC<DesignPanelProps> = ({ settings, onChange, on
   const inkHeavy = isInkHeavy(settings.pageBg || '#ffffff');
 
   const handleThemeSelect = (themeId: string) => {
-    const t = THEMES.find((item) => item.id === themeId);
-    if (!t) return;
-    onChange({
-      theme: t.id,
-      headingColor: t.heading_color,
-      textColor: t.text_color,
-      tableHeaderBg: t.table_header_bg,
-      tableHeaderTextColor: t.table_header_text,
-      borderColor: t.border_color,
-      dividerColor: t.divider_color,
-      fontFamily: t.body_font,
-      headingFontFamily: t.heading_font,
-      pageBorder: t.border_style,
-      pageBg: t.page_bg,
-    });
+    const next = themeDesignSettings(themeId);
+    if (next) onChange(next as Partial<DesignSettings>);
   };
 
   return (

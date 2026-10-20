@@ -126,6 +126,10 @@ export function createDroppedBlockNode(schema: any, blockType: string, customPay
       const raw = createSignatureGridNode(customPayload.columns || 2);
       return PMNode.fromJSON(schema, { ...raw, attrs: { ...raw.attrs, blockId } });
     }
+    case 'collegeLogo': {
+      const raw = createImageBlockNode({ imageType: 'college-logo', alt: 'College logo', width: '90px' });
+      return PMNode.fromJSON(schema, { ...raw, attrs: { ...raw.attrs, blockId } });
+    }
     case 'clubLogo':
     case 'imageBlock': {
       const raw = createImageBlockNode({

@@ -356,6 +356,7 @@ def search_clubs(
                 membership_position=m.position if m else None,
                 join_request_status=jr.status if jr else None,
                 admin_name=admin_name,
+                has_logo=_active_logo_asset(db, c) is not None,
             )
         )
     return results
@@ -1832,34 +1833,7 @@ async def upload_club_logo(
         db.add(asset)
         db.flush()
 
-    # Associate with club letterhead
-    lh = (
-        db.query(Letterhead)
-        .filter(Letterhead.club_id == ctx.club.id)
-        .first()
-    )
-    if not lh:
-        system_lh = db.query(Letterhead).filter(Letterhead.club_id.is_(None)).first()
-        if system_lh:
-            validate_letterhead_asset_refs(db, ctx.club.id, letterhead=system_lh)
-        lh = Letterhead(
-            id=str(uuid.uuid4()),
-            club_id=ctx.club.id,
-            name=f"{ctx.club.name} Official Letterhead",
-            left_logo_asset_id=system_lh.left_logo_asset_id if system_lh else None,
-            right_logo_asset_id=asset.id,
-            institute_logo_asset_id=system_lh.institute_logo_asset_id if system_lh else None,
-            title_text=ctx.club.name.upper(),
-            subtitle_text="Sardar Vallabhbhai National Institute of Technology, Surat",
-            colors={"primary": "#1E5B94"},
-            fonts={"primary": "Times New Roman"},
-            layout={"type": "dual_logo_single_line"},
-        )
-        db.add(lh)
-    else:
-        lh.right_logo_asset_id = asset.id
-
-    ctx.club.default_letterhead_id = lh.id
+    # The letterhead is generated from this logo; no letterhead record is kept.
     settings_dict = dict(ctx.club.settings or {})
     settings_dict["logo_asset_id"] = asset.id
     ctx.club.settings = settings_dict
@@ -1881,13 +1855,12 @@ async def upload_club_logo(
         "asset_id": asset.id,
         "filename": asset.filename,
         "url": f"/api/v1/assets/{asset.id}/content",
-        "letterhead_id": lh.id,
+        "letterhead_id": None,  # the letterhead is generated from the logo
     }
 
 
 class BrandingIn(BaseModel):
     logo_asset_id: Optional[str] = None
-    letterhead_banner_asset_id: Optional[str] = None
 
 
 @router.put("/{club_id}/branding")
@@ -1902,8 +1875,7 @@ def set_club_branding(
     from server.app.core.tenancy import get_asset_for_club
 
     settings = dict(ctx.club.settings or {})
-    for field, value in (("logo_asset_id", payload.logo_asset_id),
-                         ("letterhead_banner_asset_id", payload.letterhead_banner_asset_id)):
+    for field, value in (("logo_asset_id", payload.logo_asset_id),):
         if value is None:
             continue
         if value == "":
@@ -1917,8 +1889,7 @@ def set_club_branding(
     log_audit(db=db, action="club_branding_updated", entity_type="club", entity_id=ctx.club.id, club_id=ctx.club.id,
               user_id=ctx.user.id, meta=payload.model_dump(exclude_none=True),
               ip=request.client.host if request.client else None)
-    return {"logo_asset_id": settings.get("logo_asset_id"),
-            "letterhead_banner_asset_id": settings.get("letterhead_banner_asset_id")}
+    return {"logo_asset_id": settings.get("logo_asset_id")}
 
 
 @router.get("/{club_id}/letterhead-banner")
@@ -1939,15 +1910,68 @@ def get_club_letterhead_banner(
     cfg = build_club_config_from_db(db, ctx.club.slug)
     banner = club_banner_path(
         Path(os.environ.get("STORAGE_LOCAL_ROOT", "storage")).resolve() / "cache" / "banners",
-        cfg.club_name,
-        cfg.institute_name,
-        uploaded_banner=cfg.letterhead_banner_path,
+        cfg.letterhead_title or cfg.club_name,
+        cfg.letterhead_subtitle or cfg.institute_name.split("(")[0],
         logo_path=cfg.club_logo_path,
         color=cfg.brand_color,
     )
     if not Path(banner).exists():
         raise HTTPException(status_code=404, detail="Banner not available")
     return FileResponse(str(banner), media_type="image/png", headers={"Cache-Control": "private, max-age=60"})
+
+
+def _active_logo_asset(db: Session, club: Club):
+    """The club's own logo: the one chosen in settings, else its letterhead logo, else the newest upload."""
+    from server.app.models import Asset, Letterhead
+
+    logo_asset_id = (club.settings or {}).get("logo_asset_id")
+    asset = None
+    if logo_asset_id:
+        asset = db.query(Asset).filter(
+            Asset.id == logo_asset_id, (Asset.club_id == club.id) | (Asset.club_id.is_(None))
+        ).first()
+    if not asset:
+        lh = db.query(Letterhead).filter(Letterhead.club_id == club.id).first()
+        if lh and lh.right_logo_asset_id:
+            asset = db.query(Asset).filter(Asset.id == lh.right_logo_asset_id, Asset.club_id == club.id).first()
+    if not asset:
+        asset = db.query(Asset).filter(Asset.club_id == club.id, Asset.kind == "logo").order_by(Asset.created_at.desc()).first()
+    return asset
+
+
+def _serve_asset_image(asset):
+    from fastapi.responses import FileResponse, Response
+    from server.app.core.storage import LocalDiskStorage
+
+    try:
+        active_storage = get_storage()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    if isinstance(active_storage, LocalDiskStorage):
+        f_path = active_storage.local_path(asset.storage_key)
+        if not f_path.is_file():
+            raise HTTPException(status_code=404, detail="Club logo file not found on storage")
+        return FileResponse(str(f_path), media_type=asset.mime or "image/png", headers={"Cache-Control": "private, max-age=300"})
+    try:
+        return Response(content=active_storage.load(asset.storage_key), media_type=asset.mime or "image/png")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Club logo file not found on storage")
+
+
+@router.get("/{club_id}/public-logo")
+def get_club_public_logo(
+    club_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """A club's logo for any signed-in user (shown on the club list before joining)."""
+    club = db.query(Club).filter(Club.id == club_id, Club.disabled_at.is_(None)).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found")
+    asset = _active_logo_asset(db, club)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Club logo not found")
+    return _serve_asset_image(asset)
 
 
 @router.get("/{club_id}/logo")
@@ -1957,43 +1981,10 @@ def get_club_logo(
     db: Session = Depends(get_db),
 ):
     """Serve the active logo asset for the club."""
-    from fastapi.responses import FileResponse, Response
-    from server.app.models import Asset, Letterhead
-    from server.app.core.storage import get_storage, LocalDiskStorage
-
-    logo_asset_id = (ctx.club.settings or {}).get("logo_asset_id")
-    asset = None
-    if logo_asset_id:
-        asset = db.query(Asset).filter(
-            Asset.id == logo_asset_id, (Asset.club_id == ctx.club.id) | (Asset.club_id.is_(None))
-        ).first()
-    if not asset:
-        lh = db.query(Letterhead).filter(Letterhead.club_id == ctx.club.id).first()
-        if lh and lh.right_logo_asset_id:
-            asset = db.query(Asset).filter(Asset.id == lh.right_logo_asset_id, Asset.club_id == ctx.club.id).first()
-    if not asset:
-        asset = db.query(Asset).filter(Asset.club_id == ctx.club.id, Asset.kind == "logo").order_by(Asset.created_at.desc()).first()
-
+    asset = _active_logo_asset(db, ctx.club)
     if not asset:
         raise HTTPException(status_code=404, detail="Club logo not found")
-
-    try:
-        active_storage = get_storage()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-
-    if isinstance(active_storage, LocalDiskStorage):
-        f_path = active_storage.local_path(asset.storage_key)
-        if not f_path.is_file():
-            raise HTTPException(status_code=404, detail="Club logo file not found on storage")
-        return FileResponse(str(f_path), media_type=asset.mime or "image/png")
-
-    try:
-        return Response(content=active_storage.load(asset.storage_key), media_type=asset.mime or "image/png")
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Club logo file not found on storage")
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    return _serve_asset_image(asset)
 
 
 # ---------------- INVITES (Club Admins create/list/revoke) ----------------
@@ -2502,180 +2493,6 @@ def update_numbering_series_format(
 
 
 # ---------------- LETTERHEADS & ASSETS (Editors view, Admins change) ----------------
-
-
-@router.get("/{club_id}/letterheads", response_model=list[LetterheadOut])
-def list_club_letterheads(
-    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
-    db: Session = Depends(get_db),
-):
-    """List club letterheads and system default letterheads (editors/viewers can view)."""
-    lhs = (
-        db.query(Letterhead)
-        .filter((Letterhead.club_id == ctx.club.id) | (Letterhead.club_id.is_(None)))
-        .order_by(Letterhead.club_id.desc(), Letterhead.created_at.desc())
-        .all()
-    )
-    return [
-        LetterheadOut(
-            id=lh.id,
-            club_id=lh.club_id,
-            name=lh.name,
-            left_logo_asset_id=lh.left_logo_asset_id,
-            right_logo_asset_id=lh.right_logo_asset_id,
-            institute_logo_asset_id=lh.institute_logo_asset_id,
-            title_text=lh.title_text,
-            subtitle_text=lh.subtitle_text,
-            colors=lh.colors or {},
-            fonts=lh.fonts or {},
-            layout=lh.layout or {},
-            created_at=lh.created_at,
-        )
-        for lh in lhs
-    ]
-
-
-@router.post("/{club_id}/letterheads", response_model=LetterheadOut, status_code=status.HTTP_201_CREATED)
-def create_club_letterhead(
-    club_id: str,
-    payload: LetterheadCreate,
-    request: Request,
-    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
-    db: Session = Depends(get_db),
-):
-    """Create a new letterhead configuration (admin only)."""
-    system_lh = db.query(Letterhead).filter(Letterhead.club_id.is_(None)).first()
-    inst_crest = system_lh.institute_logo_asset_id if system_lh else None
-    validate_letterhead_asset_refs(
-        db,
-        ctx.club.id,
-        left_logo_asset_id=payload.left_logo_asset_id or inst_crest,
-        right_logo_asset_id=payload.right_logo_asset_id,
-        institute_logo_asset_id=inst_crest,
-    )
-
-    lh = Letterhead(
-        id=str(uuid.uuid4()),
-        club_id=ctx.club.id,
-        name=payload.name.strip(),
-        left_logo_asset_id=payload.left_logo_asset_id or inst_crest,
-        right_logo_asset_id=payload.right_logo_asset_id,
-        institute_logo_asset_id=inst_crest,
-        title_text=payload.title_text or ctx.club.name.upper(),
-        subtitle_text=payload.subtitle_text or "Sardar Vallabhbhai National Institute of Technology, Surat",
-        colors=payload.colors or {"primary": "#1E5B94"},
-        fonts=payload.fonts or {"primary": "Times New Roman"},
-        layout=payload.layout or {"type": "dual_logo_single_line"},
-    )
-    db.add(lh)
-    db.commit()
-    db.refresh(lh)
-
-    client_ip = request.client.host if request.client else None
-    log_audit(
-        db=db,
-        action="letterhead_created",
-        entity_type="letterhead",
-        entity_id=lh.id,
-        club_id=ctx.club.id,
-        user_id=ctx.user.id,
-        meta={"name": lh.name},
-        ip=client_ip,
-    )
-
-    return LetterheadOut(
-        id=lh.id,
-        club_id=lh.club_id,
-        name=lh.name,
-        left_logo_asset_id=lh.left_logo_asset_id,
-        right_logo_asset_id=lh.right_logo_asset_id,
-        institute_logo_asset_id=lh.institute_logo_asset_id,
-        title_text=lh.title_text,
-        subtitle_text=lh.subtitle_text,
-        colors=lh.colors or {},
-        fonts=lh.fonts or {},
-        layout=lh.layout or {},
-        created_at=lh.created_at,
-    )
-
-
-@router.put("/{club_id}/letterheads/{letterhead_id}", response_model=LetterheadOut)
-def update_club_letterhead(
-    club_id: str,
-    letterhead_id: str,
-    payload: LetterheadUpdate,
-    request: Request,
-    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
-    db: Session = Depends(get_db),
-):
-    """Update letterhead configuration (admin only)."""
-    lh = (
-        db.query(Letterhead)
-        .filter(Letterhead.id == letterhead_id, Letterhead.club_id == ctx.club.id)
-        .first()
-    )
-    if not lh:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "LETTERHEAD_NOT_FOUND", "message": "Letterhead not found in this club"},
-        )
-
-    # Validate the complete resulting reference set before mutating anything.
-    validate_letterhead_asset_refs(
-        db,
-        ctx.club.id,
-        letterhead=lh,
-        left_logo_asset_id=payload.left_logo_asset_id if payload.left_logo_asset_id is not None else lh.left_logo_asset_id,
-        right_logo_asset_id=payload.right_logo_asset_id if payload.right_logo_asset_id is not None else lh.right_logo_asset_id,
-        institute_logo_asset_id=lh.institute_logo_asset_id,
-    )
-
-    if payload.name is not None:
-        lh.name = payload.name.strip()
-    if payload.left_logo_asset_id is not None:
-        lh.left_logo_asset_id = payload.left_logo_asset_id or None
-    if payload.right_logo_asset_id is not None:
-        lh.right_logo_asset_id = payload.right_logo_asset_id or None
-    if payload.title_text is not None:
-        lh.title_text = payload.title_text
-    if payload.subtitle_text is not None:
-        lh.subtitle_text = payload.subtitle_text
-    if payload.colors is not None:
-        lh.colors = payload.colors
-    if payload.fonts is not None:
-        lh.fonts = payload.fonts
-    if payload.layout is not None:
-        lh.layout = payload.layout
-
-    db.commit()
-    db.refresh(lh)
-
-    client_ip = request.client.host if request.client else None
-    log_audit(
-        db=db,
-        action="letterhead_updated",
-        entity_type="letterhead",
-        entity_id=lh.id,
-        club_id=ctx.club.id,
-        user_id=ctx.user.id,
-        meta={"name": lh.name},
-        ip=client_ip,
-    )
-
-    return LetterheadOut(
-        id=lh.id,
-        club_id=lh.club_id,
-        name=lh.name,
-        left_logo_asset_id=lh.left_logo_asset_id,
-        right_logo_asset_id=lh.right_logo_asset_id,
-        institute_logo_asset_id=lh.institute_logo_asset_id,
-        title_text=lh.title_text,
-        subtitle_text=lh.subtitle_text,
-        colors=lh.colors or {},
-        fonts=lh.fonts or {},
-        layout=lh.layout or {},
-        created_at=lh.created_at,
-    )
 
 
 @router.get("/{club_id}/assets", response_model=list[AssetOut])

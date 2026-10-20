@@ -1,5 +1,5 @@
 {
-  "_note": "Demo data for development. Club names and logos are from SVNIT's Chapters | Clubs | Society page; people are fictional. Applied through the public API by server/scripts/seed_demo_clubs.py.",
+  "_note": "Demo data for development. Club names and logos are from SVNIT's Chapters | Clubs | Society page (GDGC uses the GDSC logo listed there); people are fictional. Applied through the public API by server/scripts/seed_demo_clubs.py.",
   "password": "ClubDocs@123",
   "email_domain": "demo.svnit.ac.in",
   "academic_year": "2026-27",
@@ -7,60 +7,72 @@
     {
       "slug": "acm",
       "existing": true,
-      "users": {"admin": "Riya Desai", "editor": "Kabir Shah", "viewer": "Neha Iyer"},
+      "users": {
+        "admin": "Riya Desai",
+        "editor": "Kabir Shah",
+        "viewer": "Neha Iyer"
+      },
       "templates": [
         "A hackathon problem statement submission form with team name, team leader name, roll number, problem statement title, a table of team members with name, roll number and branch, and signatures of the team leader and the event coordinator"
-      ]
+      ],
+      "logo": "assets/clubs/acm.png"
     },
     {
-      "slug": "gdsc",
-      "name": "Google Developer Student Clubs, SVNIT",
-      "short_name": "GDSC",
-      "chapter_code": "GDSC-SVNIT",
+      "slug": "gdgc",
+      "name": "Google Developer Groups on Campus, SVNIT",
+      "short_name": "GDGC",
+      "chapter_code": "GDGC-SVNIT",
       "logo": "assets/clubs/gdsc.png",
       "brand_color": "#1A73E8",
       "department": "Computer Science & Engineering",
       "department_short": "CSE",
-      "footer_text": "Google Developer Student Clubs · SVNIT Surat",
-      "owner": {"name": "Ananya Rao", "position": "GDSC Lead"},
-      "users": {"admin": "Vivaan Patel", "editor": "Ishita Menon", "viewer": "Rohan Gupta"},
+      "footer_text": "Google Developer Groups on Campus · SVNIT Surat",
+      "owner": {
+        "name": "Ananya Rao",
+        "position": "GDGC Lead"
+      },
+      "users": {
+        "admin": "Vivaan Patel",
+        "editor": "Ishita Menon",
+        "viewer": "Rohan Gupta"
+      },
       "people": [
-        {"full_name": "Ananya Rao", "roll_no": "U22CS041", "branch": "Computer Science & Engineering", "role_key": "student_head", "designation": "GDSC Lead"},
-        {"full_name": "Ishita Menon", "roll_no": "U23CS017", "branch": "Computer Science & Engineering", "role_key": "student_secretary", "designation": "Core Team Secretary"},
-        {"full_name": "Dr. Meera Kulkarni", "department": "Computer Science & Engineering", "role_key": "faculty_chairman", "designation": "Faculty Advisor"}
+        {
+          "full_name": "Ananya Rao",
+          "roll_no": "U22CS041",
+          "branch": "Computer Science & Engineering",
+          "role_key": "student_head",
+          "designation": "GDGC Lead"
+        },
+        {
+          "full_name": "Ishita Menon",
+          "roll_no": "U23CS017",
+          "branch": "Computer Science & Engineering",
+          "role_key": "student_secretary",
+          "designation": "Core Team Secretary"
+        },
+        {
+          "full_name": "Dr. Meera Kulkarni",
+          "department": "Computer Science & Engineering",
+          "role_key": "faculty_chairman",
+          "designation": "Faculty Advisor"
+        }
       ],
       "venues": [
-        {"name": "Seminar Hall, CSE Department", "short_name": "CSE Seminar Hall", "addressee_default": "Head of Department, Computer Science & Engineering"},
-        {"name": "Computer Centre Lab 2", "short_name": "CC Lab 2", "addressee_default": "Head, Computer Centre"}
+        {
+          "name": "Seminar Hall, CSE Department",
+          "short_name": "CSE Seminar Hall",
+          "addressee_default": "Head of Department, Computer Science & Engineering"
+        },
+        {
+          "name": "Computer Centre Lab 2",
+          "short_name": "CC Lab 2",
+          "addressee_default": "Head, Computer Centre"
+        }
       ],
       "templates": [
-        "A certificate of completion for a Google Cloud Study Jam with participant name, study jam track name, number of skill badges earned and completion date, with a blue border and signatures of the GDSC Lead and the Faculty Advisor",
-        "A letter to the Head of the Computer Centre requesting lab access for a coding workshop, with workshop name, lab name, dates, timings, number of systems needed, and signatures of the GDSC Lead and the Faculty Advisor"
-      ]
-    },
-    {
-      "slug": "drishti",
-      "name": "Drishti, SVNIT",
-      "short_name": "DRISHTI",
-      "chapter_code": "DRISHTI",
-      "logo": "assets/clubs/drishti.png",
-      "brand_color": "#0F766E",
-      "department": "",
-      "department_short": "",
-      "footer_text": "Drishti · Technical Hobby Club of SVNIT",
-      "owner": {"name": "Arjun Nair", "position": "Convener"},
-      "users": {"admin": "Sneha Joshi", "editor": "Dev Malhotra", "viewer": "Kavya Reddy"},
-      "people": [
-        {"full_name": "Arjun Nair", "roll_no": "U22ME009", "branch": "Mechanical Engineering", "role_key": "student_head", "designation": "Convener"},
-        {"full_name": "Sneha Joshi", "roll_no": "U23EC022", "branch": "Electronics Engineering", "role_key": "student_secretary", "designation": "Joint Convener"},
-        {"full_name": "Prof. Hemant Trivedi", "department": "Mechanical Engineering", "role_key": "faculty_chairman", "designation": "Faculty In-charge"}
-      ],
-      "venues": [
-        {"name": "Drishti Workshop", "short_name": "Drishti Workshop", "addressee_default": "Faculty In-charge, Drishti"},
-        {"name": "Central Library Auditorium", "short_name": "Library Auditorium", "addressee_default": "Librarian, Central Library"}
-      ],
-      "templates": [
-        "An equipment issue form for borrowing tools from the Drishti workshop with student name, roll number, project name, a table of items with item name, quantity and expected return date, and signatures of the student and the workshop in-charge"
+        "A certificate of completion for a Google Cloud Study Jam with participant name, study jam track name, number of skill badges earned and completion date, with a blue border and signatures of the GDGC Lead and the Faculty Advisor",
+        "A letter to the Head of the Computer Centre requesting lab access for a coding workshop, with workshop name, lab name, dates, timings, number of systems needed, and signatures of the GDGC Lead and the Faculty Advisor"
       ]
     },
     {
@@ -73,43 +85,165 @@
       "department": "",
       "department_short": "",
       "footer_text": "CHRD · Cultural Activities of SVNIT",
-      "owner": {"name": "Meher Kapoor", "position": "General Secretary - Cultural"},
-      "users": {"admin": "Aditya Bose", "editor": "Tara Singh", "viewer": "Yash Agarwal"},
+      "owner": {
+        "name": "Meher Kapoor",
+        "position": "General Secretary - Cultural"
+      },
+      "users": {
+        "admin": "Aditya Bose",
+        "editor": "Tara Singh",
+        "viewer": "Yash Agarwal"
+      },
       "people": [
-        {"full_name": "Meher Kapoor", "roll_no": "U22CH014", "branch": "Chemical Engineering", "role_key": "student_head", "designation": "General Secretary (Cultural)"},
-        {"full_name": "Tara Singh", "roll_no": "U23CE031", "branch": "Civil Engineering", "role_key": "student_secretary", "designation": "Cultural Secretary"},
-        {"full_name": "Dr. Kavita Shah", "department": "Applied Mathematics & Humanities", "role_key": "faculty_chairman", "designation": "Faculty Coordinator, CHRD"}
+        {
+          "full_name": "Meher Kapoor",
+          "roll_no": "U22CH014",
+          "branch": "Chemical Engineering",
+          "role_key": "student_head",
+          "designation": "General Secretary (Cultural)"
+        },
+        {
+          "full_name": "Tara Singh",
+          "roll_no": "U23CE031",
+          "branch": "Civil Engineering",
+          "role_key": "student_secretary",
+          "designation": "Cultural Secretary"
+        },
+        {
+          "full_name": "Dr. Kavita Shah",
+          "department": "Applied Mathematics & Humanities",
+          "role_key": "faculty_chairman",
+          "designation": "Faculty Coordinator, CHRD"
+        }
       ],
       "venues": [
-        {"name": "Student Activity Centre Auditorium", "short_name": "SAC Auditorium", "addressee_default": "Dean (Students Welfare)"},
-        {"name": "Open Air Theatre", "short_name": "OAT", "addressee_default": "Dean (Students Welfare)"}
+        {
+          "name": "Student Activity Centre Auditorium",
+          "short_name": "SAC Auditorium",
+          "addressee_default": "Dean (Students Welfare)"
+        },
+        {
+          "name": "Open Air Theatre",
+          "short_name": "OAT",
+          "addressee_default": "Dean (Students Welfare)"
+        }
       ],
       "templates": [
         "A performer consent and registration form for the annual cultural night with performer name, roll number, act type, act title, duration in minutes, technical requirements, and signatures of the performer and the cultural secretary"
       ]
     },
     {
-      "slug": "sae",
-      "name": "SAE SVNIT Collegiate Club",
-      "short_name": "SAE",
-      "chapter_code": "SAE-SVNIT",
-      "logo": "assets/clubs/sae.png",
-      "brand_color": "#B91C1C",
-      "department": "Mechanical Engineering",
-      "department_short": "MED",
-      "footer_text": "SAE SVNIT Collegiate Club",
-      "owner": {"name": "Siddharth Jain", "position": "Team Captain"},
-      "users": {"admin": "Pooja Verma", "editor": "Nikhil Rana", "viewer": "Aisha Khan"},
+      "slug": "drishti",
+      "name": "Drishti, SVNIT",
+      "short_name": "DRISHTI",
+      "chapter_code": "DRISHTI",
+      "logo": "assets/clubs/drishti.png",
+      "brand_color": "#0F766E",
+      "department": "",
+      "department_short": "",
+      "footer_text": "Drishti · Technical Hobby Club of SVNIT",
+      "owner": {
+        "name": "Arjun Nair",
+        "position": "Convener"
+      },
+      "users": {
+        "admin": "Sneha Joshi",
+        "editor": "Dev Malhotra",
+        "viewer": "Kavya Reddy"
+      },
       "people": [
-        {"full_name": "Siddharth Jain", "roll_no": "U22ME033", "branch": "Mechanical Engineering", "role_key": "student_head", "designation": "Team Captain"},
-        {"full_name": "Pooja Verma", "roll_no": "U23ME012", "branch": "Mechanical Engineering", "role_key": "student_secretary", "designation": "Team Manager"},
-        {"full_name": "Dr. Rajesh Bhatt", "department": "Mechanical Engineering", "role_key": "faculty_chairman", "designation": "Faculty Advisor"}
+        {
+          "full_name": "Arjun Nair",
+          "roll_no": "U22ME009",
+          "branch": "Mechanical Engineering",
+          "role_key": "student_head",
+          "designation": "Convener"
+        },
+        {
+          "full_name": "Sneha Joshi",
+          "roll_no": "U23EC022",
+          "branch": "Electronics Engineering",
+          "role_key": "student_secretary",
+          "designation": "Joint Convener"
+        },
+        {
+          "full_name": "Prof. Hemant Trivedi",
+          "department": "Mechanical Engineering",
+          "role_key": "faculty_chairman",
+          "designation": "Faculty In-charge"
+        }
       ],
       "venues": [
-        {"name": "Automobile Workshop, Mechanical Department", "short_name": "Auto Workshop", "addressee_default": "Head of Department, Mechanical Engineering"}
+        {
+          "name": "Drishti Workshop",
+          "short_name": "Drishti Workshop",
+          "addressee_default": "Faculty In-charge, Drishti"
+        },
+        {
+          "name": "Central Library Auditorium",
+          "short_name": "Library Auditorium",
+          "addressee_default": "Librarian, Central Library"
+        }
       ],
       "templates": [
-        "A travel permission letter to the Dean (Students Welfare) for the team travelling to the BAJA SAE India competition, with competition name, destination city, travel dates, a table of team members with name, roll number and role, and the accompanying faculty member, signed by the Team Captain and the Faculty Advisor"
+        "An equipment issue form for borrowing tools from the Drishti workshop with student name, roll number, project name, a table of items with item name, quantity and expected return date, and signatures of the student and the workshop in-charge"
+      ]
+    },
+    {
+      "slug": "raag",
+      "name": "Raag, SVNIT",
+      "short_name": "RAAG",
+      "chapter_code": "RAAG",
+      "logo": "assets/clubs/raag.png",
+      "brand_color": "#C2410C",
+      "department": "",
+      "department_short": "",
+      "footer_text": "Raag · The Music Club of SVNIT",
+      "owner": {
+        "name": "Aarohi Deshpande",
+        "position": "Convener"
+      },
+      "users": {
+        "admin": "Kunal Bhatt",
+        "editor": "Sana Mirza",
+        "viewer": "Rahul Nair"
+      },
+      "people": [
+        {
+          "full_name": "Aarohi Deshpande",
+          "roll_no": "U22EE027",
+          "branch": "Electrical Engineering",
+          "role_key": "student_head",
+          "designation": "Convener"
+        },
+        {
+          "full_name": "Kunal Bhatt",
+          "roll_no": "U23CH008",
+          "branch": "Chemical Engineering",
+          "role_key": "student_secretary",
+          "designation": "Joint Convener"
+        },
+        {
+          "full_name": "Dr. Nandini Iyer",
+          "department": "Applied Mathematics & Humanities",
+          "role_key": "faculty_chairman",
+          "designation": "Faculty In-charge, Raag"
+        }
+      ],
+      "venues": [
+        {
+          "name": "Student Activity Centre Auditorium",
+          "short_name": "SAC Auditorium",
+          "addressee_default": "Dean (Students Welfare)"
+        },
+        {
+          "name": "Music Room, Student Activity Centre",
+          "short_name": "Music Room",
+          "addressee_default": "Faculty In-charge, Raag"
+        }
+      ],
+      "templates": [
+        "A music instrument issue form for borrowing club instruments with student name, roll number, a table of instruments with instrument name, quantity and condition, issue date, expected return date, and signatures of the student and the Raag convener"
       ]
     }
   ]

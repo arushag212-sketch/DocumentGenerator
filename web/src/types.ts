@@ -299,6 +299,8 @@ export interface ClubSearchResult {
   admin_name?: string | null;
   membership_role?: string | null;
   join_request_status?: string | null;
+  /** The club has uploaded a logo (served from /clubs/{id}/public-logo) */
+  has_logo?: boolean;
 }
 
 export interface JoinRequest {

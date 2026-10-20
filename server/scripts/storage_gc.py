@@ -83,6 +83,9 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
                 protected.add(Path(a.storage_key).as_posix())
 
         # 2. Template Versions
+        from server.app.models import Club
+
+        club_ids = [c.id for c in db.query(Club).all()]
         q_tmpls = db.query(Template)
         if club_id:
             q_tmpls = q_tmpls.filter((Template.club_id == club_id) | (Template.club_id.is_(None)))
@@ -94,6 +97,11 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
                     thumb = active_storage.local_path(f"thumbnails/{tv.id}.{ext}")
                     referenced.add(str(thumb))
                     protected.add(str(thumb))
+                    if tmpl.club_id is None:  # built-in: one preview per club
+                        for club_id in club_ids:
+                            per_club = active_storage.local_path(f"thumbnails/{tv.id}_{club_id}.{ext}")
+                            referenced.add(str(per_club))
+                            protected.add(str(per_club))
                 if tv.docx_storage_key:
                     p = active_storage.local_path(tv.docx_storage_key)
                     referenced.add(str(p))

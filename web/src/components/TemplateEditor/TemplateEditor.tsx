@@ -14,7 +14,7 @@ import { PreviewModal, ValidationModal, UnreviewedAiModal } from './TemplateEdit
 import { DesignSettings } from './DesignPanel';
 import { DEFAULT_DESIGN_SETTINGS, THEMES } from './themes';
 import { TemplateField } from './FieldsPanel';
-import { applyChatAction } from './applyChatAction';
+import { applyChatAction, type ApplyResult } from './applyChatAction';
 
 // Replace the document and leave a collapsed cursor at the start. setContent can
 // leave the whole document selected, and any later insert or rewrite would then
@@ -88,40 +88,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     };
   }, [clubId]);
 
-  // A template can use a specific letterhead (logo + titles + institute crest) instead of the banner
-  const [letterheads, setLetterheads] = useState<any[]>([]);
-  const [clubName, setClubName] = useState('');
-  useEffect(() => {
-    api.clubs.getLetterheads(clubId).then(setLetterheads).catch(() => setLetterheads([]));
-    api.clubs.get(clubId).then((c: any) => setClubName(c?.name || '')).catch(() => {});
-  }, [clubId]);
-  const chosenLetterhead = template?.letterhead_id ? letterheads.find((l) => l.id === template.letterhead_id) : null;
-  const letterheadLogoId = chosenLetterhead?.right_logo_asset_id || chosenLetterhead?.left_logo_asset_id;
-
   const letterhead = {
-    header: chosenLetterhead ? (
-      <div className="grid grid-cols-[72px_1fr_72px] items-center gap-3 pb-2" title={`Letterhead: ${chosenLetterhead.name}`}>
-        <div className="h-16 flex items-center justify-center">
-          {letterheadLogoId && (
-            <img
-              src={`/api/v1/clubs/${clubId}/documents/assets/${letterheadLogoId}/content`}
-              alt=""
-              className="max-h-full max-w-full object-contain"
-              draggable={false}
-            />
-          )}
-        </div>
-        <div className="text-center leading-tight" style={{ fontFamily: 'Tinos, "Times New Roman", serif' }}>
-          <p className="font-bold text-[12.5px] text-slate-900">
-            {chosenLetterhead.title_text || 'SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT'}
-          </p>
-          <p className="font-bold text-[11.5px] text-[#1E5B94]">{chosenLetterhead.subtitle_text || clubName.toUpperCase()}</p>
-        </div>
-        <div className="h-16 flex items-center justify-center">
-          <img src="/assets/svnit_crest.png" alt="" className="max-h-full max-w-full object-contain" draggable={false} />
-        </div>
-      </div>
-    ) : bannerFailed ? null : (
+    header: bannerFailed ? null : (
       <div className="group relative">
         <img
           src={`/api/v1/clubs/${clubId}/letterhead-banner`}
@@ -131,7 +99,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           onError={() => setBannerFailed(true)}
         />
         <span className="absolute -top-3 right-0 rounded bg-slate-900/80 px-1.5 py-0.5 text-[11px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
-          Letterhead · change the logo, banner or colour in Club settings
+          Letterhead · change its text, logo or colour in Club settings
         </span>
       </div>
     ),
@@ -285,7 +253,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const chatSnapshotsRef = useRef(new Map<string, { content: any; fields: TemplateField[]; design: DesignSettings; template: any }>());
 
   const handleApplyChatAction = useCallback(
-    (action: any, actionId?: string) => {
+    (action: any, actionId?: string): ApplyResult => {
       if (actionId && editor) {
         chatSnapshotsRef.current.set(actionId, {
           content: editor.getJSON(),
@@ -294,14 +262,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           template: template ? { ...template } : template,
         });
       }
-      applyChatAction({
+      const result = applyChatAction({
         action,
         editor,
+        fields,
         setTemplate,
         setFields,
         setDesignSettings,
         markUnsaved,
       });
+      if (!result.ok && actionId) chatSnapshotsRef.current.delete(actionId);
+      return result;
     },
     [editor, markUnsaved, setTemplate, setFields, setDesignSettings, fields, designSettings, template]
   );
@@ -486,7 +457,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             editor={editor}
             isOpen={leftOpen}
             onToggle={() => setLeftOpen(!leftOpen)}
-            clubLogoOptions={clubLogoOptions}
           />
         </EditorErrorBoundary>
 

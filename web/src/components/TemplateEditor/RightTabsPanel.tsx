@@ -17,7 +17,7 @@ interface RightTabsPanelProps {
   designSettings: DesignSettings;
   onDesignChange: (settings: Partial<DesignSettings>) => void;
   onAutoStyle?: () => void;
-  onApplyChatAction: (action: any, actionId?: string) => void;
+  onApplyChatAction: (action: any, actionId?: string) => { ok: boolean; message?: string } | void;
   onUndoChatAction?: (actionId: string) => boolean;
   sampleValues?: Record<string, string>;
   onSampleChange?: (key: string, value: string) => void;
@@ -156,11 +156,19 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
                 title: editor?.state?.doc?.firstChild?.textContent || 'Document',
                 fields: fields.map((f) => ({ key: f.key, label: f.label, type: f.type, required: f.required })),
                 theme: designSettings.theme,
-                blocks: (editor?.getJSON()?.content || []).slice(0, 30).map((b: any) => ({
-                  type: b.type,
-                  blockId: b.attrs?.blockId,
-                  text: b.content?.[0]?.text?.slice(0, 80) || '',
-                })),
+                selected_block_id: (() => {
+                  const $from = editor?.state?.selection?.$from;
+                  return $from && $from.depth > 0 ? $from.node(1)?.attrs?.blockId || undefined : undefined;
+                })(),
+                // Every top-level block with its full text, so suggestions can target the right one
+                blocks: (() => {
+                  const out: { type: string; blockId?: string; text: string }[] = [];
+                  editor?.state?.doc?.forEach((n: any) => {
+                    const kind = n.type.name === 'table' ? n.attrs.blockType || 'table' : n.type.name === 'heading' ? `heading${n.attrs.level}` : n.type.name;
+                    out.push({ type: kind, blockId: n.attrs?.blockId, text: (n.textContent || n.attrs?.imageType || '').slice(0, 160) });
+                  });
+                  return out.slice(0, 40);
+                })(),
               }}
               className="h-full border-none shadow-none"
             />

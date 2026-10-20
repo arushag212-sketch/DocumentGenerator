@@ -480,7 +480,11 @@ def test_w5_logo_by_text_resolution(client, auth_setup):
     acm_id = auth_setup["acm_club_id"]
     headers = auth_setup["owner_headers"]
 
-    # 1. Matching ACM logo
+    # 1. Matching ACM logo (the club's uploaded logo)
+    logo = Path("assets/clubs/acm.png")
+    up = client.post(f"/api/v1/clubs/{acm_id}/logo", headers=headers,
+                     files={"file": (logo.name, logo.read_bytes(), "image/png")})
+    assert up.status_code == 200, up.text
     res1 = client.post(
         f"/api/v1/clubs/{acm_id}/documents/assets/resolve-logo",
         json={"text": "use the ACM logo on the left"},

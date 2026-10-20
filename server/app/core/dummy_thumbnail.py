@@ -9,6 +9,7 @@ storage/thumbnails/{template_version_id}.png.
 from __future__ import annotations
 
 import shutil
+import threading
 import uuid
 from decimal import Decimal
 from pathlib import Path
@@ -221,11 +222,23 @@ def get_neutral_placeholder(target_path: Optional[Path] = None) -> Path:
     return placeholder_file
 
 
+# LibreOffice conversions fail when many previews render at once (a gallery opening);
+# render at most two at a time.
+_RENDER_SLOTS = threading.BoundedSemaphore(2)
+
+
+def thumbnail_stem(tmpl: Template, ver: TemplateVersion, club_id: Optional[str]) -> str:
+    """Built-in templates are shared, so each club gets its own preview (its own letterhead and
+    name); a club's own template has a single preview."""
+    return f"{ver.id}_{club_id}" if tmpl.club_id is None and club_id else str(ver.id)
+
+
 def render_template_thumbnail(
     db: Session,
     tmpl: Template,
     ver: TemplateVersion,
     club_slug: str,
+    club_id: Optional[str] = None,
 ) -> Path:
     """Render a thumbnail from the template's DOCX with dummy sample data.
     
@@ -235,8 +248,9 @@ def render_template_thumbnail(
     local_storage = require_local_storage()
     thumbnails_dir = local_storage.base_dir / "thumbnails"
     thumbnails_dir.mkdir(parents=True, exist_ok=True)
-    thumb_path = thumbnails_dir / f"{ver.id}.webp"
-    thumb_path_png = thumbnails_dir / f"{ver.id}.png"
+    stem = thumbnail_stem(tmpl, ver, club_id)
+    thumb_path = thumbnails_dir / f"{stem}.webp"
+    thumb_path_png = thumbnails_dir / f"{stem}.png"
 
     if thumb_path.exists():
         return thumb_path
@@ -253,8 +267,15 @@ def render_template_thumbnail(
         docx_path = Path("templates") / tmpl.slug / "template.docx"
 
     if not docx_path or not docx_path.exists():
-        return get_neutral_placeholder(thumb_path)
+        return get_neutral_placeholder()
 
+    with _RENDER_SLOTS:
+        if thumb_path.exists():  # rendered by another request while this one waited
+            return thumb_path
+        return _render_thumbnail(db, tmpl, ver, club_slug, docx_path, thumb_path, local_storage)
+
+
+def _render_thumbnail(db, tmpl, ver, club_slug, docx_path, thumb_path, local_storage) -> Path:
     temp_out_dir = local_storage.base_dir / "temp_thumbnails" / str(uuid.uuid4())
     temp_out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -272,7 +293,9 @@ def render_template_thumbnail(
         )
         dummy_event = get_dummy_thumbnail_event_record()
         dummy_extra: dict[str, Any] = {}
-        if ver.schema_yaml:
+        # Editor-built templates get per-field sample values; legacy forms (bills, minutes) render
+        # from the full sample event record, whose tables have the columns those forms use.
+        if ver.schema_yaml and ver.editor_json:
             try:
                 import yaml
                 from docgen.schema import TemplateSchema
@@ -280,6 +303,10 @@ def render_template_thumbnail(
                 s_dict = yaml.safe_load(ver.schema_yaml)
                 s_obj = TemplateSchema(**s_dict)
                 dummy_extra = _build_editor_dummy_context(s_obj, s_dict.get("fields", []), ver.editor_json or {})
+                # The viewing club's own name, department and footer come from its config, not sample values
+                for key in ("club_name", "club_short", "club_code", "chapter_code", "institute_name", "institute_short",
+                            "department", "department_short", "club_footer", "approval_chain", "head_of_account"):
+                    dummy_extra.pop(key, None)
             except Exception:
                 pass
 
@@ -313,4 +340,5 @@ def render_template_thumbnail(
     finally:
         shutil.rmtree(temp_out_dir, ignore_errors=True)
 
-    return get_neutral_placeholder(thumb_path)
+    # Not cached under this template's name, so the next view tries again
+    return get_neutral_placeholder()

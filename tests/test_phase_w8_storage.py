@@ -166,7 +166,8 @@ def test_document_version_retention_and_regeneration(client, db_session):
     token = create_access_token(user_id=owner.id, email=owner.email, token_version=owner.token_version)
     headers = {"Authorization": f"Bearer {token}"}
 
-    doc = db_session.query(Document).first()
+    # Always generate a fresh document: one left by another test may already have had files pruned
+    doc = None
     if not doc:
         res_resp = client.post(
             f"/api/v1/clubs/{club.id}/numbering/ROOM/reserve",

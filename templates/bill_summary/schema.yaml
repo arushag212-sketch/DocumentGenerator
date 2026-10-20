@@ -9,7 +9,7 @@ recommend:
   requires: [bills, bundle]
   reason: "Consolidated summary of the event's bills and expenses."
   reason_not: "Needed after the event, when bills are settled."
-letterhead: acm
+letterhead: club
 numbering: null
 depends_on: []
 repeat_per: null

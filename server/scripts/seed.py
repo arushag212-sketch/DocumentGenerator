@@ -91,103 +91,8 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
     # Platform Admin accounts are NEVER seeded automatically.
     # Platform admin accounts must only be created via: python -m server.scripts.create_admin
 
-    # 2. System Assets (SVNIT logos)
-    source_assets = [
-        ("assets/clean_svnit_approval_header.png", "image/png", "svnit_header"),
-        ("assets/permission_page1_img1.png", "image/png", "svnit_crest"),
-        ("assets/permission_page1_img2.png", "image/png", "acm_logo"),
-        ("assets/svnit_bilingual_header.png", "image/png", "svnit_bilingual_header"),
-        ("assets/clean_permission_header.png", "image/png", "clean_permission_header"),
-    ]
-
-    asset_records = {}
-    for rel_path, mime, key_alias in source_assets:
-        src = project_root / rel_path
-        if not src.exists():
-            continue
-        source_bytes = src.read_bytes()
-        file_hash = hashlib.sha256(source_bytes).hexdigest()
-        file_size = len(source_bytes)
-        storage_key = active_storage.save(f"assets/{src.name}", source_bytes)
-        if isinstance(active_storage, LocalDiskStorage):
-            storage_key = str(active_storage.local_path(storage_key))
-
-        # A club-owned upload must never be silently reclassified as a system
-        # asset just because it has the same filename as a bundled asset.
-        asset = db.query(Asset).filter(
-            Asset.filename == src.name,
-            Asset.is_system.is_(True),
-            Asset.club_id.is_(None),
-        ).first()
-        if not asset:
-            asset = Asset(
-                club_id=None,  # System asset
-                kind="logo" if "img" in src.name else "letterhead",
-                filename=src.name,
-                mime=mime,
-                sha256=file_hash,
-                size=file_size,
-                storage_key=storage_key,
-                uploaded_by=None,
-                is_system=True,
-            )
-            db.add(asset)
-            db.flush()
-        else:
-            asset.kind = "logo" if "img" in src.name else "letterhead"
-            asset.mime = mime
-            asset.sha256 = file_hash
-            asset.size = file_size
-            asset.storage_key = storage_key
-            asset.is_system = True
-            db.flush()
-        asset_records[key_alias] = asset
-    print(f"-> Seeded {len(asset_records)} system assets")
-
-    # 3. System Letterheads
-    svnit_crest_id = asset_records.get("svnit_crest").id if asset_records.get("svnit_crest") else None
-    acm_logo_id = asset_records.get("acm_logo").id if asset_records.get("acm_logo") else None
-
-    # SVNIT Bilingual Letterhead
-    lh_svnit = db.query(Letterhead).filter(
-        Letterhead.name == "SVNIT Bilingual Letterhead", Letterhead.club_id.is_(None)
-    ).first()
-    if not lh_svnit:
-        lh_svnit = Letterhead(
-            club_id=None,
-            name="SVNIT Bilingual Letterhead",
-            left_logo_asset_id=svnit_crest_id,
-            right_logo_asset_id=None,
-            institute_logo_asset_id=svnit_crest_id,
-            title_text="SARDAR VALLABHBHAI NATIONAL INSTITUTE OF TECHNOLOGY, SURAT",
-            subtitle_text="सरदार वल्लभभाई राष्ट्रीय प्रौद्योगिकी संस्थान, सूरत",
-            colors={"primary": "#000000"},
-            fonts={"primary": "Times New Roman"},
-            layout={"type": "bilingual_center"},
-        )
-        db.add(lh_svnit)
-        db.flush()
-
-    # ACM Letterhead
-    lh_acm = db.query(Letterhead).filter(
-        Letterhead.name == "ACM Standard Letterhead", Letterhead.club_id.is_(None)
-    ).first()
-    if not lh_acm:
-        lh_acm = Letterhead(
-            club_id=None,
-            name="ACM Standard Letterhead",
-            left_logo_asset_id=svnit_crest_id,
-            right_logo_asset_id=acm_logo_id,
-            institute_logo_asset_id=svnit_crest_id,
-            title_text="ASSOCIATION FOR COMPUTING MACHINERY",
-            subtitle_text="Sardar Vallabhbhai National Institute of Technology, Surat",
-            colors={"primary": "#1E5B94"},
-            fonts={"primary": "Times New Roman"},
-            layout={"type": "dual_logo_single_line"},
-        )
-        db.add(lh_acm)
-        db.flush()
-    print("-> Seeded system letterheads")
+    # Letterheads are generated per club (institute crest, club name, college name, club logo);
+    # no letterhead images or records are seeded.
 
     # 4. Six System Templates
     system_template_slugs = [
@@ -289,7 +194,6 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
             chapter_code=cfg_data.get("chapter_code", ""),
             head_of_account=cfg_data.get("head_of_account", ""),
             academic_year_default=cfg_data.get("academic_year", "2026-27"),
-            default_letterhead_id=lh_acm.id if lh_acm else None,
             settings={
                 "institute_name": cfg_data.get("institute_name"),
                 "institute_short": cfg_data.get("institute_short"),
@@ -298,9 +202,7 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
                 "approval_chain": cfg_data.get("approval_chain", []),
                 "department": cfg_data.get("department", ""),
                 "department_short": cfg_data.get("department_short", ""),
-                "letterhead_banner_path": cfg_data.get("letterhead_banner_path"),
                 # The asset file used as this club's logo ("use the ACM logo", composed banners).
-                "logo_filename": cfg_data.get("logo_filename"),
             },
         )
         db.add(club)
@@ -530,72 +432,7 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
             db.flush()
     print(f"-> Seeded numbering series for ACM")
 
-    # 9. Seed Additional Dummy Clubs (Demo Robotics Club, Demo Cultural Club)
-    additional_clubs = [
-        ("Demo Robotics Club", "ROBO", "robotics", "ROBO", "robotics.lead@svnit.ac.in", "Demo Robotics Lead"),
-        ("Demo Cultural Club", "CULT", "cultural", "CULT", "cultural.lead@svnit.ac.in", "Demo Cultural Lead"),
-    ]
-    for c_name, c_short, c_slug, c_code, c_lead_email, c_lead_name in additional_clubs:
-        extra_club = db.query(Club).filter(Club.slug == c_slug).first()
-        if not extra_club:
-            extra_club = Club(
-                name=c_name,
-                short_name=c_short,
-                slug=c_slug,
-                chapter_code=c_code,
-                head_of_account=c_code,
-                academic_year_default="2026-27",
-                settings={"department": "Student Welfare", "approval_chain": []},
-            )
-            db.add(extra_club)
-            db.flush()
-
-        # Venues
-        for v_name in ("Seminar Hall", "Main Auditorium"):
-            v_check = db.query(Venue).filter(Venue.club_id == extra_club.id, Venue.name == v_name).first()
-            if not v_check:
-                db.add(Venue(club_id=extra_club.id, name=v_name, short_name=v_name))
-                db.flush()
-
-        # Numbering
-        for s_key in ("ROOM", "EVT", "MOM"):
-            ns_check = db.query(NumberingSeries).filter(
-                NumberingSeries.club_id == extra_club.id,
-                NumberingSeries.key == s_key,
-                NumberingSeries.academic_year == "2026-27",
-            ).first()
-            if not ns_check:
-                db.add(NumberingSeries(
-                    club_id=extra_club.id,
-                    key=s_key,
-                    format=f"{c_short}/{{academic_year}}/{s_key}/{{seq:03d}}",
-                    academic_year="2026-27",
-                    last_seq=0,
-                ))
-                db.flush()
-
-        if demo_users:
-            lead_u = db.query(User).filter(User.email == c_lead_email).first()
-            if not lead_u:
-                lead_u = User(
-                    email=c_lead_email,
-                    password_hash=get_password_hash("LeadPass123!"),
-                    name=c_lead_name,
-                    is_platform_admin=False,
-                )
-                db.add(lead_u)
-                db.flush()
-            m_lead = db.query(Membership).filter(Membership.club_id == extra_club.id, Membership.user_id == lead_u.id).first()
-            if not m_lead:
-                db.add(Membership(
-                    club_id=extra_club.id,
-                    user_id=lead_u.id,
-                    role="owner",
-                    position="Student Head/Chairperson",
-                    status="active",
-                ))
-                db.flush()
-    print("-> Seeded additional dummy clubs (Robotics, Cultural)")
+    # Other clubs are created through the app (or demo/clubs.json via seed_demo_clubs.py), not here.
 
     db.commit()
     db.close()
@@ -606,8 +443,6 @@ def seed(clean: bool = False, demo_users: Optional[bool] = None):
         print("  Club Owner: demo.owner@svnit.ac.in  /  DemoOwnerPass123!   (Role: owner)")
         print("  Secretary:  secretary@svnit.ac.in   /  SecretaryPass123!   (Role: editor)")
         print("  Treasurer:  treasurer@svnit.ac.in   /  TreasurerPass123!   (Role: treasurer)")
-        print("  Robo Lead:  robotics.lead@svnit.ac.in / LeadPass123!      (Role: owner)")
-        print("  Cult Lead:  cultural.lead@svnit.ac.in / LeadPass123!      (Role: owner)")
         print("  (Platform Admin accounts created only via: python -m server.scripts.create_admin)")
         print("=" * 72 + "\n")
     else:

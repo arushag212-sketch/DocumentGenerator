@@ -592,10 +592,10 @@ def resolve_club_logo_by_text(club_id: str, text: str, db: Session) -> dict[str,
     club_code = (club_row.short_name or "").strip().lower() if club_row else ""
     matched: list[Asset] = []
     if club_code and re.search(rf"\b{re.escape(club_code)}\b", text_lower):
-        # 1. The logo the club configured; 2. files named after the club; 3. the club's only logo.
-        logo_filename = ((club_row.settings or {}).get("logo_filename") or "").strip()
-        if logo_filename:
-            matched = [a for a in all_assets if a.filename == logo_filename][:1]
+        # 1. The club's active logo; 2. files named after the club; 3. the club's only logo.
+        active_id = (club_row.settings or {}).get("logo_asset_id")
+        if active_id:
+            matched = [a for a in club_assets if a.id == active_id][:1]
         if not matched:
             matched = [a for a in all_assets if club_code in a.filename.lower()]
         if not matched:
@@ -883,6 +883,9 @@ def generate_draft_template(
     design_settings = _sanitize_design(spec.design)
     if design_settings:
         editor_json["design_settings"] = design_settings
+    from server.app.core.template_compiler import ensure_block_ids
+
+    ensure_block_ids(editor_json)
     fields_list = [f.model_dump(exclude_none=True) for f in spec.fields]
 
     storage_templates_dir = local_storage.base_dir / "templates"

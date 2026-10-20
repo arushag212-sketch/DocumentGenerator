@@ -7,20 +7,20 @@ Each request is plain English from a club member; the member then answers only t
 
 | Club | Request | Recommended | Right docs | Asked | Facts present | Unstated facts | Artefacts | Pages | Time |
 |---|---|---|---|---|---|---|---|---|---|
-| acm | We are conducting a two-day Web Development Workshop on 14–1… | Permission Letter, Event Proposal | Yes | time_start, time_end, submitted_to, description, objectives, resource_persons, budget_items, total_budget | all | none | none | 1, 1 | 15.3s |
-| gdsc | We're organising a Flutter Forward study jam on 8 November 2… | Permission Letter, Event Proposal | Yes | submitted_to, description, objectives, resource_persons, budget_items, total_budget | all | none | none | 1, 1 | 29.7s |
-| sae | Write a sponsorship letter to Tata Motors for our BAJA SAE I… | Sponsorship Request Letter | Yes | company_name, company_address, description, sponsorship_tiers, contact_name, contact_email | all | none | none | 1 | 23.6s |
-| chrd | Need certificates of participation for the Garba Night held … | Certificate of Participation | Yes | recipient_name | all | none | none | 1, 1, 1 | 35.4s |
-| drishti | Post a notice about recruitment for the Drishti robotics tea… | Notice / Circular | Yes | notice_title, notice_body, venue, registration_link | all | none | none | 1 | 23.2s |
-| acm | Minutes of the core committee meeting held on 18 October 202… | Minutes of Meeting | Yes | meeting_title, meeting_date, attendees, agenda_items, meeting_start_time, meeting_end_time, chaired_by, absentees, action_items, next_meeting_date, prepared_by, approved_by | all | none | none | 1 | 24.4s |
+| acm | We are conducting a two-day Web Development Workshop on 14–1… | Permission Letter, Event Proposal | Yes | submitted_to, time_start, time_end, description, objectives, resource_persons, budget_items, total_budget | all | none | none | 1, 1 | 13.2s |
+| gdgc | We're organising a Flutter Forward study jam on 8 November 2… | Permission Letter, Event Proposal | Yes | submitted_to, description, objectives, resource_persons, budget_items, total_budget | all | none | none | 1, 1 | 56.2s |
+| raag | Write a sponsorship letter to Yamaha Music India for our ann… | Sponsorship Request Letter | Yes | company_name, company_address, description, sponsorship_tiers, contact_name, contact_email | all | none | none | 1 | 28.0s |
+| chrd | Need certificates of participation for the Garba Night held … | Certificate of Participation | Yes | recipient_name | all | none | none | 1, 1, 1 | 41.6s |
+| drishti | Post a notice about recruitment for the Drishti robotics tea… | Notice / Circular | Yes | notice_title, notice_body, venue, registration_link | all | none | none | 1 | 32.4s |
+| acm | Minutes of the core committee meeting held on 18 October 202… | Minutes of Meeting | Yes | meeting_title, meeting_date, attendees, agenda_items, meeting_start_time, meeting_end_time, chaired_by, absentees, action_items, next_meeting_date, prepared_by, approved_by | all | none | none | 1 | 29.6s |
 
 ## Template generation from a description
 
 | Club | Description | Template | Fields | Expected fields | Layout | Time |
 |---|---|---|---|---|---|---|
-| acm | create a certificate for acm summer challenge 2026 for the f… | ACM Summer Challenge 2026 Certificate | recipient_name, position, event_name, award_date, organiser | Yes | landscape | 8.9s |
-| drishti | A gate pass letter to the Chief Security Officer to take equ… | Gate Pass Letter for Equipment Out of Campus | exhibition_name, exhibition_dates, equipment_items | Yes | ok | 9.4s |
-| gdsc | An attendance sheet for a workshop with workshop name, date,… | Workshop Attendance Sheet | workshop_name, workshop_date, venue, attendees | Yes | ok | 9.0s |
+| acm | create a certificate for acm summer challenge 2026 for the f… | ACM Summer Challenge 2026 Certificate | recipient_name, position, event_name, award_date, organiser | Yes | landscape | 11.1s |
+| drishti | A gate pass letter to the Chief Security Officer to take equ… | Campus Gate Pass Letter | exhibition_name, exhibition_dates, equipment_list | Yes | ok | 51.9s |
+| gdgc | An attendance sheet for a workshop with workshop name, date,… | Workshop Attendance Sheet | workshop_name, workshop_date, venue, attendees | Yes | ok | 10.1s |
 
 ## Summary against the evaluation criteria
 

@@ -43,6 +43,8 @@ class ClubSearchOut(BaseModel):
     membership_position: Optional[str] = None
     join_request_status: Optional[str] = None
     admin_name: Optional[str] = None
+    # The club has uploaded a logo; cards load it from /clubs/{id}/public-logo
+    has_logo: bool = False
 
 
 class JoinRequestCreate(BaseModel):

@@ -106,31 +106,6 @@ class DatabaseTemplateSource:
         return TemplateSchema(**data)
 
 
-def _resolve_banner_path(value: Optional[str]) -> Optional[str]:
-    """Banner paths in settings may be absolute or relative to the project root."""
-    if not value:
-        return None
-    path = Path(value)
-    if not path.is_absolute():
-        path = Path(__file__).resolve().parent.parent / path
-    return str(path) if path.exists() else None
-
-
-def _banner_from_asset(db_session: Any, club: Any, asset_id: Optional[str]) -> Optional[str]:
-    """Letterhead banner chosen from the club's (or the shared) uploaded images."""
-    if not asset_id:
-        return None
-    from server.app.models import Asset
-
-    asset = db_session.query(Asset).filter(
-        Asset.id == asset_id, (Asset.club_id == club.id) | (Asset.club_id.is_(None))
-    ).first()
-    if asset is None:
-        return None
-    path = _resolve_docx_key(asset.storage_key)
-    return str(path) if path.exists() else None
-
-
 def _club_logo_path(db_session: Any, club: Any) -> Optional[str]:
     """Local file of the club's logo (from its default letterhead, else its newest logo asset)."""
     from server.app.models import Asset, Letterhead
@@ -308,8 +283,11 @@ def build_club_config_from_db(db_session: Any, club_slug: str) -> ClubConfig:
         head_of_account=club.head_of_account or "",
         department=settings.get("department") or "",
         department_short=settings.get("department_short") or "",
-        letterhead_banner_path=_banner_from_asset(db_session, club, settings.get("letterhead_banner_asset_id"))
-        or _resolve_banner_path(settings.get("letterhead_banner_path")),
+        letterhead_title=(settings.get("letterhead_title") or club.name or "").strip(),
+        letterhead_subtitle=(
+            settings.get("letterhead_subtitle")
+            or str(club.settings.get("institute_name", "Sardar Vallabhbhai National Institute of Technology, Surat")).split("(")[0]
+        ).strip(),
         club_logo_path=_club_logo_path(db_session, club),
         brand_color=settings.get("brand_color") or "#4F81BD",
         footer_text=settings.get("footer_text") or "",

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ClubPermissions, Venue, NumberingSeries, Letterhead, Asset } from '../types';
+import { ClubPermissions, Venue, NumberingSeries } from '../types';
 import { api } from '../api/client';
 import {
   Building,
@@ -52,7 +52,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
   const [cleaning, setCleaning] = useState(false);
   const [logoVersion, setLogoVersion] = useState(Date.now());
   const [logoFailed, setLogoFailed] = useState(false);
-  const [branding, setBranding] = useState<{ logo_asset_id?: string; letterhead_banner_asset_id?: string }>({});
+  const [letterheadText, setLetterheadText] = useState({ title: '', subtitle: '', color: '#1b365d', defaultTitle: '', defaultSubtitle: '' });
 
   // General Settings state
   const [clubProfile, setClubProfile] = useState<{
@@ -107,34 +107,9 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
   const [seriesForm, setSeriesForm] = useState<NumberingSeries | null>(null);
 
   // Letterheads state
-  const [letterheads, setLetterheads] = useState<Letterhead[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [previewLetterhead, setPreviewLetterhead] = useState<Letterhead | null>(null);
 
   const isAdmin = permissions?.can_edit_settings || permissions?.role === 'admin' || permissions?.role === 'owner' || permissions?.is_platform_admin;
-
-  const chooseBranding = async (field: 'logo_asset_id' | 'letterhead_banner_asset_id', assetId: string) => {
-    setError(null);
-    try {
-      const res = await api.clubs.setBranding(clubId, { [field]: assetId });
-      setBranding({
-        logo_asset_id: res.logo_asset_id || undefined,
-        letterhead_banner_asset_id: res.letterhead_banner_asset_id || undefined,
-      });
-      setLogoFailed(false);
-      setLogoVersion(Date.now());
-      setSuccess(
-        field === 'logo_asset_id'
-          ? 'Club logo updated. New documents use it.'
-          : assetId
-            ? 'Letter banner updated.'
-            : 'Banner removed; letters use a banner composed from the logo.'
-      );
-    } catch (err: any) {
-      setError(err?.detail || err?.message || 'Could not update branding.');
-    }
-  };
 
   const loadData = async () => {
     setLoading(true);
@@ -168,18 +143,15 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
         const data = await api.clubs.getNumberingSeries(clubId);
         setSeriesList(data);
       } else if (subTab === 'letterheads') {
-        const [lhs, asts, clubInfo] = await Promise.all([
-          api.clubs.getLetterheads(clubId),
-          api.clubs.getAssets(clubId),
-          api.clubs.get(clubId),
-        ]);
-        setLetterheads(lhs);
-        setAssets(asts);
-        const st = (clubInfo as any).settings || {};
-        setBranding({ logo_asset_id: st.logo_asset_id, letterhead_banner_asset_id: st.letterhead_banner_asset_id });
-        if (lhs.length > 0 && !previewLetterhead) {
-          setPreviewLetterhead(lhs[0]);
-        }
+        const clubInfo: any = await api.clubs.get(clubId);
+        const st = clubInfo.settings || {};
+        setLetterheadText({
+          title: st.letterhead_title || '',
+          subtitle: st.letterhead_subtitle || '',
+          color: st.brand_color || '#1b365d',
+          defaultTitle: clubInfo.name || '',
+          defaultSubtitle: String(st.institute_name || 'Sardar Vallabhbhai National Institute of Technology, Surat').split('(')[0].trim(),
+        });
       } else if (subTab === 'storage') {
         const stats = await api.clubs.getStorageStats(clubId);
         setStorageStats(stats);
@@ -381,7 +353,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
         {[
           { id: 'general', label: 'General & Profile', icon: Building },
           { id: 'venues', label: 'Venues & Facilities', icon: MapPin },
-          { id: 'letterheads', label: 'Letterheads & Logos', icon: FileSpreadsheet },
+          { id: 'letterheads', label: 'Letterhead & Logo', icon: FileSpreadsheet },
           { id: 'numbering', label: 'Numbering Series', icon: Hash },
           { id: 'storage', label: 'Storage & Retention', icon: HardDrive },
         ].map((t) => {
@@ -919,150 +891,117 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
         </div>
       )}
 
-      {/* TAB 3: LETTERHEADS & LOGOS */}
+      {/* TAB 3: LETTERHEAD */}
       {subTab === 'letterheads' && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-4 sm:p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900">Letterheads & Institutional Logos</h3>
-              <p className="text-xs text-slate-500">
-                Manage club official letterheads, logo normalization (RGBA to clean white canvas), and typography.
-              </p>
-            </div>
-
-            {isAdmin && (
-              <label className="inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-[#162a4a] text-white text-xs font-semibold px-3 py-2 rounded-lg cursor-pointer transition-colors shadow-sm">
-                <Upload className="w-4 h-4" />
-                <span>{uploadingLogo ? 'Normalizing...' : 'Upload Club Logo'}</span>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  onChange={handleLogoUpload}
-                  disabled={uploadingLogo}
-                  className="hidden"
-                />
-              </label>
-            )}
+        <div className="surface-card p-4 sm:p-6 space-y-6">
+          <div>
+            <h3 className="section-title">Letterhead</h3>
+            <p className="text-sm text-slate-600 mt-0.5 max-w-2xl">
+              Every document this club creates carries this letterhead: the college crest, the two lines below and the club logo.
+              It is generated automatically, so it stays consistent across all templates.
+            </p>
           </div>
 
-          {/* Letterhead Preview */}
-          <div className="border-2 border-slate-200 rounded-xl p-4 sm:p-6 bg-slate-50 space-y-4">
-            <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-brand-700" />
-              Official Letterhead Preview
-            </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <img
+              key={logoVersion}
+              src={`/api/v1/clubs/${clubId}/letterhead-banner?v=${logoVersion}`}
+              alt="Letterhead printed on this club's documents"
+              className="w-full h-auto"
+            />
+          </div>
 
-            <div className="bg-white border border-slate-300 rounded-lg p-5 shadow-sm max-w-2xl mx-auto space-y-4">
-              {/* The banner generated documents actually print */}
-              <img
-                key={logoVersion}
-                src={`/api/v1/clubs/${clubId}/letterhead-banner?v=${logoVersion}`}
-                alt="Letterhead banner printed on this club's documents"
-                className="w-full h-auto"
+          <form
+            className="grid md:grid-cols-2 gap-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setError(null);
+              try {
+                await api.clubs.update(clubId, {
+                  settings: {
+                    letterhead_title: letterheadText.title.trim(),
+                    letterhead_subtitle: letterheadText.subtitle.trim(),
+                    brand_color: letterheadText.color,
+                  },
+                });
+                setLogoVersion(Date.now());
+                setSuccess('Letterhead updated. New documents and previews use it.');
+              } catch (err: any) {
+                setError(err?.message || 'Could not save the letterhead.');
+              }
+            }}
+          >
+            <div className="md:col-span-2">
+              <label className="field-label" htmlFor="lh-title">First line (club name)</label>
+              <input
+                id="lh-title"
+                className="input-field"
+                disabled={!isAdmin}
+                maxLength={90}
+                value={letterheadText.title}
+                placeholder={letterheadText.defaultTitle}
+                onChange={(e) => setLetterheadText({ ...letterheadText, title: e.target.value })}
               />
-              <div className="py-4 space-y-2">
-                <div className="h-2 bg-slate-100 rounded w-3/4" />
-                <div className="h-2 bg-slate-100 rounded w-full" />
-                <div className="h-2 bg-slate-100 rounded w-2/3" />
-              </div>
-              <p className="border-t border-slate-200 pt-2 text-center text-xs text-slate-500">Club footer · Page 1 of 1</p>
-              <p className="text-xs text-slate-500">
-                Built from the club logo and letterhead colour, or the banner image you choose below.
-              </p>
+              <p className="text-xs text-slate-500 mt-1">Leave blank to use the club name. Printed in capitals.</p>
             </div>
-          </div>
-
-          {/* Letterheads and Assets List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
-              <h4 className="text-xs font-bold text-slate-800">
-                Configured Letterheads ({letterheads.length})
-              </h4>
-              <div className="space-y-2 text-xs">
-                {letterheads.map((lh) => (
-                  <div
-                    key={lh.id}
-                    onClick={() => setPreviewLetterhead(lh)}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      previewLetterhead?.id === lh.id
-                        ? 'bg-brand-50 border-brand-700 text-brand-700'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="font-bold flex items-center justify-between">
-                      <span>{lh.name}</span>
-                      {lh.is_default && (
-                        <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold">
-                          Default
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1">{lh.title_text}</div>
-                  </div>
-                ))}
+            <div className="md:col-span-2">
+              <label className="field-label" htmlFor="lh-subtitle">Second line (college name)</label>
+              <input
+                id="lh-subtitle"
+                className="input-field"
+                disabled={!isAdmin}
+                maxLength={120}
+                value={letterheadText.subtitle}
+                placeholder={letterheadText.defaultSubtitle}
+                onChange={(e) => setLetterheadText({ ...letterheadText, subtitle: e.target.value })}
+              />
+              <p className="text-xs text-slate-500 mt-1">Leave blank to use the college name.</p>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="lh-color">Text colour</label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="lh-color"
+                  type="color"
+                  disabled={!isAdmin}
+                  value={letterheadText.color}
+                  onChange={(e) => setLetterheadText({ ...letterheadText, color: e.target.value })}
+                  className="h-10 w-12 border border-slate-300 rounded-lg p-1 bg-white"
+                />
+                <span className="font-mono text-sm text-slate-600">{letterheadText.color}</span>
               </div>
             </div>
-
-            <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-900">Images ({assets.length})</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Choose which image is the club logo and which banner heads your letters. Upload new ones from General &amp; Profile.
-                </p>
+            <div>
+              <span className="field-label">Club logo</span>
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-lg border border-slate-200 bg-white p-1 flex items-center justify-center">
+                  {logoFailed ? (
+                    <Building className="w-5 h-5 text-slate-300" />
+                  ) : (
+                    <img
+                      key={logoVersion}
+                      src={`/api/v1/clubs/${clubId}/logo?v=${logoVersion}`}
+                      alt="Club logo"
+                      className="max-h-full max-w-full object-contain"
+                      onError={() => setLogoFailed(true)}
+                    />
+                  )}
+                </div>
+                {isAdmin && (
+                  <label className="btn-secondary cursor-pointer">
+                    <Upload className="w-4 h-4" />
+                    {uploadingLogo ? 'Uploading…' : 'Replace logo'}
+                    <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={handleLogoUpload} disabled={uploadingLogo} />
+                  </label>
+                )}
               </div>
-              <ul className="space-y-2">
-                {assets.map((ast) => {
-                  const isLogo = branding.logo_asset_id === ast.id;
-                  const isBanner = branding.letterhead_banner_asset_id === ast.id;
-                  return (
-                    <li key={ast.id} className={`p-2.5 rounded-lg border flex items-center gap-3 ${isLogo || isBanner ? 'border-brand-700 bg-brand-50' : 'border-slate-200'}`}>
-                      <div className="h-12 w-20 flex-shrink-0 bg-white border border-slate-200 rounded flex items-center justify-center overflow-hidden">
-                        <img
-                          src={`/api/v1/clubs/${clubId}/documents/assets/${ast.id}/content`}
-                          alt=""
-                          loading="lazy"
-                          className="max-h-full max-w-full object-contain"
-                          onError={(e) => ((e.target as HTMLElement).style.visibility = 'hidden')}
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-900 truncate">{ast.filename}</p>
-                        <p className="text-xs text-slate-500">
-                          {ast.kind === 'letterhead' ? 'Banner' : 'Logo'}
-                          {ast.size ? ` · ${Math.round(ast.size / 1024)} KB` : ''}
-                          {!ast.club_id ? ' · shared' : ''}
-                        </p>
-                      </div>
-                      {isAdmin && (
-                        <div className="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">
-                          {ast.kind !== 'letterhead' && (
-                            <button
-                              type="button"
-                              className={isLogo ? 'btn-primary !px-2.5 !py-1 text-xs' : 'btn-secondary !px-2.5 !py-1 text-xs'}
-                              disabled={isLogo}
-                              onClick={() => chooseBranding('logo_asset_id', ast.id)}
-                            >
-                              {isLogo ? 'Club logo' : 'Use as logo'}
-                            </button>
-                          )}
-                          {ast.kind === 'letterhead' && (
-                          <button
-                            type="button"
-                            className={isBanner ? 'btn-primary !px-2.5 !py-1 text-xs' : 'btn-secondary !px-2.5 !py-1 text-xs'}
-                            onClick={() => chooseBranding('letterhead_banner_asset_id', isBanner ? '' : ast.id)}
-                            title={isBanner ? 'Stop using this banner (a banner is then composed from the logo)' : undefined}
-                          >
-                            {isBanner ? 'Letter banner' : 'Use as banner'}
-                          </button>
-                          )}
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
             </div>
-          </div>
+            {isAdmin && (
+              <div className="md:col-span-2 flex justify-end">
+                <button type="submit" className="btn-primary">Save letterhead</button>
+              </div>
+            )}
+          </form>
         </div>
       )}
 

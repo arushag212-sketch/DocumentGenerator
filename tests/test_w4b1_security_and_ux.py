@@ -518,32 +518,3 @@ def test_club_logo_upload_endpoint(client, auth_setup):
     assert norm_img.getpixel((0, 0)) == (255, 255, 255)
 
 
-def test_letterhead_picker_uses_actual_club_logo_asset(client, auth_setup):
-    """Verify GET /api/v1/clubs/{club_id}/documents/letterheads returns club logo url and locked SVNIT logo."""
-    acm_id = auth_setup["acm_club_id"]
-    owner_headers = auth_setup["owner_headers"]
-
-    res = client.get(
-        f"/api/v1/clubs/{acm_id}/documents/letterheads",
-        headers=owner_headers,
-    )
-    assert res.status_code == 200
-    letterheads = res.json()
-    assert len(letterheads) >= 1
-
-    acm_lh = next((lh for lh in letterheads if "ACM" in lh["name"]), letterheads[0])
-    assert acm_lh["club_logo_url"] is not None
-    assert acm_lh["svnit_logo_url"] is not None
-    assert acm_lh["svnit_logo_locked"] is True
-
-
-def test_acm_logo_origin_provenance():
-    """Document and assert the origin of the current ACM logo."""
-    # Origin statement: The ACM logo was extracted from sample docs/Permission_public.pdf,
-    # page 1 (PyMuPDF xref 7 with soft-mask xref 8, saved to assets/permission_page1_img2.png).
-    logo_file = Path("assets/permission_page1_img2.png")
-    assert logo_file.exists(), "ACM logo asset must exist in assets/permission_page1_img2.png"
-    from PIL import Image
-    img = Image.open(logo_file)
-    assert img.mode == "RGB", "ACM logo must be composited onto RGB white"
-    assert img.getpixel((0, 0)) == (255, 255, 255), "ACM logo corners must be pure white"

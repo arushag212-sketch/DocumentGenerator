@@ -215,3 +215,22 @@ export const DEFAULT_DESIGN_SETTINGS = {
   watermark: '',
   watermarkOpacity: 0.15,
 };
+
+/** The design settings a theme sets (used by the Design panel and the AI copilot). */
+export function themeDesignSettings(themeId: string) {
+  const t = THEMES.find((item) => item.id === themeId);
+  if (!t) return null;
+  return {
+    theme: t.id,
+    headingColor: t.heading_color,
+    textColor: t.text_color,
+    tableHeaderBg: t.table_header_bg,
+    tableHeaderTextColor: t.table_header_text,
+    borderColor: t.border_color,
+    dividerColor: t.divider_color,
+    fontFamily: t.body_font,
+    headingFontFamily: t.heading_font,
+    pageBorder: t.border_style,
+    pageBg: t.page_bg,
+  };
+}

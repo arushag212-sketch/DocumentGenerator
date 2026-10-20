@@ -27,7 +27,7 @@ function ClubMark({ clubId, name, size = 32 }: { clubId?: string | number; name?
   if (clubId && !failed) {
     return (
       <img
-        src={`/api/v1/clubs/${clubId}/logo`}
+        src={`/api/v1/clubs/${clubId}/public-logo`}
         alt=""
         onError={() => setFailed(true)}
         className="rounded-md bg-white object-contain border border-slate-200"
@@ -92,7 +92,7 @@ function ClubSwitcher() {
                 }}
                 className="w-full flex items-center gap-2.5 px-2.5 py-2 text-left hover:bg-slate-50"
               >
-                <ClubMark clubId={c.my_role || user?.is_platform_admin ? c.id : undefined} name={c.name} size={24} />
+                <ClubMark clubId={c.id} name={c.name} size={24} />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm text-slate-800 truncate">{c.name}</span>
                   {!c.my_role && !user?.is_platform_admin && <span className="block text-xs text-amber-600">Pending approval</span>}

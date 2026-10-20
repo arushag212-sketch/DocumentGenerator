@@ -38,13 +38,10 @@ def test_w1_database_models_and_seeds(db_session):
     assert club.name == "ACM Student Chapter, SVNIT"
     assert club.short_name == "ACM"
 
-    # Check System Assets
-    assets = db_session.query(Asset).filter(Asset.is_system == True).all()
-    assert len(assets) >= 4
-
-    # Check System Letterheads
-    letterheads = db_session.query(Letterhead).all()
-    assert len(letterheads) >= 2
+    # No shared letterhead images: each club's letterhead is generated from its own logo
+    assert db_session.query(Asset).filter(Asset.is_system == True).count() == 0
+    # Letterheads are generated per club; no letterhead records or images are seeded
+    assert db_session.query(Letterhead).count() == 0
 
     # The 6 institute forms plus the template library (templates/library/*.json)
     from server.app.core.template_library import load_specs

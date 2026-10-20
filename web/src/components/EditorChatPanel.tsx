@@ -39,7 +39,8 @@ export type EditorChatPanelProps = {
   templateId?: string;
   documentContext?: EditorAssistantDocumentContext;
   selectedText?: string;
-  onApply: (action: EditorAssistantAction, actionId?: string) => void;
+  /** Apply a suggestion; a result with ok=false keeps it un-applied and shows the reason. */
+  onApply: (action: EditorAssistantAction, actionId?: string) => { ok: boolean; message?: string } | void;
   /** Restore the template to before this suggestion; returns false when it cannot. */
   onUndo?: (actionId: string) => boolean;
   requestAssistant?: EditorAssistantFetcher;
@@ -83,6 +84,7 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
   const [lastRequest, setLastRequest] = useState<EditorAssistantRequest | null>(null);
   const [appliedActions, setAppliedActions] = useState<Set<string>>(new Set());
   const appliedOrderRef = useRef<string[]>([]);
+  const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
   const [rejectedActions, setRejectedActions] = useState<Set<string>>(new Set());
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -168,7 +170,16 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
   const applyAction = (msgId: string, idx: number, action: EditorAssistantAction) => {
     const actionId = `${msgId}:${idx}`;
     if (appliedActions.has(actionId)) return;
-    onApply(action, actionId);
+    const result = onApply(action, actionId);
+    if (result && result.ok === false) {
+      setActionErrors((prev) => ({ ...prev, [actionId]: result.message || 'This suggestion could not be applied.' }));
+      return;
+    }
+    setActionErrors((prev) => {
+      const next = { ...prev };
+      delete next[actionId];
+      return next;
+    });
     appliedOrderRef.current.push(actionId);
     setAppliedActions((prev) => new Set(prev).add(actionId));
   };
@@ -281,6 +292,7 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
                         onApply={() => applyAction(message.id, idx, action)}
                         onReject={() => rejectAction(message.id, idx)}
                         onUndo={onUndo ? () => undoAction(actionId) : undefined}
+                        error={actionErrors[actionId]}
                         onClarifySelect={(opt) => submitRequest({ instruction: opt })}
                       />
                     );
@@ -337,7 +349,8 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              // Enter sends; Shift+Enter starts a new line
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 sendMessage();
               }
@@ -349,7 +362,7 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
             className="w-full resize-none border-0 bg-transparent px-2.5 py-1.5 text-xs text-slate-800 outline-none placeholder:text-slate-400"
           />
           <div className="flex items-center justify-between px-2 pb-1.5">
-            <span className="text-xs text-slate-400">Ctrl/⌘+Enter</span>
+            <span className="text-xs text-slate-400">Enter to send · Shift+Enter for a new line</span>
             <div className="flex items-center gap-1">
               {recognitionRef.current && (
                 <button

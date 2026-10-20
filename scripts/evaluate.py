@@ -60,19 +60,19 @@ DOC_CASES = [
         ["Rs.", "₹", "Dr. "],
     ),
     DocCase(
-        "gdsc",
+        "gdgc",
         "We're organising a Flutter Forward study jam on 8 November 2026 from 2 PM to 5 PM in CC Lab 2 for 60 students.",
         ["Permission Letter", "Event Proposal"],
         {"submitted_to": "Head, Computer Centre"},
-        ["Flutter Forward", "CC Lab 2", "60", "02:00 PM", "GDSC"],
+        ["Flutter Forward", "CC Lab 2", "60", "02:00 PM", "GDGC"],
         ["Seminar Hall"],
     ),
     DocCase(
-        "sae",
-        "Write a sponsorship letter to Tata Motors for our BAJA SAE India 2027 team. About 40 participants, at the Auto Workshop on 12–13 January 2027.",
+        "raag",
+        "Write a sponsorship letter to Yamaha Music India for our annual concert Swar Sandhya. About 400 attendees, at the SAC Auditorium on 12 January 2027.",
         ["Sponsorship Request Letter"],
-        {"company_name": "Tata Motors", "contact_name": "Siddharth Jain"},
-        ["Tata Motors", "BAJA", "Auto Workshop", "40", "SAE"],
+        {"company_name": "Yamaha Music India", "contact_name": "Aarohi Deshpande"},
+        ["Yamaha Music India", "Swar Sandhya", "SAC Auditorium", "400", "Raag"],
         ["Mahindra", "₹"],
     ),
     DocCase(
@@ -113,7 +113,7 @@ TEMPLATE_CASES = [
                  ["recipient", "position", "event"], expect_landscape=True),
     TemplateCase("drishti", "A gate pass letter to the Chief Security Officer to take equipment out of campus for an exhibition, with exhibition name, dates, a table of items with quantity and serial number, and signatures of the convener and faculty in-charge",
                  ["exhibition", "item", "date"]),
-    TemplateCase("gdsc", "An attendance sheet for a workshop with workshop name, date, venue and a table of attendees with roll number, name and signature",
+    TemplateCase("gdgc", "An attendance sheet for a workshop with workshop name, date, venue and a table of attendees with roll number, name and signature",
                  ["workshop", "attendee", "venue"]),
 ]
 

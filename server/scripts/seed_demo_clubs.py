@@ -87,9 +87,6 @@ def seed(no_ai: bool = False) -> list[dict[str, str]]:
                     "chapter_code": spec.get("chapter_code"), "academic_year_default": ay,
                     "position": spec["owner"]["position"], "is_signatory": False,
                 })
-                logo = ROOT / spec["logo"]
-                api.call("POST", f"/clubs/{club['id']}/logo", owner_token,
-                         files={"file": (logo.name, logo.read_bytes(), "image/png")})
                 api.call("PUT", f"/clubs/{club['id']}", owner_token, json={
                     "department": spec.get("department") or "",
                     "settings": {
@@ -115,6 +112,12 @@ def seed(no_ai: bool = False) -> list[dict[str, str]]:
                     api.call("POST", f"/clubs/{club['id']}/venues", owner_token, json=venue)
                 report.append(f"{slug}: club created")
             accounts.append({"club": club["name"], "role": "owner", "email": owner_email, "password": password})
+
+        # Logo from the club's own entry (uploading the same file again is a no-op)
+        if spec.get("logo"):
+            logo = ROOT / spec["logo"]
+            api.call("POST", f"/clubs/{club['id']}/logo", owner_token,
+                     files={"file": (logo.name, logo.read_bytes(), "image/png")})
 
         # 2. Members join and are approved with their access level
         pending = {jr["user_email"]: jr for jr in api.call("GET", f"/clubs/{club['id']}/join-requests?status=pending", owner_token)}
@@ -150,7 +153,12 @@ def seed(no_ai: bool = False) -> list[dict[str, str]]:
         if not no_ai:
             existing = {t["name"] for t in api.call("GET", f"/clubs/{club['id']}/documents/templates", owner_token)
                         if not t.get("is_system")}
-            for description in spec.get("templates", []):
+            # AI may name a re-draft differently, so a club that already has its templates is left alone
+            wanted = spec.get("templates", [])
+            if len(existing) >= len(wanted):
+                wanted = []
+                report.append(f"{slug}: club templates already present")
+            for description in wanted:
                 try:
                     clear_rate_limits()
                     draft = api.call("POST", f"/clubs/{club['id']}/documents/templates/ai-draft", owner_token,

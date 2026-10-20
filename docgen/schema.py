@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 class FieldSchema(BaseModel):
     key: str
+    label: Optional[str] = None  # short name shown in the editor and on placeholders ("Event Name")
     type: str = "text"  # text, longtext, int, money, date, date_range, time_range, enum, person_ref, table
     required: bool | str = False  # True, False, or conditional expression string
     ask: Optional[str] = None
@@ -45,7 +46,7 @@ class TemplateSchema(BaseModel):
     triggers: list[str] = Field(default_factory=list)
     # When this template is useful (see server/app/core/recommend_rules.py)
     recommend: Optional[dict[str, Any]] = None
-    letterhead: str = "acm"
+    letterhead: str = "club"  # always the club's generated letterhead
     numbering: Optional[NumberingSchema] = None
     depends_on: list[str] = Field(default_factory=list)
     repeat_per: Optional[str] = None  # e.g. "winners" -> one doc per winner

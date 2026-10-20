@@ -554,51 +554,6 @@ def test_numbering_series_format_update_never_rewrites_existing_numbers(client, 
     assert doc_in_db.ref_no == orig_ref, f"Expected {orig_ref} to remain unchanged, but got {doc_in_db.ref_no}"
 
 
-def test_letterheads_and_assets_crud_and_permissions(client, owner_context, editor_context):
-    club_id = owner_context["club_id"]
-
-    # 1. Editor can view letterheads and assets
-    res_lhs = client.get(f"/api/v1/clubs/{club_id}/letterheads", headers=editor_context["headers"])
-    assert res_lhs.status_code == 200
-    assert len(res_lhs.json()) > 0
-
-    res_assets = client.get(f"/api/v1/clubs/{club_id}/assets", headers=editor_context["headers"])
-    assert res_assets.status_code == 200
-    assert len(res_assets.json()) > 0
-
-    # 2. Editor cannot create or update letterhead (403)
-    lh_payload = {
-        "name": "Custom Editor Letterhead",
-        "title_text": "UNAUTHORIZED TITLE",
-        "colors": {"primary": "#FF0000"},
-    }
-    assert client.post(f"/api/v1/clubs/{club_id}/letterheads", json=lh_payload, headers=editor_context["headers"]).status_code == 403
-
-    # 3. Admin creates letterhead
-    lh_admin_payload = {
-        "name": "ACM Annual Fest Letterhead",
-        "title_text": "ACM STUDENT CHAPTER - TECH FEST 2026",
-        "colors": {"primary": "#0A2540"},
-    }
-    create_lh = client.post(f"/api/v1/clubs/{club_id}/letterheads", json=lh_admin_payload, headers=owner_context["headers"])
-    assert create_lh.status_code == 201
-    lh_id = create_lh.json()["id"]
-
-    # 4. Admin updates letterhead
-    upd_lh = client.put(
-        f"/api/v1/clubs/{club_id}/letterheads/{lh_id}",
-        json={"subtitle_text": "Annual Flagship Technical Symposium"},
-        headers=owner_context["headers"],
-    )
-    assert upd_lh.status_code == 200
-    assert upd_lh.json()["subtitle_text"] == "Annual Flagship Technical Symposium"
-
-
-# ==============================================================================
-# PART 3: W6b.1 SECURITY & SPEC TESTS
-# ==============================================================================
-
-
 def test_invite_rate_limit_brute_force_gets_429(client):
     """10 requests allowed per minute; 11th request triggers 429."""
     from server.app.core.rate_limit import clear_rate_limits

@@ -48,12 +48,28 @@ def auth_users(client: TestClient):
     student_headers = {"Authorization": f"Bearer {student_token}"}
     student_id = reg_student.json()["user"]["id"]
 
-    # 3. Get ACM Club ID and Robotics Club ID
+    # 3. ACM, plus a second club created by its own owner (the tests seed no demo clubs)
     clubs_res = client.get("/api/v1/clubs/search?q=", headers=owner_headers)
     assert clubs_res.status_code == 200
     clubs = clubs_res.json()
     acm_club = next(c for c in clubs if c["slug"] == "acm")
-    robo_club = next((c for c in clubs if c["slug"] == "robotics"), None)
+    other_owner = client.post(
+        "/api/v1/auth/register",
+        json={"email": f"lead_{uuid.uuid4().hex[:8]}@svnit.ac.in", "password": "LeadPassword123!", "name": "Rhea Kulkarni"},
+    )
+    assert other_owner.status_code == 201, other_owner.text
+    other_headers = {"Authorization": f"Bearer {other_owner.json()['access_token']}"}
+    suffix = uuid.uuid4().hex[:6]
+    other_res = client.post(
+        "/api/v1/clubs",
+        headers=other_headers,
+        json={"name": f"Robotics Society {suffix}", "short_name": "ROBO", "slug": f"robotics-{suffix}",
+              "position": "Student Head/Chairperson", "is_signatory": False},
+    )
+    assert other_res.status_code in (200, 201), other_res.text
+    robo_club = other_res.json()
+    # Setup registrations must not count towards the rate limits the tests exercise
+    clear_rate_limits()
 
     return {
         "owner_headers": owner_headers,
@@ -77,11 +93,10 @@ def test_w7_club_search(client: TestClient, auth_users):
     res = client.get("/api/v1/clubs/search?q=", headers=headers)
     assert res.status_code == 200
     all_clubs = res.json()
-    assert len(all_clubs) >= 3
+    assert len(all_clubs) >= 2
     slugs = [c["slug"] for c in all_clubs]
     assert "acm" in slugs
-    assert "robotics" in slugs
-    assert "cultural" in slugs
+    assert auth_users["robo_club"]["slug"] in slugs
 
     # Filtered search for "Robotics"
     res_robo = client.get("/api/v1/clubs/search?q=robotics", headers=headers)

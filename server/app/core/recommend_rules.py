@@ -40,6 +40,9 @@ VENUE_WORDS = re.compile(
 )
 
 
+NEED_WORDS = re.compile(r"\b(need|needs|needed|want|require|requires|required|request|requesting|get|use|using)\b", re.IGNORECASE)
+
+
 def compute_signals(text: str, has_budget: bool, has_winners: bool, has_bills: bool, is_meeting: bool) -> dict[str, bool]:
     """Request features that templates' rules refer to by name."""
     describes_event = bool(EVENT_WORDS.search(text) and DESCRIBING_WORDS.search(text)) and not is_meeting
@@ -49,6 +52,8 @@ def compute_signals(text: str, has_budget: bool, has_winners: bool, has_bills: b
         "bills": has_bills,
         "meeting": is_meeting,
         "venue": bool(VENUE_WORDS.search(text)),
+        # Asking for a place ("need the auditorium"), not just naming where something happens
+        "venue_request": bool(VENUE_WORDS.search(text) and NEED_WORDS.search(text)),
         "bundle": bool(BUNDLE_WORDS.search(text)),
         "event_description": describes_event,
     }

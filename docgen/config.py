@@ -59,9 +59,10 @@ class ClubConfig(BaseModel):
     # Owning department, e.g. "Computer Science & Engineering" / "CSE" (for HoD lines, branches).
     department: str = ""
     department_short: str = ""
-    # Full-width header banner for letter-style system templates. When unset, one is
-    # composed from the institute crest, the club name and the club logo.
-    letterhead_banner_path: Optional[str] = None
+    # Letterhead: generated for every club from the institute crest, these two lines and the
+    # club logo. The text is editable in club settings; blank means the club and college names.
+    letterhead_title: str = ""
+    letterhead_subtitle: str = ""
     club_logo_path: Optional[str] = None
     # Brand kit: accent colour for composed banners, footer line on generated documents.
     brand_color: str = "#4F81BD"

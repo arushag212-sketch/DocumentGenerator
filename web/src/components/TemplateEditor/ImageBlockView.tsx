@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { NodeViewWrapper, NodeViewProps } from '@tiptap/react';
+import { useAuth } from '../../context/AuthContext';
 import {
   AlignLeft,
   AlignCenter,
@@ -16,8 +17,9 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
   deleteNode,
   selected,
 }) => {
+  const { activeClub } = useAuth();
   const {
-    src,
+    src: storedSrc,
     alt,
     caption,
     width,
@@ -26,6 +28,15 @@ export const ImageBlockView: React.FC<NodeViewProps> = ({
     imageType = 'image',
     placeholderText,
   } = node.attrs;
+  // A club-logo block without a chosen image shows (and prints) the club's own logo;
+  // a college-logo block shows the institute crest.
+  const src =
+    storedSrc ||
+    (imageType === 'college-logo'
+      ? '/assets/svnit_crest.png'
+      : (imageType === 'club-logo' || imageType === 'logo') && activeClub
+        ? `/api/v1/clubs/${activeClub.id}/public-logo`
+        : '');
 
   const [isResizing, setIsResizing] = useState(false);
   const [liveDimensions, setLiveDimensions] = useState<{ width: number; height: number } | null>(null);
