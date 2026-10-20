@@ -264,6 +264,11 @@ def run_storage_gc(apply: bool = False, club_id: Optional[str] = None) -> GCRepo
                         continue
                     if res_p in protected_keys or posix_p in protected_keys or norm_rel in protected_keys:
                         continue
+                    # Full-page previews ({card}_p{n}.webp) live and die with their card preview
+                    if s_name == "thumbnails" and "_p" in fp.stem:
+                        card = fp.with_name(fp.stem.rsplit("_p", 1)[0] + ".webp")
+                        if str(card.resolve()) in protected_keys or str(card) in protected_keys:
+                            continue
 
                     # If not referenced in database, it is an orphan!
                     is_referenced = (

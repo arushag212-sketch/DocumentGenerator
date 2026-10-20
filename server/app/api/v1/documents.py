@@ -557,7 +557,68 @@ def get_template_thumbnail(
         )
 
     media_type = "image/webp" if str(thumb_path).endswith(".webp") else "image/png"
-    return FileResponse(thumb_path, media_type=media_type)
+    # Revalidate so a re-rendered preview replaces the browser's copy
+    return FileResponse(thumb_path, media_type=media_type, headers={"Cache-Control": "no-cache"})
+
+
+def _gallery_template(db: Session, template_id: str, club_id: str):
+    tmpl = db.query(Template).filter(
+        (Template.id == template_id) | (Template.slug == template_id),
+        ((Template.club_id.is_(None)) | (Template.club_id == club_id)),
+    ).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    ver = (
+        db.query(TemplateVersion).filter(TemplateVersion.id == tmpl.current_version_id).first()
+        or db.query(TemplateVersion).filter(TemplateVersion.template_id == tmpl.id)
+        .order_by(TemplateVersion.version_no.desc()).first()
+    )
+    if not ver:
+        raise HTTPException(status_code=404, detail="Template has no version")
+    return tmpl, ver
+
+
+@router.get("/templates/{template_id}/sample-pages")
+def get_template_sample_pages(
+    template_id: str,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """Every page of the template filled with sample data, as this club would print it."""
+    from server.app.core.dummy_thumbnail import render_template_preview_pages
+
+    tmpl, ver = _gallery_template(db, template_id, ctx.club.id)
+    try:
+        pages = render_template_preview_pages(db, tmpl, ver, ctx.club.slug, ctx.club.id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    if not pages:
+        raise HTTPException(status_code=422, detail="This template could not be rendered for preview.")
+    base = f"/api/v1/clubs/{ctx.club.id}/documents/templates/{tmpl.id}/sample-pages"
+    return {
+        "name": tmpl.name,
+        "description": tmpl.description,
+        "page_count": len(pages),
+        "pages": [f"{base}/{i + 1}?v={int(p.stat().st_mtime)}" for i, p in enumerate(pages)],
+    }
+
+
+@router.get("/templates/{template_id}/sample-pages/{page_no}")
+def get_template_sample_page(
+    template_id: str,
+    page_no: int,
+    ctx: ClubContext = Depends(require_club_access(Role.VIEWER)),
+    db: Session = Depends(get_db),
+):
+    """One page image of the sample preview."""
+    from server.app.core.dummy_thumbnail import preview_page_paths, thumbnail_stem
+
+    tmpl, ver = _gallery_template(db, template_id, ctx.club.id)
+    thumb = require_local_storage().base_dir / "thumbnails" / f"{thumbnail_stem(tmpl, ver, ctx.club.id)}.webp"
+    pages = preview_page_paths(thumb)
+    if page_no < 1 or page_no > len(pages):
+        raise HTTPException(status_code=404, detail="Page not found")
+    return FileResponse(pages[page_no - 1], media_type="image/webp", headers={"Cache-Control": "private, max-age=300"})
 
 
 @router.post("/templates/{template_id}/fork", response_model=TemplateGalleryItemOut, status_code=status.HTTP_201_CREATED)

@@ -480,6 +480,10 @@ export const api = {
         mapping: Record<string, string | null>;
       }>(`/clubs/${clubId}/documents/rows/parse`, { method: 'POST', body: form });
     },
+    getTemplateSamplePages: (clubId: string | number, templateId: string) =>
+      apiFetch<{ name: string; description?: string; page_count: number; pages: string[] }>(
+        `/clubs/${clubId}/documents/templates/${templateId}/sample-pages`
+      ),
     listTemplates: (clubId: string | number) =>
       apiFetch<any[]>(`/clubs/${clubId}/documents/templates`),
     forkTemplate: (clubId: string | number, templateId: string, payload?: { name?: string }) =>

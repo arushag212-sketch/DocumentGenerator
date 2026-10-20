@@ -16,12 +16,14 @@ import {
   X,
   Wand2,
   Upload,
+  Eye,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { TemplateGalleryItem, ClubPermissions } from '../types';
 import { TemplateWizardModal } from './TemplateWizardModal';
 import { rememberTemplatePrompt } from '../utils/templatePrompt';
 import { TemplateImportModal } from './TemplateImportModal';
+import { TemplatePreviewModal } from './TemplatePreviewModal';
 
 interface TemplateGalleryTabProps {
   clubId: string | number;
@@ -199,6 +201,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
   });
 
   const canManage = Boolean(permissions?.can_create_documents);
+  const [previewTemplate, setPreviewTemplate] = useState<TemplateGalleryItem | null>(null);
 
   if (loading) {
     return (
@@ -457,10 +460,22 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
             >
               <div>
                 {/* Thumbnail Header */}
-                <div className="h-44 bg-slate-100 relative overflow-hidden border-b border-slate-200 flex items-center justify-center">
+                <div className="h-44 bg-slate-100 relative overflow-hidden border-b border-slate-200 flex items-center justify-center group/thumb">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTemplate(tmpl)}
+                    className="absolute inset-0 z-10 flex items-end justify-center pb-3 bg-slate-900/0 hover:bg-slate-900/25 focus-visible:bg-slate-900/25 transition-colors"
+                    aria-label={`Preview ${tmpl.name}`}
+                  >
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-800 shadow opacity-0 group-hover/thumb:opacity-100 focus-visible:opacity-100 transition-opacity">
+                      <Eye className="w-3.5 h-3.5" /> Preview
+                    </span>
+                  </button>
                   <img
                     src={tmpl.thumbnail_url || `/api/v1/clubs/${clubId}/documents/templates/${tmpl.id}/thumbnail`}
                     alt={tmpl.name}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover object-top "
                     onError={(e) => {
                       const target = e.target as HTMLElement;
@@ -519,6 +534,16 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
 
               {/* Action Buttons */}
               <div className="p-4 bg-slate-50/70 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  type="button"
+                  data-testid={`preview-btn-${tmpl.slug}`}
+                  onClick={() => setPreviewTemplate(tmpl)}
+                  title="See every page with sample values before using or editing"
+                  className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Preview</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => onSelectTemplate(tmpl.slug || tmpl.id)}
@@ -656,6 +681,34 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {previewTemplate && (
+        <TemplatePreviewModal
+          clubId={clubId}
+          template={previewTemplate}
+          canManage={canManage}
+          onClose={() => setPreviewTemplate(null)}
+          onUse={() => {
+            const t = previewTemplate;
+            setPreviewTemplate(null);
+            onSelectTemplate(t.slug || t.id);
+          }}
+          onCustomize={() => {
+            const t = previewTemplate;
+            setPreviewTemplate(null);
+            setActionModal({ type: 'fork', tmpl: t, value: `${t.name} (Custom)` });
+          }}
+          onEdit={
+            onOpenEditor
+              ? () => {
+                  const t = previewTemplate;
+                  setPreviewTemplate(null);
+                  onOpenEditor(t.id);
+                }
+              : undefined
+          }
+        />
       )}
 
       {/* Ambiguous Logo Selection Modal */}

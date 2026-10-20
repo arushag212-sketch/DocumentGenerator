@@ -8,6 +8,7 @@ storage/thumbnails/{template_version_id}.png.
 
 from __future__ import annotations
 
+import logging
 import shutil
 import threading
 import uuid
@@ -222,9 +223,61 @@ def get_neutral_placeholder(target_path: Optional[Path] = None) -> Path:
     return placeholder_file
 
 
-# LibreOffice conversions fail when many previews render at once (a gallery opening);
-# render at most two at a time.
+logger = logging.getLogger(__name__)
+
+# Preview image width in pixels
+THUMBNAIL_WIDTH_PX = 900.0
+# Full-page sample preview (the gallery's "Preview" viewer) width in pixels
+PAGE_PREVIEW_WIDTH_PX = 1400.0
+MAX_PREVIEW_PAGES = 12
+
+
+def preview_page_paths(thumb_path: Path) -> list[Path]:
+    """Cached full-size sample pages saved next to a template's card preview."""
+    stem = thumb_path.stem
+    pages = sorted(thumb_path.parent.glob(f"{stem}_p*.webp"), key=lambda p: int(p.stem.rsplit("_p", 1)[1]))
+    return pages
+
+
+def render_template_preview_pages(
+    db: Session,
+    tmpl: Template,
+    ver: TemplateVersion,
+    club_slug: str,
+    club_id: Optional[str] = None,
+) -> list[Path]:
+    """Every page of the template filled with sample data, as the viewing club would print it."""
+    local_storage = require_local_storage()
+    thumbnails_dir = local_storage.base_dir / "thumbnails"
+    thumbnails_dir.mkdir(parents=True, exist_ok=True)
+    thumb_path = thumbnails_dir / f"{thumbnail_stem(tmpl, ver, club_id)}.webp"
+    pages = preview_page_paths(thumb_path)
+    if pages:
+        return pages
+    with _PREVIEW_SLOTS:
+        pages = preview_page_paths(thumb_path)
+        if pages:
+            return pages
+        docx_path = _template_docx(tmpl, ver, local_storage)
+        if docx_path is None:
+            return []
+        _render_thumbnail(db, tmpl, ver, club_slug, docx_path, thumb_path, local_storage)
+    return preview_page_paths(thumb_path)
+
+
+def _template_docx(tmpl: Template, ver: TemplateVersion, local_storage) -> Optional[Path]:
+    if ver.docx_storage_key:
+        candidate = local_storage.local_path(ver.docx_storage_key)
+        if candidate.exists():
+            return candidate
+    fallback = Path("templates") / tmpl.slug / "template.docx"
+    return fallback if fallback.exists() else None
+
+# Each conversion runs its own LibreOffice profile; cap the gallery's card renders so opening it
+# doesn't start a dozen at once, and give the Preview viewer separate slots so it never waits
+# behind that queue.
 _RENDER_SLOTS = threading.BoundedSemaphore(2)
+_PREVIEW_SLOTS = threading.BoundedSemaphore(2)
 
 
 def thumbnail_stem(tmpl: Template, ver: TemplateVersion, club_id: Optional[str]) -> str:
@@ -321,22 +374,32 @@ def _render_thumbnail(db, tmpl, ver, club_slug, docx_path, thumb_path, local_sto
 
         if render_res.pdf_path and render_res.pdf_path.exists():
             pdf_doc = pymupdf.open(str(render_res.pdf_path))
+            # Full-size pages for the Preview viewer, from the same render
+            for idx, pg in enumerate(pdf_doc):
+                if idx >= MAX_PREVIEW_PAGES:
+                    break
+                page_scale = PAGE_PREVIEW_WIDTH_PX / max(pg.rect.width, 1.0)
+                ppix = pg.get_pixmap(matrix=pymupdf.Matrix(page_scale, page_scale))
+                Image.frombytes("RGB", [ppix.width, ppix.height], ppix.samples).save(
+                    str(thumb_path.parent / f"{thumb_path.stem}_p{idx + 1}.webp"), format="WEBP", quality=88, method=6
+                )
             if len(pdf_doc) > 0:
                 page = pdf_doc[0]
                 rect = page.rect
-                scale = 240.0 / max(rect.width, 1.0)
+                # Sharp on high-DPI screens: the gallery card is ~360 px wide, shown at up to 2.5x
+                scale = THUMBNAIL_WIDTH_PX / max(rect.width, 1.0)
                 mat = pymupdf.Matrix(scale, scale)
                 pix = page.get_pixmap(matrix=mat)
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 try:
-                    img.save(str(thumb_path), format="WEBP", quality=80)
+                    img.save(str(thumb_path), format="WEBP", quality=88, method=6)
                 except Exception:
-                    img.save(str(thumb_path), format="JPEG", quality=80)
+                    img.save(str(thumb_path), format="JPEG", quality=90)
                 pdf_doc.close()
                 return thumb_path
             pdf_doc.close()
     except Exception as e:
-        print(f"[WARN] Thumbnail generation failed for template {tmpl.slug} (v{ver.version_no}): {e}")
+        logger.warning("Thumbnail generation failed for template %s (v%s): %s", tmpl.slug, ver.version_no, e)
     finally:
         shutil.rmtree(temp_out_dir, ignore_errors=True)
 
