@@ -110,6 +110,15 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
   // Numbering series state
   const [seriesList, setSeriesList] = useState<NumberingSeries[]>([]);
   const [seriesForm, setSeriesForm] = useState<NumberingSeries | null>(null);
+  const [createSeriesForm, setCreateSeriesForm] = useState<{
+    key: string;
+    format: string;
+    academic_year: string;
+    last_seq: number;
+    description: string;
+  } | null>(null);
+  const [createSeriesSubmitting, setCreateSeriesSubmitting] = useState(false);
+  const [createSeriesError, setCreateSeriesError] = useState<string | null>(null);
 
   // Letterheads state
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -284,6 +293,55 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
       loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to delete venue');
+    }
+  };
+
+  const handleOpenAddSeries = () => {
+    setCreateSeriesError(null);
+    setCreateSeriesForm({
+      key: '',
+      format: '{club}/{yy}-{next}/{series}/{seq:03d}',
+      academic_year: clubProfile.academic_year_default || '2026-27',
+      last_seq: 0,
+      description: '',
+    });
+  };
+
+  const handleCreateSeries = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createSeriesForm) return;
+    setCreateSeriesError(null);
+    setError(null);
+
+    const key = createSeriesForm.key.trim().toUpperCase();
+    if (!key) {
+      setCreateSeriesError('Series key is required');
+      return;
+    }
+    const format = createSeriesForm.format.trim();
+    if (!format) {
+      setCreateSeriesError('Format template is required');
+      return;
+    }
+    const academicYear = (createSeriesForm.academic_year || '').trim() || clubProfile.academic_year_default || '2026-27';
+
+    setCreateSeriesSubmitting(true);
+    try {
+      await api.clubs.createNumberingSeries(clubId, {
+        key,
+        format,
+        academic_year: academicYear,
+        last_seq: Number(createSeriesForm.last_seq) || 0,
+      });
+      setSuccess(`Series "${key}" created.`);
+      setCreateSeriesForm(null);
+      loadData();
+    } catch (err: any) {
+      const msg = err.message || 'Failed to create numbering series';
+      setCreateSeriesError(msg);
+      setError(msg);
+    } finally {
+      setCreateSeriesSubmitting(false);
     }
   };
 
@@ -813,11 +871,23 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
       {/* TAB 2: NUMBERING SERIES */}
       {subTab === 'numbering' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-4 sm:p-6 space-y-4">
-          <div>
-            <h3 className="text-sm sm:text-base font-bold text-slate-900">Official Club Numbering Series & Counters</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Numbering series generate atomic, strictly unique document dispatch numbers. Counters increment monotonically.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">Official Club Numbering Series & Counters</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Numbering series generate atomic, strictly unique document dispatch numbers. Counters increment monotonically.
+              </p>
+            </div>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleOpenAddSeries}
+                className="inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-[#162a4a] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors shadow-sm self-start sm:self-auto"
+              >
+                <Plus className="w-4 h-4" />
+                Add Series
+              </button>
+            )}
           </div>
 
           <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
@@ -830,8 +900,20 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
           {loading ? (
             <div className="text-center py-8 text-xs text-slate-400">Loading series...</div>
           ) : seriesList.length === 0 ? (
-            <div className="text-center py-8 text-xs text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-              No numbering series found.
+            <div className="text-center py-10 px-4 text-xs text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-200 space-y-3">
+              <p>No numbering series found.</p>
+              {isAdmin && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddSeries}
+                    className="inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-[#162a4a] text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-colors shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create your first series
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1095,6 +1177,109 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
                   className="px-4 py-2 bg-brand-700 hover:bg-[#162a4a] text-white font-semibold rounded-lg shadow-sm"
                 >
                   Save Venue
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE NUMBERING MODAL */}
+      {isAdmin && createSeriesForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="font-bold text-base text-slate-900">
+              Create Numbering Series
+            </h3>
+            <p className="text-xs text-slate-500">
+              Set up a numbering series for official documents. Numbering series generate atomic, strictly unique document dispatch numbers.
+            </p>
+            {createSeriesError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700" role="alert">
+                {createSeriesError}
+              </div>
+            )}
+            <form onSubmit={handleCreateSeries} className="space-y-3 text-xs">
+              <div>
+                <label htmlFor="create-series-key" className="block font-semibold text-slate-700 mb-1">Series Key *</label>
+                <input
+                  id="create-series-key"
+                  type="text"
+                  required
+                  maxLength={64}
+                  value={createSeriesForm.key}
+                  onChange={(e) => setCreateSeriesForm({ ...createSeriesForm, key: e.target.value.toUpperCase() })}
+                  placeholder="e.g. DOC, EVT, MOM"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 font-mono text-xs uppercase"
+                />
+                <p className="text-[11px] text-slate-400 mt-0.5">Short unique identifier for this series.</p>
+              </div>
+              <div>
+                <label htmlFor="create-series-format" className="block font-semibold text-slate-700 mb-1">Format Template *</label>
+                <input
+                  id="create-series-format"
+                  type="text"
+                  required
+                  maxLength={255}
+                  value={createSeriesForm.format}
+                  onChange={(e) => setCreateSeriesForm({ ...createSeriesForm, format: e.target.value })}
+                  placeholder="{club}/{yy}-{next}/{series}/{seq:03d}"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 font-mono text-xs"
+                />
+                <p className="text-[11px] text-slate-400 mt-0.5">Tokens: {'{club}'}, {'{yy}'}, {'{next}'}, {'{series}'}, {'{seq:03d}'}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="create-series-ay" className="block font-semibold text-slate-700 mb-1">Academic Year *</label>
+                  <input
+                    id="create-series-ay"
+                    type="text"
+                    required
+                    value={createSeriesForm.academic_year}
+                    onChange={(e) => setCreateSeriesForm({ ...createSeriesForm, academic_year: e.target.value })}
+                    placeholder="2026-27"
+                    className="w-full border border-slate-300 rounded-lg p-2.5"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="create-series-seq" className="block font-semibold text-slate-700 mb-1">Starting Counter</label>
+                  <input
+                    id="create-series-seq"
+                    type="number"
+                    min={0}
+                    value={createSeriesForm.last_seq}
+                    onChange={(e) => setCreateSeriesForm({ ...createSeriesForm, last_seq: parseInt(e.target.value, 10) || 0 })}
+                    placeholder="0"
+                    className="w-full border border-slate-300 rounded-lg p-2.5"
+                  />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="create-series-desc" className="block font-semibold text-slate-700 mb-1">Description / Purpose</label>
+                <textarea
+                  id="create-series-desc"
+                  rows={2}
+                  value={createSeriesForm.description}
+                  onChange={(e) => setCreateSeriesForm({ ...createSeriesForm, description: e.target.value })}
+                  placeholder="Purpose of this numbering series..."
+                  className="w-full border border-slate-300 rounded-lg p-2.5"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setCreateSeriesForm(null)}
+                  disabled={createSeriesSubmitting}
+                  className="px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createSeriesSubmitting}
+                  className="px-4 py-2 bg-brand-700 hover:bg-[#162a4a] text-white font-semibold rounded-lg shadow-sm"
+                >
+                  {createSeriesSubmitting ? 'Creating…' : 'Create Series'}
                 </button>
               </div>
             </form>

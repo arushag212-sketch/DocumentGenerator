@@ -349,6 +349,11 @@ export const api = {
         method: 'DELETE',
       }),
     getNumberingSeries: (clubId: string | number) => apiFetch<NumberingSeries[]>(`/clubs/${clubId}/numbering`),
+    createNumberingSeries: (clubId: string | number, data: { key: string; format: string; academic_year: string; last_seq?: number }) =>
+      apiFetch<NumberingSeries>(`/clubs/${clubId}/numbering`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     updateNumberingSeries: (clubId: string | number, seriesKey: string, data: { format?: string; academic_year?: string; description?: string }) =>
       apiFetch<NumberingSeries>(`/clubs/${clubId}/numbering/${seriesKey}`, {
         method: 'PUT',
