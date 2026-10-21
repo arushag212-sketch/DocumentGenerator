@@ -111,6 +111,8 @@ from server.app.models import (
 from server.app.core.dummy_thumbnail import (
     get_dummy_thumbnail_event_record,
     get_neutral_placeholder,
+    is_placeholder_file,
+    is_thumbnail_pending,
     render_template_thumbnail,
 )
 
@@ -516,21 +518,21 @@ def get_template_thumbnail(
     )
     if not ver:
         placeholder = get_neutral_placeholder()
-        return FileResponse(placeholder, media_type="image/png")
+        return FileResponse(placeholder, media_type="image/png", headers={"Cache-Control": "no-store", "X-Thumbnail": "pending"})
 
     thumbnails_dir = local_storage.base_dir / "thumbnails"
     thumbnails_dir.mkdir(parents=True, exist_ok=True)
     from server.app.core.dummy_thumbnail import thumbnail_stem
 
     stem = thumbnail_stem(tmpl, ver, ctx.club.id)
-    thumb_path = thumbnails_dir / f"{stem}.webp"
-    if not thumb_path.exists():
-        thumb_path_png = thumbnails_dir / f"{stem}.png"
-        if thumb_path_png.exists():
+    thumb_path = local_storage.local_path(f"thumbnails/{stem}.webp")
+    if not thumb_path.exists() or is_placeholder_file(thumb_path):
+        thumb_path_png = local_storage.local_path(f"thumbnails/{stem}.png")
+        if thumb_path_png.exists() and not is_placeholder_file(thumb_path_png):
             thumb_path = thumb_path_png
 
     # Check copy-on-write fork source template version if not rendered yet
-    if not thumb_path.exists() and tmpl.forked_from_template_id:
+    if (not thumb_path.exists() or is_placeholder_file(thumb_path)) and tmpl.forked_from_template_id:
         src_tmpl = db.query(Template).filter(Template.id == tmpl.forked_from_template_id).first()
         if src_tmpl:
             src_ver = (
@@ -541,14 +543,14 @@ def get_template_thumbnail(
             )
             if src_ver:
                 src_stem = thumbnail_stem(src_tmpl, src_ver, ctx.club.id)
-                src_webp = thumbnails_dir / f"{src_stem}.webp"
-                src_png = thumbnails_dir / f"{src_stem}.png"
-                if src_webp.exists():
-                    return FileResponse(src_webp, media_type="image/webp")
-                elif src_png.exists():
-                    return FileResponse(src_png, media_type="image/png")
+                src_webp = local_storage.local_path(f"thumbnails/{src_stem}.webp")
+                src_png = local_storage.local_path(f"thumbnails/{src_stem}.png")
+                if src_webp.exists() and not is_placeholder_file(src_webp):
+                    return FileResponse(src_webp, media_type="image/webp", headers={"Cache-Control": "no-cache", "X-Thumbnail": "ready"})
+                elif src_png.exists() and not is_placeholder_file(src_png):
+                    return FileResponse(src_png, media_type="image/png", headers={"Cache-Control": "no-cache", "X-Thumbnail": "ready"})
 
-    if not thumb_path.exists():
+    if not thumb_path.exists() or is_placeholder_file(thumb_path):
         thumb_path = render_template_thumbnail(
             db=db,
             tmpl=tmpl,
@@ -557,9 +559,14 @@ def get_template_thumbnail(
             club_id=ctx.club.id,
         )
 
+    is_pending = is_thumbnail_pending(stem) or is_placeholder_file(thumb_path)
     media_type = "image/webp" if str(thumb_path).endswith(".webp") else "image/png"
-    # Revalidate so a re-rendered preview replaces the browser's copy
-    return FileResponse(thumb_path, media_type=media_type, headers={"Cache-Control": "no-cache"})
+    headers = (
+        {"Cache-Control": "no-store", "X-Thumbnail": "pending"}
+        if is_pending
+        else {"Cache-Control": "no-cache", "X-Thumbnail": "ready"}
+    )
+    return FileResponse(thumb_path, media_type=media_type, headers=headers)
 
 
 def _gallery_template(db: Session, template_id: str, club_id: str):

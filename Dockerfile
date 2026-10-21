@@ -66,6 +66,9 @@ COPY backend/pyproject.toml /app/pyproject.toml
 # Ensure runtime directories exist
 RUN mkdir -p /app/data /app/storage /app/outputs
 
+# Pre-render built-in template thumbnails at build time
+RUN cd /app && python -m scripts.prerender_thumbnails || echo "Warning: prerender_thumbnails failed, continuing build"
+
 # Create non-root system user and configure permissions
 RUN groupadd -r clubdocs && useradd -r -g clubdocs -d /app -s /bin/bash clubdocs \
     && chown -R clubdocs:clubdocs /app \

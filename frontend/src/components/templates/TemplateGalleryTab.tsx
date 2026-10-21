@@ -55,6 +55,65 @@ const AI_TEMPLATE_EXAMPLES: { label: string; prompt: string }[] = [
   },
 ];
 
+interface TemplateCardThumbnailProps {
+  src: string;
+  alt: string;
+}
+
+const TemplateCardThumbnail: React.FC<TemplateCardThumbnailProps> = ({ src, alt }) => {
+  const [currentSrc, setCurrentSrc] = useState(src);
+  const [retryCount, setRetryCount] = useState(0);
+
+  useEffect(() => {
+    setCurrentSrc(src);
+    setRetryCount(0);
+  }, [src]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const checkThumbnail = async () => {
+      try {
+        const res = await fetch(currentSrc, { cache: 'no-store' });
+        const isPending = res.headers.get('X-Thumbnail') === 'pending';
+        if (!cancelled && isPending && retryCount < 6) {
+          timer = setTimeout(() => {
+            if (!cancelled) {
+              setRetryCount((prev) => prev + 1);
+              const sep = src.includes('?') ? '&' : '?';
+              setCurrentSrc(`${src}${sep}retry=${Date.now()}`);
+            }
+          }, 5000);
+        }
+      } catch {
+        // network or fetch error, ignore
+      }
+    };
+
+    checkThumbnail();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [src, currentSrc, retryCount]);
+
+  return (
+    <img
+      src={currentSrc}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      className="w-full h-full object-cover object-top "
+      onError={(e) => {
+        const target = e.target as HTMLElement;
+        target.style.display = 'none';
+      }}
+    />
+  );
+};
+
 export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
   clubId,
   permissions,
@@ -471,16 +530,9 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                       <Eye className="w-3.5 h-3.5" /> Preview
                     </span>
                   </button>
-                  <img
+                  <TemplateCardThumbnail
                     src={tmpl.thumbnail_url || `/api/v1/clubs/${clubId}/documents/templates/${tmpl.id}/thumbnail`}
                     alt={tmpl.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover object-top "
-                    onError={(e) => {
-                      const target = e.target as HTMLElement;
-                      target.style.display = 'none';
-                    }}
                   />
                   <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
                     {tmpl.is_system ? (

@@ -317,7 +317,7 @@ class SyncedDiskStorage(LocalDiskStorage):
     downloaded the first time it is needed. Caches and thumbnails stay local and are rebuilt.
     """
 
-    PERSISTENT_PREFIXES = ("assets/", "templates/", "documents/")
+    PERSISTENT_PREFIXES = ("assets/", "templates/", "documents/", "thumbnails/")
 
     def __init__(self, base_dir: Optional[Path | str] = None, remote: Optional[S3Storage] = None):
         super().__init__(base_dir)
