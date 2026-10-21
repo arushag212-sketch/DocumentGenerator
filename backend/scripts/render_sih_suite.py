@@ -65,7 +65,7 @@ def main():
     print(f"   DOCX: {res_perm.docx_path}")
     print(f"   PDF:  {res_perm.pdf_path}")
     create_side_by_side(
-        Path("sample docs/Permission_public.pdf"),
+        Path("../docs/samples/Permission_public.pdf"),
         res_perm.pdf_path,
         Path("tests/visual/permission_letter_comparison.png")
     )
@@ -76,7 +76,7 @@ def main():
     print(f"   DOCX: {res_appr.docx_path}")
     print(f"   PDF:  {res_appr.pdf_path}")
     create_side_by_side(
-        Path("sample docs/ACM_Sample_Submitted.pdf"),
+        Path("../docs/samples/ACM_Sample_Submitted.pdf"),
         res_appr.pdf_path,
         Path("tests/visual/approval_note_comparison.png")
     )
@@ -104,7 +104,7 @@ def main():
     print(f"   DOCX: {res_prize.docx_path}")
     print(f"   PDF:  {res_prize.pdf_path}")
     create_side_by_side(
-        Path("sample docs/Prize Money Format 2026.pdf"),
+        Path("../docs/samples/Prize Money Format 2026.pdf"),
         res_prize.pdf_path,
         Path("tests/visual/prize_money_receipt_comparison.png")
     )
@@ -115,7 +115,7 @@ def main():
     print(f"   DOCX: {res_billsum.docx_path}")
     print(f"   PDF:  {res_billsum.pdf_path}")
     create_side_by_side(
-        Path("sample docs/BIll_summary_public.pdf"),
+        Path("../docs/samples/BIll_summary_public.pdf"),
         res_billsum.pdf_path,
         Path("tests/visual/bill_summary_comparison.png")
     )
@@ -149,7 +149,7 @@ def main():
     print(f"   DOCX: {res_billcert.docx_path}")
     print(f"   PDF:  {res_billcert.pdf_path}")
     create_side_by_side(
-        Path("sample docs/Bill Certificate_public.pdf"),
+        Path("../docs/samples/Bill Certificate_public.pdf"),
         res_billcert.pdf_path,
         Path("tests/visual/bill_certificate_comparison.png")
     )

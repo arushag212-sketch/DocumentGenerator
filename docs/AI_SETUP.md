@@ -28,7 +28,7 @@ To prevent broken workflows:
 
 ## 2. Configuration & How to Set `GEMINI_MODEL`
 
-In your `.env` file or environment variables:
+In `backend/.env` or environment variables:
 
 ```ini
 # Required for real AI drafting:

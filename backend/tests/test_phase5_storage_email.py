@@ -129,3 +129,13 @@ def test_alembic_offline_postgresql_migration():
     assert res.returncode == 0, f"Alembic migration failed: {res.stderr}"
     assert "ALTER TABLE documents ADD CONSTRAINT uq_document_club_ref_no UNIQUE" in res.stdout
 
+
+
+def test_absolute_keys_from_an_old_location_map_into_the_current_root(tmp_path):
+    """Keys saved as full paths keep working after the storage folder moves; escapes are still refused."""
+    store = LocalDiskStorage(base_dir=tmp_path / "storage")
+    store.save("documents/d1/v1/a.pdf", b"pdf")
+    old_key = r"C:\Users\someone\Old\DocumentGenerator\storage\documents\d1\v1\a.pdf"
+    assert store.load(old_key) == b"pdf"
+    with pytest.raises(ValueError):
+        store.local_path(r"C:\Windows\System32\drivers\etc\hosts")

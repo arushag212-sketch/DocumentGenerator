@@ -8,7 +8,7 @@ Downloads:
 
 Places fonts in:
 1. assets/fonts/
-2. web/public/fonts/
+2. frontend/public/fonts/
 3. Windows user fonts directory (C:\\Users\\<user>\\AppData\\Local\\Microsoft\\Windows\\Fonts)
 """
 
@@ -59,7 +59,7 @@ def bundle_fonts():
     assets_dir = repo_root / "assets" / "fonts"
     assets_dir.mkdir(parents=True, exist_ok=True)
 
-    web_fonts_dir = repo_root / "web" / "public" / "fonts"
+    web_fonts_dir = repo_root.parent / "frontend" / "public" / "fonts"
     web_fonts_dir.mkdir(parents=True, exist_ok=True)
 
     user_fonts_dir = None
@@ -89,7 +89,7 @@ def bundle_fonts():
         else:
             print(f"  Cached {filename} ({dest.stat().st_size} bytes)")
 
-        # Copy to web/public/fonts/
+        # Copy to frontend/public/fonts/
         shutil.copy2(dest, web_fonts_dir / filename)
 
         # Copy to Windows user fonts dir if on Windows

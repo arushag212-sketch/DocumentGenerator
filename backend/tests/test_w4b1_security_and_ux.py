@@ -403,11 +403,11 @@ def test_validator_rejects_unexpected_jinja_tags():
 def test_editor_ux_no_raw_jinja_delimiters_in_ui():
     """UI Test: Verify that Info Table, Repeating Table, and all editor blocks contain NO raw '{{' or '{%'."""
     # Read the bundled JavaScript / HTML output in dist or built source
-    dist_js_files = list(Path("web/dist/assets").glob("*.js"))
-    assert dist_js_files, "web/dist must be built"
+    dist_js_files = list(Path("../frontend/dist/assets").glob("*.js"))
+    assert dist_js_files, "frontend/dist must be built"
 
     # Verify extensions.ts source directly
-    ext_src = Path("web/src/components/TemplateEditor/extensions.ts").read_text(encoding="utf-8")
+    ext_src = Path("../frontend/src/components/TemplateEditor/extensions.ts").read_text(encoding="utf-8")
 
     # In InfoTable: must not contain raw Jinja delimiters
     assert "{{ ${r.field} }}" not in ext_src, "InfoTable should not render raw '{{ ${r.field} }}'"

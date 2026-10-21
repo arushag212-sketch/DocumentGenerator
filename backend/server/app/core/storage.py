@@ -80,8 +80,17 @@ class LocalDiskStorage(Storage):
             try:
                 return candidate.resolve().relative_to(self.base_dir).as_posix()
             except ValueError:
-                # Let _resolve_safe_path reject absolute paths outside the
-                # configured root instead of silently accepting them.
+                # Absolute key from before the storage folder moved (another checkout path or
+                # machine): keep the part after its own storage folder. _resolve_safe_path
+                # still confines the result to base_dir. Anything else is rejected there.
+                parts = candidate.parts
+                names = [p.lower() for p in parts]
+                folder = self.base_dir.name.lower()
+                if folder in names:
+                    idx = len(names) - 1 - names[::-1].index(folder)
+                    rest = parts[idx + 1:]
+                    if rest:
+                        return Path(*rest).as_posix()
                 return raw
         clean = candidate.as_posix().lstrip("/\\")
         base_name = self.base_dir.name

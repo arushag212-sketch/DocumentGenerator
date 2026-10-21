@@ -73,7 +73,12 @@ async def log_errors_middleware(request: Request, call_next):
 
 # 3. Mount Static Assets
 assets_dir = settings.ASSETS_DIR
-web_dir = Path(__file__).resolve().parent.parent.parent / "web"
+# The built website: frontend/dist next to backend/ in the repo, or web/dist inside the Docker image
+_backend_root = Path(__file__).resolve().parent.parent.parent
+web_dir = next(
+    (d for d in (_backend_root.parent / "frontend", _backend_root / "web") if (d / "dist").is_dir()),
+    _backend_root.parent / "frontend",
+)
 dist_dir = web_dir / "dist"
 dist_assets = dist_dir / "assets"
 

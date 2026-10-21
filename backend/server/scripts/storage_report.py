@@ -5,7 +5,6 @@ Measures:
    - storage/documents, storage/previews, storage/batches, storage/thumbnails, storage/templates
    - outputs
    - data temp databases
-   - docs/screenshots
    - visual test artifacts
 2. Top 20 largest files
 3. Duplicate files by SHA256
@@ -143,7 +142,6 @@ def generate_report(check_limits: bool = False) -> str:
         ("storage (TOTAL)", Path("storage")),
         ("outputs", Path("outputs")),
         ("data temp databases", Path("data")),
-        ("docs/screenshots", Path("docs/screenshots")),
         ("tests_visual", Path("tests") / "visual"),
     ]
 

@@ -17,7 +17,8 @@ import sys
 from pathlib import Path
 
 # Add project root to sys.path
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parent.parent  # backend/
+REPO_DIR = ROOT_DIR.parent  # Dockerfile, docker-compose.yml, vercel.json and docs/ live here
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -28,7 +29,7 @@ from server.app.main import app
 
 def check_dockerfile() -> tuple[bool, list[str]]:
     errors = []
-    dockerfile_path = ROOT_DIR / "Dockerfile"
+    dockerfile_path = REPO_DIR / "Dockerfile"
     if not dockerfile_path.exists():
         return False, ["Dockerfile does not exist."]
 
@@ -61,7 +62,7 @@ def check_dockerfile() -> tuple[bool, list[str]]:
 
 def check_docker_compose() -> tuple[bool, list[str]]:
     errors = []
-    compose_path = ROOT_DIR / "docker-compose.yml"
+    compose_path = REPO_DIR / "docker-compose.yml"
     if not compose_path.exists():
         return False, ["docker-compose.yml does not exist."]
 
@@ -95,7 +96,7 @@ def check_docker_compose() -> tuple[bool, list[str]]:
 def check_env_documentation() -> tuple[bool, list[str]]:
     errors = []
     env_example = ROOT_DIR / ".env.example"
-    doc_path = ROOT_DIR / "docs" / "DEPLOYMENT.md"
+    doc_path = REPO_DIR / "docs" / "DEPLOYMENT.md"
 
     if not env_example.exists():
         errors.append(".env.example missing.")
@@ -124,9 +125,9 @@ def check_no_hardcoded_secrets() -> tuple[bool, list[str]]:
     aws_secret_pattern = re.compile(r"(?i)aws_secret_access_key\s*=\s*['\"][A-Za-z0-9/+=]{40}['\"]")
 
     scan_targets = [
-        ROOT_DIR / "Dockerfile",
-        ROOT_DIR / "docker-compose.yml",
-        ROOT_DIR / "vercel.json",
+        REPO_DIR / "Dockerfile",
+        REPO_DIR / "docker-compose.yml",
+        REPO_DIR / "vercel.json",
         ROOT_DIR / "server" / "app" / "core" / "config.py",
         ROOT_DIR / "server" / "app" / "main.py",
     ]
@@ -145,7 +146,7 @@ def check_no_hardcoded_secrets() -> tuple[bool, list[str]]:
 
 def check_production_configs_localhost() -> tuple[bool, list[str]]:
     errors = []
-    vercel_path = ROOT_DIR / "vercel.json"
+    vercel_path = REPO_DIR / "vercel.json"
     if vercel_path.exists():
         content = vercel_path.read_text(encoding="utf-8")
         if "localhost" in content or "127.0.0.1" in content:

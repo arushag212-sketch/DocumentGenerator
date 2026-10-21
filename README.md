@@ -24,6 +24,7 @@ minutes) in minutes instead of hours. Describe what you need, check the details,
 Needs Python 3.12+, Node 20+ and LibreOffice.
 
 ```powershell
+cd backend
 copy .env.example .env          # then fill in at least GOOGLE_CLIENT_ID
 python -m pip install -r requirements-dev.txt
 python -m server.scripts.seed   # built-in templates and the demo accounts
@@ -34,7 +35,7 @@ python -m uvicorn server.app.main:app --port 8000
 In a second terminal:
 
 ```powershell
-cd web
+cd frontend
 copy .env.example .env          # VITE_GOOGLE_CLIENT_ID
 npm install
 npm run dev
@@ -45,8 +46,8 @@ Open http://localhost:5173. Demo accounts for local testing are listed in [docs/
 ## Tests
 
 ```powershell
-python -m pytest -q --timeout=300 -p no:cacheprovider
-cd web; npm run build
+cd backend; python -m pytest -q --timeout=300 -p no:cacheprovider
+cd ..\frontend; npm run build
 ```
 
 Tests use their own temporary database and storage folder; your local data is never touched.
@@ -76,26 +77,22 @@ see **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 ## Project layout
 
 ```
-server/                 FastAPI backend
-  app/api/v1/           HTTP routes (auth, clubs, documents, home, events, invites, verify)
-  app/core/             Business logic: security, storage, template compiler, AI helpers
-  app/models/ schemas/  Database models and request/response shapes
-  alembic/              Database migrations
-  scripts/              Admin tools: seed, migrate, create_admin, doctor, storage clean-up
-docgen/                 Document engine: extraction, rendering, numbering, letterhead
-web/src/                React website
-  pages/                One file per screen (landing, sign-in, dashboard, profile, help, ...)
-  components/           Pieces used by the pages, by feature:
-    layout/             App frame and sidebar
-    create/             "Create" flow (describe -> drafts -> results)
-    documents/ templates/ settings/ assistant/ onboarding/ auth/ common/ brand/
-    TemplateEditor/     The visual template editor
-  api/ context/ hooks/ utils/
-templates/              Built-in Word templates and their schemas
-assets/                 College crest, fonts, placeholders (see assets/README.md)
-tests/                  pytest suite
-scripts/                Build and developer tools
+backend/                Python backend (run its commands from inside this folder)
+  server/               FastAPI app: api/v1 routes, core logic, models, schemas,
+                        alembic migrations, admin scripts (seed, migrate, doctor, ...)
+  docgen/               Document engine: extraction, rendering, numbering, letterhead
+  templates/            Built-in Word templates and their schemas
+  assets/               College crest, fonts, placeholders (see assets/README.md)
+  config/ demo/         Club config example and demo-club data
+  tests/                pytest suite
+  scripts/              Build and developer tools (dev.ps1, build_templates.py, ...)
+  requirements*.txt     Python packages (production / tests)
+frontend/               React website
+  src/pages/            One file per screen (landing, sign-in, dashboard, profile, help, ...)
+  src/components/       Pieces used by the pages, grouped by feature
+                        (layout, create, documents, templates, settings, TemplateEditor, ...)
 docs/                   Guides
+Dockerfile, render.yaml, vercel.json, docker-compose.yml   Deployment
 ```
 
 ## Guides
@@ -108,4 +105,4 @@ docs/                   Guides
 - [Database schema](docs/DB_SCHEMA.md)
 
 To share the code safely as a zip (no secrets, databases or dependencies):
-`powershell -ExecutionPolicy Bypass -File scripts/make_share_zip.ps1`
+`powershell -ExecutionPolicy Bypass -File backend/scripts/make_share_zip.ps1`

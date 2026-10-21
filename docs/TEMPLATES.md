@@ -3,7 +3,7 @@
 ClubDocs templates can be made in two ways:
 
 - **In the web editor** (most clubs): visual, no Word needed. See section 1.
-- **As Word files in `templates/`** (built-in templates, maintained by developers). See section 2.
+- **As Word files in `backend/templates/`** (built-in templates, maintained by developers). See section 2.
 
 ---
 
@@ -60,15 +60,15 @@ makes the template available for creating documents. AI-written blocks must be r
 
 ## 2. Built-in Word templates (developers)
 
-Built-in templates live in `templates/<template_id>/` as a Word file plus `schema.yaml`, rendered with
-`docxtpl` (Jinja2 syntax). `scripts/build_templates.py` generates them.
+Built-in templates live in `backend/templates/<template_id>/` as a Word file plus `schema.yaml`, rendered with
+`docxtpl` (Jinja2 syntax). `backend/scripts/build_templates.py` generates them.
 
 ### Avoid split tags
 
 Word often splits text into several runs, and `{{ event_name }}` split across runs is not recognised.
 
 - Type each tag in one go, or paste it as plain text (`Ctrl+Shift+V`).
-- Validate after saving: `python -m docgen.cli validate-templates`
+- Validate after saving (from `backend/`): `python -m docgen.cli validate-templates`
 
 ### Repeating table rows
 

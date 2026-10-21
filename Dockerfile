@@ -8,10 +8,10 @@
 FROM node:20.18.0-alpine AS frontend-builder
 
 WORKDIR /build
-COPY web/package.json web/package-lock.json ./
+COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
-COPY web/ ./
+COPY frontend/ ./
 # Public Google client ID for the sign-in button (Render passes service env vars as build args)
 ARG VITE_GOOGLE_CLIENT_ID=""
 ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
@@ -46,21 +46,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python dependencies with wheel cache
-COPY requirements.txt ./
+COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy compiled frontend from Stage 1
 COPY --from=frontend-builder /build/dist /app/web/dist
 
 # Copy application backend, template engine, and migrations
-COPY docgen /app/docgen
-COPY server /app/server
-COPY scripts /app/scripts
-COPY assets /app/assets
-COPY templates /app/templates
-COPY config /app/config
-COPY alembic.ini /app/alembic.ini
-COPY pyproject.toml /app/pyproject.toml
+COPY backend/docgen /app/docgen
+COPY backend/server /app/server
+COPY backend/scripts /app/scripts
+COPY backend/assets /app/assets
+COPY backend/templates /app/templates
+COPY backend/config /app/config
+COPY backend/alembic.ini /app/alembic.ini
+COPY backend/pyproject.toml /app/pyproject.toml
 
 # Ensure runtime directories exist
 RUN mkdir -p /app/data /app/storage /app/outputs

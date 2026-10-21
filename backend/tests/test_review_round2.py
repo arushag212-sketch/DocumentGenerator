@@ -21,6 +21,8 @@ Tests run against the RENDERED PDFs (extracted via PyMuPDF), verifying:
 
 from decimal import Decimal
 from pathlib import Path
+import re
+
 import pytest
 import pymupdf
 
@@ -79,7 +81,8 @@ def test_item2_xml_escaping_ampersand_in_pdf_text(rendered_sih_pdfs):
     doc_appr = pymupdf.open(str(rendered_sih_pdfs["approval_note"]))
     text_appr = doc_appr[0].get_text()
     doc_appr.close()
-    assert "Chairman, F& SW" in text_appr, (
+    # The chairman line comes from the club config ("Chairman F&SW" or "Chairman, F& SW"); either way the & must survive
+    assert re.search(r"Chairman,? F\s?&\s?SW", text_appr), (
         "Ampersand was not preserved in Approval Note PDF text!"
     )
 

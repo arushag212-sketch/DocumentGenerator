@@ -1,42 +1,37 @@
-# Sensitive / local-only files
-config/club_config.yaml
-*.env
+# Secrets and local settings
 .env
-data/*.db*
-storage/
+*.env
+backend/config/club_config.yaml
+
+# Local data, generated files and private samples
+backend/data/*.db*
+backend/storage/
 outputs/
+backend/outputs/
+docs/samples/
 sample docs/
-node_modules/
-web/node_modules/
-dist/
-web/dist/
+backend/tests/visual/
 docs/downloads/
 *.log
 *.zip
-tests/visual/
+
+# Website build and packages
+node_modules/
+frontend/dist/
+dist/
 
 # Python
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
 build/
 .eggs/
-
-# Outputs
-outputs/
-
-# Tools
 .pytest_cache/
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Virtual env
 venv/
 .venv/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

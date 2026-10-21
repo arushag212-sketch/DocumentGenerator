@@ -5,18 +5,17 @@ venv
 **/node_modules
 **/__pycache__
 **/*.pyc
-.pytest_cache
-web/dist
-data
-storage
+**/.pytest_cache
+frontend/dist
+backend/data
+backend/storage
+backend/tests
+backend/config/club_config.yaml
 outputs
 sample docs
 docs
-tests
 scratch_*.py
 *.log
 *.zip
-.env
 **/.env
 .claude
-config/club_config.yaml

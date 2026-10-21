@@ -13,8 +13,8 @@
     Builds the frontend production bundle and serves via FastAPI on port 8000.
 
 .EXAMPLE
-    .\scripts\dev.ps1
-    .\scripts\dev.ps1 -Production
+    .\backend\scripts\dev.ps1
+    .\backend\scripts\dev.ps1 -Production
 #>
 
 param(
@@ -22,7 +22,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Backend commands run from backend/; the website lives next to it in frontend/
 $ProjectRoot = Resolve-Path "$PSScriptRoot\.."
+$FrontendDir = Resolve-Path "$ProjectRoot\..\frontend"
 Set-Location $ProjectRoot
 
 Write-Host "========================================================================" -ForegroundColor Cyan
@@ -43,7 +45,7 @@ python -m server.scripts.seed
 # 3. Launch App
 if ($Production) {
     Write-Host "`n[3/3] Building Frontend for Single-URL Production Mode..." -ForegroundColor Yellow
-    Set-Location "$ProjectRoot\web"
+    Set-Location $FrontendDir
     npm install
     npm run build
     Set-Location $ProjectRoot
@@ -56,15 +58,15 @@ if ($Production) {
     Write-Host "-> Frontend: http://localhost:5173 (Vite Hot-Reload Dev Server)" -ForegroundColor Cyan
 
     # Ensure frontend node_modules installed
-    if (-not (Test-Path "$ProjectRoot\web\node_modules")) {
-        Write-Host "Installing web dependencies..." -ForegroundColor Gray
-        Set-Location "$ProjectRoot\web"
+    if (-not (Test-Path "$FrontendDir\node_modules")) {
+        Write-Host "Installing website dependencies..." -ForegroundColor Gray
+        Set-Location $FrontendDir
         npm install
         Set-Location $ProjectRoot
     }
 
     # Start Vite in background job/process
-    $ViteProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c cd web && npm run dev" -PassThru
+    $ViteProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c cd /d `"$FrontendDir`" && npm run dev" -PassThru
 
     try {
         # Run FastAPI in foreground

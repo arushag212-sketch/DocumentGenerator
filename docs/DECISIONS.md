@@ -7,19 +7,15 @@ This log documents all architectural decisions, design choices, and documented t
 ## 1. Skipped Test Exceptions
 
 ### `test_postgres_concurrency.py::test_concurrency_numbering_postgres`
-- **Status**: Skipped (`@pytest.mark.skip(reason="Docker/PostgreSQL not available")`)
-- **Rationale**: Local development environment runs on native Windows without Docker Desktop or WSL 2. As defined in build constraints, live PostgreSQL services cannot be spawned locally.
+- **Status**: Runs when `POSTGRES_TEST_URL` points at a PostgreSQL database (skipped otherwise). It passed against PostgreSQL 16 in Docker before deployment.
 - **Verification Strategy**:
   1. Concurrency isolation and atomic gap-free numbering logic is fully verified locally against SQLite WAL mode with 20 parallel worker threads (`test_concurrency_numbering_atomic_sqlite`).
-  2. All table DDL and migrations are verified for PostgreSQL dialect compilation using `scripts/check_db.py` and `alembic upgrade head --sql` in offline mode.
+  2. All table DDL and migrations are verified for PostgreSQL dialect compilation using `backend/scripts/check_db.py` and `alembic upgrade head --sql` in offline mode.
   3. Live PostgreSQL concurrency can be executed in production CI/CD or staging containers with `POSTGRES_TEST_URL`.
 
 ### `tests/e2e/test_w3_slice_e2e.py`, `tests/test_w6b_e2e_browser.py`, `tests/test_w7_e2e_browser.py`
-- **Status**: Skipped (`@pytest.mark.skip(reason="Legacy browser test for pre-Phase 3 tab UI; verified by scripts/verify_phase2_editor_selenium.py and scripts/verify_phase4_home_selenium.py")`)
+- **Status**: Removed. The legacy browser tests for the old tab UI were deleted; the flows are covered by API tests and manual browser checks.
 - **Rationale**: These legacy test scripts were authored during earlier development iterations that depended on obsolete tab-state switching (`currentTab` buttons for "Dashboard", "Events", "Review") before the Phase 3 React Router declarative refactor (`/home`, `/documents`, `/templates`, `/settings/club`).
-- **Verification Strategy**: Full real-browser Selenium automated verification is conducted using the two canonical suites:
-  1. `scripts/verify_phase2_editor_selenium.py` (verifies TipTap 3 editor, native table cells, bold/chip insertion, and live LibreOffice preview).
-  2. `scripts/verify_phase4_home_selenium.py` (verifies `/home` fast path, date/time/money pickers, AI draft confirmations, reference numbers, and multi-document ZIP batch download).
 
 ### `tests/live/test_gemini_live.py::test_gemini_live_draft_template`
 - **Status**: Conditionally Skipped when Google Gemini Free Tier Quota is exceeded (`AIQuotaError: HTTP 429`)

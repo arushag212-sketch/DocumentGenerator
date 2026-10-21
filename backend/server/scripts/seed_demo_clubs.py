@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "demo" / "clubs.json"
-ACCOUNTS_DOC = ROOT / "docs" / "DEMO_ACCOUNTS.md"
+ACCOUNTS_DOC = ROOT.parent / "docs" / "DEMO_ACCOUNTS.md"
 ROLE_POSITIONS = {"admin": "Secretary", "editor": "Executive Member", "viewer": "Executive Member"}
 
 

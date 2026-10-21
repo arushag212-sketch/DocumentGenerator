@@ -272,7 +272,7 @@ def write_report(docs: list[dict], tmpls: list[dict]) -> None:
               f"{sum(r['pages_ok'] for r in ok_docs)}/{len(ok_docs)} with the expected page count.",
               f"- **Template flexibility**: {sum(1 for t in tmpls if not t.get('error') and t['fields_ok'])}/{len(tmpls)} templates drafted from a sentence with the expected fields.",
               f"- **Reliability**: {len(ok_docs)}/{len(docs)} generation runs completed without errors.", ""]
-    (ROOT / "docs" / "EVALUATION.md").write_text("\n".join(lines), encoding="utf-8")
+    (ROOT.parent / "docs" / "EVALUATION.md").write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> int:

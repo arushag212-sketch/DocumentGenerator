@@ -1,4 +1,4 @@
-# scripts/check_env.ps1
+# backend/scripts/check_env.ps1
 # Verifies system environment versions for reproducible local builds.
 
 $ErrorActionPreference = "Stop"
@@ -75,7 +75,7 @@ try {
 }
 
 # 4. Frontend Package.json Pins Check
-$pkgJsonPath = Join-Path $root "web/package.json"
+$pkgJsonPath = Join-Path $root "../frontend/package.json"
 if (Test-Path $pkgJsonPath) {
     $pkgJson = Get-Content $pkgJsonPath -Raw | ConvertFrom-Json
     $tiptapCore = $pkgJson.dependencies.'@tiptap/core'
