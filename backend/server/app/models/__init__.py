@@ -401,3 +401,15 @@ class AuditLog(TimestampMixin, Base):
     entity_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     ip: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+
+class AICache(Base):
+    __tablename__ = "ai_cache"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    club_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # json | text
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    response: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
+    hits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

@@ -80,6 +80,13 @@ class Settings(BaseModel):
 
     LOW_MEMORY_MODE: bool = False
 
+    # AI Configuration (Gemini & Groq Fallback, Caching, Determinism)
+    AI_TEMPERATURE: float = 0.0
+    AI_CACHE_ENABLED: bool = True
+    AI_CACHE_TTL_HOURS: int = 168
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+
     # Google OAuth & Email Domain Policy
     GOOGLE_CLIENT_ID: str = ""
     ALLOWED_EMAIL_DOMAIN: str = ""
@@ -161,6 +168,25 @@ class Settings(BaseModel):
         low_mem = os.environ.get("LOW_MEMORY_MODE")
         if low_mem is not None:
             self.LOW_MEMORY_MODE = low_mem.strip().lower() in ("true", "1", "yes", "on")
+
+        # AI Settings
+        temp_env = os.environ.get("AI_TEMPERATURE", "0").strip()
+        try:
+            self.AI_TEMPERATURE = float(temp_env)
+        except (ValueError, TypeError):
+            self.AI_TEMPERATURE = 0.0
+
+        ai_cache_env = os.environ.get("AI_CACHE_ENABLED", "true").strip().lower()
+        self.AI_CACHE_ENABLED = ai_cache_env in ("true", "1", "yes", "on")
+
+        ttl_env = os.environ.get("AI_CACHE_TTL_HOURS", "168").strip()
+        try:
+            self.AI_CACHE_TTL_HOURS = int(ttl_env)
+        except (ValueError, TypeError):
+            self.AI_CACHE_TTL_HOURS = 168
+
+        self.GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+        self.GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
 
 
 settings = Settings()

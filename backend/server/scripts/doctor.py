@@ -335,51 +335,74 @@ def check_ai() -> list[CheckResult]:
     from server.app.core.config import _load_env_file
     _load_env_file()
 
+    results: list[CheckResult] = []
+
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key or not api_key.strip():
-        return [
+        results.append(
             CheckResult(
                 name="Google Gemini AI Integration",
                 passed=True,
                 message="GEMINI_API_KEY is not set (optional in development; offline mode active). Set GEMINI_API_KEY to enable live AI template drafting.",
             )
-        ]
-
-    from docgen.llm import discover_gemini_models
-    try:
-        discovered = discover_gemini_models(api_key.strip(), force_refresh=True)
-        if not discovered:
-            return [
+        )
+    else:
+        from docgen.llm import discover_gemini_models
+        try:
+            discovered = discover_gemini_models(api_key.strip(), force_refresh=True)
+            if not discovered:
+                results.append(
+                    CheckResult(
+                        name="Google Gemini AI Integration",
+                        passed=False,
+                        message="No compatible Gemini flash models found.",
+                        fix_instruction="Verify your GEMINI_API_KEY has access to Gemini flash models.",
+                    )
+                )
+            else:
+                chosen_model = discovered[0]
+                models_str = ", ".join(discovered[:5]) + (f" (+{len(discovered)-5} more)" if len(discovered) > 5 else "")
+                results.append(
+                    CheckResult(
+                        name="Google Gemini AI Integration",
+                        passed=True,
+                        message=(
+                            f"Gemini API connected. Discovered flash models: [{models_str}]. "
+                            f"Selected model for docgen: '{chosen_model}'."
+                        ),
+                    )
+                )
+        except Exception as e:
+            results.append(
                 CheckResult(
                     name="Google Gemini AI Integration",
                     passed=False,
-                    message="No compatible Gemini flash models found.",
-                    fix_instruction="Verify your GEMINI_API_KEY has access to Gemini flash models.",
+                    message=f"Gemini API check failed: {e}",
+                    fix_instruction="Verify your GEMINI_API_KEY in .env.",
                 )
-            ]
+            )
 
-        configured_model = os.environ.get("GEMINI_MODEL")
-        chosen_model = discovered[0]
-        models_str = ", ".join(discovered[:5]) + (f" (+{len(discovered)-5} more)" if len(discovered) > 5 else "")
-        return [
+    # Groq AI Fallback
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if groq_key and groq_key.strip():
+        groq_model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+        results.append(
             CheckResult(
-                name="Google Gemini AI Integration",
+                name="Groq AI Integration (Fallback)",
                 passed=True,
-                message=(
-                    f"Gemini API connected. Discovered flash models: [{models_str}]. "
-                    f"Selected model for docgen: '{chosen_model}'."
-                ),
+                message=f"Groq configured (model: {groq_model}). Automatic fallback active when Gemini quota is exceeded.",
             )
-        ]
-    except Exception as e:
-        return [
+        )
+    else:
+        results.append(
             CheckResult(
-                name="Google Gemini AI Integration",
-                passed=False,
-                message=f"Gemini API check failed: {e}",
-                fix_instruction="Verify your GEMINI_API_KEY in .env.",
+                name="Groq AI Integration (Fallback)",
+                passed=True,
+                message="GROQ_API_KEY is not set (optional fallback). Set GROQ_API_KEY to enable automatic fallback when Gemini quota is exceeded.",
             )
-        ]
+        )
+
+    return results
 
 
 def check_optional_services() -> list[tuple[str, str, str]]:

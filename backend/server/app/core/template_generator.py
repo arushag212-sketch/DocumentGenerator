@@ -782,7 +782,7 @@ def generate_draft_template(
 
     # 5. Call LLM with 1 retry on schema validation failure
     try:
-        raw_json = client.generate_json(full_prompt, schema)
+        raw_json = client.generate_json(full_prompt, schema, club_id=club_id)
     except AIServiceError as ai_err:
         err_code = status.HTTP_503_SERVICE_UNAVAILABLE if isinstance(ai_err, AIAuthenticationError) else status.HTTP_502_BAD_GATEWAY
         raise HTTPException(
@@ -803,7 +803,7 @@ def generate_draft_template(
             f"Ensure all required fields (name, category, description, fields, blocks) are present and conform to schema. Return corrected JSON:"
         )
         try:
-            retry_json = client.generate_json(retry_prompt, schema)
+            retry_json = client.generate_json(retry_prompt, schema, club_id=club_id)
         except AIServiceError as ai_err:
             err_code = status.HTTP_503_SERVICE_UNAVAILABLE if isinstance(ai_err, AIAuthenticationError) else status.HTTP_502_BAD_GATEWAY
             raise HTTPException(

@@ -30,6 +30,12 @@ services:
         value: svnit.ac.in
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: AI_TEMPERATURE
+        value: "0"
+      - key: AI_CACHE_ENABLED
+        value: "true"
       # Files live in Supabase Storage; the container disk is only a working copy
       - key: STORAGE_BACKEND
         value: s3
@@ -58,6 +64,8 @@ services:
       - key: APP_BASE_URL
         sync: false
       - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
         sync: false
       - key: SEED_DEMO_CLUBS
         value: "true"
