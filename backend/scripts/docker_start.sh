@@ -18,7 +18,10 @@ else
 fi
 
 if [ "${SEED_DEMO_CLUBS:-false}" = "true" ]; then
+  echo "Setting up demo clubs (SEED_DEMO_CLUBS=true)..."
   python -m server.scripts.seed_demo_clubs --owners-only || echo "Demo club setup failed (non-fatal)."
+else
+  echo "Demo club setup skipped: SEED_DEMO_CLUBS is not 'true'."
 fi
 
 # Run health doctor after migrations and seed; notices are diagnostic only.

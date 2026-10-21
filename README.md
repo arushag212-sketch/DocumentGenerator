@@ -3,11 +3,29 @@
 Official documents for SVNIT student clubs (permission letters, approval notes, certificates, bills,
 minutes) in minutes instead of hours. Describe what you need, check the details, download PDF or Word.
 
-- **Sign in with your SVNIT Google account** (only `@svnit.ac.in` addresses).
+- **Sign in with your SVNIT Google account** (`rollno@dept.svnit.ac.in`, any department).
 - **Each club has its own space:** members, letterhead, logo, templates and reference numbers.
 - **Templates:** built-in SVNIT formats, a visual editor, and AI help to draft or import new ones.
 - **Documents:** generated from one description, numbered automatically, reviewed and approved in the app.
   Approved PDFs carry a code anyone can verify at `/verify`.
+
+## Live demo
+
+**https://clubdocs.vercel.app**
+
+Five demo clubs with their official logos, one owner account each (email and password sign-in):
+
+| Club | Owner email |
+|---|---|
+| ACM Student Chapter, SVNIT | `acm.owner@demo.svnit.ac.in` |
+| Google Developer Groups on Campus, SVNIT | `gdgc.owner@demo.svnit.ac.in` |
+| Centre for Human Resource Development (CHRD), SVNIT | `chrd.owner@demo.svnit.ac.in` |
+| Drishti, SVNIT | `drishti.owner@demo.svnit.ac.in` |
+| Raag, SVNIT | `raag.owner@demo.svnit.ac.in` |
+
+All five use the password `ClubDocs@1234`. These are demo accounts only; real clubs sign in with
+their SVNIT Google account. The first visit after a quiet spell can take up to a minute while the
+free server wakes up.
 
 ## Tech stack
 
@@ -16,7 +34,7 @@ minutes) in minutes instead of hours. Describe what you need, check the details,
 | Website | React 18, TypeScript, Vite, Tailwind CSS, TipTap editor |
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2, Alembic |
 | Documents | python-docx and docxtpl (Word), LibreOffice (PDF), PyMuPDF (page images) |
-| AI | Google Gemini (optional; simple built-in rules without a key) |
+| AI | Google Gemini, with Groq as a fallback and a response cache (optional; simple built-in rules without a key) |
 | Data | SQLite locally, PostgreSQL in production; files on disk or Supabase Storage |
 
 ## Run it locally (Windows)
