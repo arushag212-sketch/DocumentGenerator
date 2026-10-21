@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
-import { ClubSearchResult, JoinRequest } from '../types';
+import { ClubSearchResult, JoinRequest, ClubPosition } from '../types';
 import {
   Building2,
   PlusCircle,
@@ -21,14 +21,15 @@ import {
 
 type AccessLevel = 'editor' | 'viewer';
 
-const POSITIONS = [
-  'Executive Member',
-  'Secretary',
-  'Treasurer',
-  'Chairperson',
-  'Co-Chairperson',
-  'Faculty Advisor',
-  'Other',
+const FALLBACK_POSITIONS: ClubPosition[] = [
+  { key: 'faculty_chairman', label: 'Faculty Chairman', group: 'faculty', signs: true, help: 'Signs approval notes and bills as the club\'s faculty chairman.' },
+  { key: 'faculty_co_chairman', label: 'Faculty Co-Chairman', group: 'faculty', signs: true, help: 'Second faculty signatory on approval notes.' },
+  { key: 'faculty_incharge', label: 'Faculty In-charge (venue)', group: 'faculty', signs: false, help: 'Named on permission letters for a venue they look after.' },
+  { key: 'student_head', label: 'Student Head/Chairperson', group: 'student', signs: true, help: 'Signs letters and receipts on behalf of the students.' },
+  { key: 'student_secretary', label: 'Student Secretary', group: 'student', signs: true, help: 'Co-signs letters with the student head.' },
+  { key: 'treasurer', label: 'Treasurer', group: 'student', signs: true, help: 'Signs bill summaries and certificates of expenditure.' },
+  { key: 'technical_assistant', label: 'Technical Assistant', group: 'staff', signs: false, help: 'Named on permission letters for labs and halls.' },
+  { key: 'other', label: 'Other', group: 'other', signs: false, help: 'Any other position; give it a designation.' },
 ];
 
 const ACCESS_OPTIONS: { value: AccessLevel; title: string; body: string; icon: React.ReactNode }[] = [
@@ -106,9 +107,20 @@ export const OnboardingClubPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mode, setMode] = useState<'join' | 'create'>('join');
 
+  const [positions, setPositions] = useState<ClubPosition[]>([]);
+  useEffect(() => {
+    api.clubs
+      .getPositions()
+      .then((data) => setPositions(data || []))
+      .catch(() => setPositions([]));
+  }, []);
+
+  const availablePositions = positions.length > 0 ? positions : FALLBACK_POSITIONS;
+  const signatoryPositions = availablePositions.filter((p) => p.signs);
+
   // Join form
   const [selectedClubId, setSelectedClubId] = useState<string>('');
-  const [requestedPosition, setRequestedPosition] = useState('Executive Member');
+  const [requestedPosition, setRequestedPosition] = useState('Student Head/Chairperson');
   const [customPosition, setCustomPosition] = useState('');
   const [accessLevel, setAccessLevel] = useState<AccessLevel>('editor');
   const [joinMessage, setJoinMessage] = useState('');
@@ -209,7 +221,17 @@ export const OnboardingClubPage: React.FC = () => {
       setJoinError('Pick a club from the list first.');
       return;
     }
-    const finalPosition = requestedPosition === 'Other' ? customPosition.trim() : requestedPosition;
+    let finalPosition = requestedPosition;
+    if (requestedPosition === 'Other') {
+      const trimmedCustom = customPosition.trim();
+      if (!trimmedCustom) {
+        setJoinError('Tell the club admin your position.');
+        return;
+      }
+      finalPosition = trimmedCustom.toLowerCase().startsWith('other:')
+        ? trimmedCustom
+        : `Other: ${trimmedCustom}`;
+    }
     if (!finalPosition) {
       setJoinError('Tell the club admin your position.');
       return;
@@ -271,7 +293,7 @@ export const OnboardingClubPage: React.FC = () => {
         name: newClubName.trim(),
         short_name: newClubShortName.trim().toUpperCase(),
         chapter_code: newClubChapterCode.trim() || undefined,
-        position: myPositionInNewClub.trim() || 'Chairperson',
+        position: myPositionInNewClub.trim() || 'Student Head/Chairperson',
         is_signatory: true,
       });
       await api.clubs.uploadLogo(created.id, newClubLogo);
@@ -529,9 +551,9 @@ export const OnboardingClubPage: React.FC = () => {
                   onChange={(e) => setRequestedPosition(e.target.value)}
                   className="input-field"
                 >
-                  {POSITIONS.map((p) => (
-                    <option key={p} value={p}>
-                      {p === 'Other' ? 'Other (custom title)' : p}
+                  {availablePositions.map((p) => (
+                    <option key={p.key} value={p.label}>
+                      {p.key === 'other' || p.label === 'Other' ? 'Other (custom title)' : p.label}
                     </option>
                   ))}
                 </select>
@@ -549,6 +571,7 @@ export const OnboardingClubPage: React.FC = () => {
                     required
                     className="input-field"
                   />
+                  <p className="text-xs text-slate-500 mt-1">Custom positions cannot sign documents.</p>
                 </div>
               )}
 
@@ -662,14 +685,18 @@ export const OnboardingClubPage: React.FC = () => {
 
             <div>
               <label htmlFor="club-position" className="field-label">Your position in this club</label>
-              <input
+              <select
                 id="club-position"
-                type="text"
                 value={myPositionInNewClub}
                 onChange={(e) => setMyPositionInNewClub(e.target.value)}
-                required
                 className="input-field"
-              />
+              >
+                {signatoryPositions.map((p) => (
+                  <option key={p.key} value={p.label}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <button

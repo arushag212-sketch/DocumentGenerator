@@ -315,6 +315,14 @@ export interface ClubSearchResult {
   has_logo?: boolean;
 }
 
+export interface ClubPosition {
+  key: string;
+  label: string;
+  group: 'faculty' | 'student' | 'staff' | 'other';
+  signs: boolean;
+  help: string;
+}
+
 export interface JoinRequest {
   id: string;
   club_id: string;

@@ -114,23 +114,19 @@ def _club_to_out(club: Club, my_role: Optional[str], db: Session) -> ClubOut:
 
 from sqlalchemy import func
 
+from server.app.core.club_positions import POSITIONS
+
 FIXED_POSITIONS: dict[str, str] = {
-    "Student Head/Chairperson": "student_head",
-    "Student Secretary": "student_secretary",
-    "Treasurer": "treasurer",
-    "Faculty Chairman": "faculty_chairman",
-    "Faculty Co-Chairman": "faculty_co_chairman",
-    "Core member": "core_member",
-    "Member": "member",
-    "Other": "member",
+    p["label"]: p["key"] for p in POSITIONS
 }
+# Backward compatibility mappings for legacy stored positions / alternative spacing:
+FIXED_POSITIONS.setdefault("Student Head / Chairperson", "student_head")
+FIXED_POSITIONS.setdefault("Core member", "core_member")
+FIXED_POSITIONS.setdefault("Member", "member")
+FIXED_POSITIONS["Other"] = "member"
 
 SIGNATORY_ROLES: set[str] = {
-    "student_head",
-    "student_secretary",
-    "treasurer",
-    "faculty_chairman",
-    "faculty_co_chairman",
+    p["key"] for p in POSITIONS if p.get("signs")
 }
 
 
@@ -399,6 +395,12 @@ def list_clubs(
                 included_ids.add(club.id)
 
     return clubs_out
+
+
+@router.get("/positions")
+def list_positions_catalog(current_user: User = Depends(get_current_user)):
+    """Club positions available across clubs (who signs which documents). Requires authentication."""
+    return POSITIONS
 
 
 @router.post("", response_model=ClubOut, status_code=status.HTTP_201_CREATED)

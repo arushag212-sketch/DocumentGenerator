@@ -21,7 +21,7 @@ POSITIONS: list[dict] = [
      "help": "Second faculty signatory on approval notes."},
     {"key": "faculty_incharge", "label": "Faculty In-charge (venue)", "group": "faculty", "signs": False,
      "help": "Named on permission letters for a venue they look after."},
-    {"key": "student_head", "label": "Student Head / Chairperson", "group": "student", "signs": True,
+    {"key": "student_head", "label": "Student Head/Chairperson", "group": "student", "signs": True,
      "help": "Signs letters and receipts on behalf of the students."},
     {"key": "student_secretary", "label": "Student Secretary", "group": "student", "signs": True,
      "help": "Co-signs letters with the student head."},

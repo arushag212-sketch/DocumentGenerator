@@ -289,8 +289,10 @@ export const api = {
     getPermissions: (clubId: string | number) => apiFetch<ClubPermissions>(`/clubs/${clubId}/permissions`),
     getAuditLogs: (clubId: string | number) => apiFetch<AuditLog[]>(`/clubs/${clubId}/audit-log?limit=200`),
     getPeople: (clubId: string | number) => apiFetch<Person[]>(`/clubs/${clubId}/people`),
-    getPositions: (clubId: string | number) =>
-      apiFetch<{ key: string; label: string; group: 'faculty' | 'student' | 'staff' | 'other'; signs: boolean; help: string }[]>(`/clubs/${clubId}/positions`),
+    getPositions: (clubId?: string | number) =>
+      apiFetch<{ key: string; label: string; group: 'faculty' | 'student' | 'staff' | 'other'; signs: boolean; help: string }[]>(
+        clubId ? `/clubs/${clubId}/positions` : '/clubs/positions'
+      ),
     addPerson: (clubId: string | number, person: Partial<Person>) =>
       apiFetch<Person>(`/clubs/${clubId}/people`, {
         method: 'POST',
