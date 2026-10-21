@@ -236,7 +236,7 @@ export const api = {
   },
 
   clubs: {
-    list: () => apiFetch<Club[]>('/clubs/'),
+    list: () => apiFetch<Club[]>('/clubs'),
     search: (q: string = '') => apiFetch<ClubSearchResult[]>(`/clubs/search?q=${encodeURIComponent(q)}`),
     createClub: (data: { name: string; short_name: string; chapter_code?: string; position?: string; is_signatory?: boolean }) =>
       apiFetch<Club>('/clubs', {
