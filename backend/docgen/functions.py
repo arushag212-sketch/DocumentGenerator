@@ -167,6 +167,14 @@ def _parse_date(val: Any) -> date | None:
     if isinstance(val, date):
         return val
     s = str(val).strip()
+    # Year-first dates (2026-11-08, as the AI and date pickers send them) are year-month-day.
+    # dayfirst=True below would read them as year-day-month.
+    if re.match(r"^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}", s):
+        try:
+            from dateutil.parser import parse as parse_date
+            return parse_date(s, yearfirst=True, dayfirst=False).date()
+        except Exception:
+            pass
     try:
         from dateutil.parser import parse as parse_date
         return parse_date(s, dayfirst=True).date()

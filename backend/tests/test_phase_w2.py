@@ -468,7 +468,7 @@ def test_w2_permanent_svnit_logo_in_web_shell(client):
     html = res.text
 
     # SVNIT logo asset reference in HTML
-    assert "/assets/svnit_crest.png" in html or "svnit_crest" in html
+    assert "svnit_crest" in html or "clubdocs_logo" in html  # tab icon is the ClubDocs logo; the crest stays inside the app
     # Verified Official Platform text MUST NOT be present
     assert "Verified Official Platform" not in html
 
