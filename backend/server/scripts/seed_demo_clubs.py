@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -150,6 +151,55 @@ def _get_acm_spec() -> dict:
     }
 
 
+def _restore_missing_logo(club_id: str, spec: dict) -> bool:
+    """Give an existing demo club its logo when it has none, or its logo file never reached storage.
+
+    Only the logo is touched, written the same way the logo upload endpoint does, so a club whose
+    logo was uploaded but lost (for example when the bucket upload failed) recovers on the next start.
+    """
+    from server.app.core.database import SessionLocal
+    from server.app.core.storage import get_storage
+    from server.app.core.template_compiler import normalize_logo_image
+    from server.app.models import Asset, Club
+
+    logo = ROOT / spec["logo"] if spec.get("logo") else None
+    if logo is None or not logo.exists():
+        return False
+    storage = get_storage()
+    with SessionLocal() as db:
+        club = db.query(Club).filter(Club.id == club_id).first()
+        if club is None:
+            return False
+        settings = dict(club.settings or {})
+        current = None
+        if settings.get("logo_asset_id"):
+            current = db.query(Asset).filter(Asset.id == settings["logo_asset_id"]).first()
+        if current is None:
+            current = (
+                db.query(Asset)
+                .filter(Asset.club_id == club.id, Asset.kind == "logo")
+                .order_by(Asset.created_at.desc())
+                .first()
+            )
+        if current is not None and storage.exists(current.storage_key):
+            return False
+
+        data = normalize_logo_image(logo.read_bytes())
+        key, sha256 = storage.save_content_addressed("assets", data, "png")
+        asset = db.query(Asset).filter(Asset.club_id == club.id, Asset.sha256 == sha256).first()
+        if asset is None:
+            asset = Asset(
+                id=str(uuid.uuid4()), club_id=club.id, kind="logo", filename=logo.name, mime="image/png",
+                sha256=sha256, size=len(data), storage_key=key, is_system=False,
+            )
+            db.add(asset)
+            db.flush()
+        settings["logo_asset_id"] = asset.id
+        club.settings = settings
+        db.commit()
+        return True
+
+
 def seed(no_ai: bool = False, owners_only: bool = False) -> list[dict[str, str]] | None:
     from server.app.core.rate_limit import clear_rate_limits
     from server.app.core.database import SessionLocal
@@ -186,6 +236,8 @@ def seed(no_ai: bool = False, owners_only: bool = False) -> list[dict[str, str]]
 
             owner_email = _email(slug, "owner", domain)
             if existing_club is not None:
+                if _restore_missing_logo(existing_club.id, spec):
+                    print(f"{existing_club.name}: logo was missing, added")
                 print(f"{existing_club.name} ({owner_email}): already set up, skipped")
                 report.append(f"{slug}: already set up, skipped")
                 continue
