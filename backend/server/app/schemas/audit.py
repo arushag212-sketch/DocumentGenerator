@@ -17,3 +17,6 @@ class AuditLogOut(BaseModel):
     meta: dict[str, Any] = {}
     ip: Optional[str] = None
     created_at: datetime
+    # Who did it (filled in by the API; empty for system actions)
+    actor_name: Optional[str] = None
+    actor_email: Optional[str] = None

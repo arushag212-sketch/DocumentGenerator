@@ -56,15 +56,17 @@ export interface Person {
 }
 
 export interface AuditLog {
-  id: string | number;
-  actor_email: string;
+  id: string;
+  club_id: string | null;
+  user_id: string | null;
   action: string;
-  resource_type: string;
-  resource_id: string | null;
-  club_id: string | number | null;
-  changes_json: string | null;
-  ip_address: string | null;
+  entity_type: string;
+  entity_id: string | null;
+  meta: Record<string, any>;
+  ip: string | null;
   created_at: string;
+  actor_name?: string | null;
+  actor_email?: string | null;
 }
 
 export interface ClubPermissions {

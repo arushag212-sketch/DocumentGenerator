@@ -47,8 +47,10 @@ class FileSystemTemplateSource:
 def _resolve_docx_key(key: Optional[str]) -> Path:
     """Template DOCX keys are absolute paths or keys relative to the storage root."""
     path = Path(key or "")
-    if path.is_absolute() or path.exists():
+    if path.exists():
         return path
+    # Missing absolute paths go through storage too: it maps keys saved before the storage folder
+    # moved, and (with STORAGE_BACKEND=s3) brings files back after a restart wiped the disk.
     try:
         from server.app.core.storage import get_storage, LocalDiskStorage
 

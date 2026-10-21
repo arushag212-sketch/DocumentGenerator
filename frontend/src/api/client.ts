@@ -277,7 +277,7 @@ export const api = {
         body: JSON.stringify(data),
       }),
     getMembers: (clubId: string | number) => apiFetch<ClubMember[]>(`/clubs/${clubId}/members`),
-    addMember: (clubId: string | number, data: { user_email: string; role: string; title?: string }) =>
+    addMember: (clubId: string | number, data: { email: string; role: string; position?: string }) =>
       apiFetch<ClubMember>(`/clubs/${clubId}/members`, {
         method: 'POST',
         body: JSON.stringify(data),
@@ -287,7 +287,7 @@ export const api = {
         method: 'DELETE',
       }),
     getPermissions: (clubId: string | number) => apiFetch<ClubPermissions>(`/clubs/${clubId}/permissions`),
-    getAuditLogs: (clubId: string | number) => apiFetch<AuditLog[]>(`/clubs/${clubId}/audit-logs`),
+    getAuditLogs: (clubId: string | number) => apiFetch<AuditLog[]>(`/clubs/${clubId}/audit-log?limit=200`),
     getPeople: (clubId: string | number) => apiFetch<Person[]>(`/clubs/${clubId}/people`),
     getPositions: (clubId: string | number) =>
       apiFetch<{ key: string; label: string; group: 'faculty' | 'student' | 'staff' | 'other'; signs: boolean; help: string }[]>(`/clubs/${clubId}/positions`),
@@ -320,7 +320,7 @@ export const api = {
         method: 'DELETE',
       }),
     revealSensitive: (clubId: string | number, personId: string | number) =>
-      apiFetch<{ field: string; value: string | null }>(`/clubs/${clubId}/people/${personId}/sensitive?reveal=true`),
+      apiFetch<{ field: string; value: string | null }>(`/clubs/${clubId}/people/${personId}/sensitive`),
     getInvites: (clubId: string | number) => apiFetch<Invite[]>(`/clubs/${clubId}/invites`),
     createInvite: (clubId: string | number, data: { role: string; max_uses?: number; expiry_days?: number }) =>
       apiFetch<Invite>(`/clubs/${clubId}/invites`, {
@@ -686,11 +686,6 @@ export const api = {
       apiFetch<any[]>(`/clubs/${clubId}/events/active`),
     get: (clubId: string | number, eventId: string) =>
       apiFetch<any>(`/clubs/${clubId}/events/${eventId}`),
-    create: (clubId: string | number, payload: { title: string; event_code?: string; record?: Record<string, any> }) =>
-      apiFetch<any>(`/clubs/${clubId}/events`, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
     update: (clubId: string | number, eventId: string, payload: { title?: string; event_code?: string; record?: Record<string, any> }, updateDocuments = false) =>
       apiFetch<any>(`/clubs/${clubId}/events/${eventId}?update_documents=${updateDocuments}`, {
         method: 'PUT',

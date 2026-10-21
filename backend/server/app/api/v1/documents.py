@@ -1675,8 +1675,9 @@ def preview_template(
                 time.sleep(1)
                 try:
                     pdf_path, _ = renderer._convert_to_pdf(rendered_docx)
-                except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"PDF conversion failed: {e}")
+                except Exception:
+                    logger.exception("Template preview: PDF conversion failed")
+                    raise HTTPException(status_code=500, detail="The preview could not be made right now. Please try again in a moment.")
 
             pdf_doc = pymupdf.open(str(pdf_path))
             detected_orientation = "portrait"
@@ -1705,10 +1706,9 @@ def preview_template(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Preview error: {e}")
+    except Exception:
+        logger.exception("Template preview failed")
+        raise HTTPException(status_code=500, detail="The preview could not be made. Check the template for empty or broken blocks and try again.")
 
 
 @router.post("/templates/{template_id}/publish", response_model=TemplateGalleryItemOut)
@@ -2862,10 +2862,16 @@ def download_batch_zip(
             .first()
         )
         if doc_v:
-            if doc_v.docx_key and Path(doc_v.docx_key).exists():
-                files_to_zip.append((Path(doc_v.docx_key), f"{base_name}.docx"))
-            if doc_v.pdf_key and Path(doc_v.pdf_key).exists():
-                files_to_zip.append((Path(doc_v.pdf_key), f"{base_name}.pdf"))
+            # Through storage, so moved or remote-backed files are found too
+            for key, ext in ((doc_v.docx_key, "docx"), (doc_v.pdf_key, "pdf")):
+                if not key:
+                    continue
+                try:
+                    src = local_storage.local_path(key)
+                except ValueError:
+                    continue
+                if src.exists():
+                    files_to_zip.append((src, f"{base_name}.{ext}"))
 
     if not files_to_zip:
         raise HTTPException(status_code=404, detail="Batch documents not available on storage.")

@@ -7,15 +7,33 @@ interface AuditTabProps {
   clubId: string | number;
 }
 
+/** Readable label for an audit action code, e.g. "document_approved" -> "Document approved". */
+const actionLabel = (code: string) => {
+  const s = code.replace(/_/g, ' ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+/** Short "key: value" summary of an entry's details, skipping internal ids. */
+const metaSummary = (meta: Record<string, any> | null | undefined) =>
+  Object.entries(meta || {})
+    .filter(([k, v]) => v !== null && v !== '' && !/(^|_)id$|hash/.test(k))
+    .slice(0, 4)
+    .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+    .join(' · ');
+
 export const AuditTab: React.FC<AuditTabProps> = ({ clubId }) => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchLogs = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await api.clubs.getAuditLogs(clubId);
       setLogs(data);
+    } catch (err: any) {
+      setError(err.message || 'Could not load the activity log.');
     } finally {
       setLoading(false);
     }
@@ -54,10 +72,12 @@ export const AuditTab: React.FC<AuditTabProps> = ({ clubId }) => {
           <span className="text-xs font-semibold text-slate-600">
             Audit Records ({logs.length})
           </span>
-          <span className="text-xs text-slate-400 font-mono">Scoped by Club #{clubId}</span>
+          <span className="text-xs text-slate-400">Latest 200 entries</span>
         </div>
 
-        {loading ? (
+        {error ? (
+          <div className="p-8 text-center text-red-600 text-sm">{error}</div>
+        ) : loading ? (
           <div className="p-8 text-center text-slate-400 text-sm">Loading audit logs...</div>
         ) : logs.length === 0 ? (
           <div className="p-8 text-center text-slate-500 text-sm">No audit activity logged yet.</div>
@@ -87,20 +107,23 @@ export const AuditTab: React.FC<AuditTabProps> = ({ clubId }) => {
                         second: '2-digit',
                       })}
                     </td>
-                    <td className="py-3.5 px-6 font-medium text-slate-900">{log.actor_email}</td>
                     <td className="py-3.5 px-6">
-                      <span className="bg-slate-100 text-slate-800 font-mono text-xs px-2 py-0.5 rounded font-medium border border-slate-200">
-                        {log.action}
+                      <span className="block font-medium text-slate-900">{log.actor_name || 'System'}</span>
+                      {log.actor_email && <span className="block text-slate-500">{log.actor_email}</span>}
+                    </td>
+                    <td className="py-3.5 px-6">
+                      <span className="bg-slate-100 text-slate-800 text-xs px-2 py-0.5 rounded font-medium border border-slate-200 whitespace-nowrap">
+                        {actionLabel(log.action)}
                       </span>
                     </td>
-                    <td className="py-3.5 px-6 font-mono text-slate-600 text-xs">
-                      {log.resource_type} {log.resource_id ? `#${log.resource_id}` : ''}
+                    <td className="py-3.5 px-6 text-slate-600 text-xs capitalize">
+                      {log.entity_type.replace(/_/g, ' ')}
                     </td>
                     <td className="py-3.5 px-6 font-mono text-slate-500 text-xs">
-                      {log.ip_address || '—'}
+                      {log.ip || '—'}
                     </td>
-                    <td className="py-3.5 px-6 text-slate-600 font-mono text-xs max-w-xs truncate">
-                      {log.changes_json || '—'}
+                    <td className="py-3.5 px-6 text-slate-600 text-xs max-w-xs truncate" title={metaSummary(log.meta)}>
+                      {metaSummary(log.meta) || '—'}
                     </td>
                   </tr>
                 ))}

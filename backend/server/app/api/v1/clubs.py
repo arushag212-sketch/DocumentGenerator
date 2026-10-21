@@ -1081,6 +1081,8 @@ def add_member(
             role=payload.role,
             status="active",
         )
+    if payload.position and payload.position.strip():
+        membership.position = payload.position.strip()
 
     client_ip = request.client.host if request.client else None
     log_audit(
@@ -1220,6 +1222,30 @@ def remove_member(
 
 
 # ---------------- PEOPLE & SIGNATORIES (Field Encryption + ScopedRepository) ----------------
+
+
+@router.get("/{club_id}/people/{person_id}/sensitive")
+def reveal_person_mobile(
+    person_id: str,
+    request: Request,
+    ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Show one official's full mobile number to a club admin; every reveal is recorded."""
+    person = ScopedRepository(db, Person, club_id=ctx.club.id).get(person_id)
+    if not person:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Person not found")
+    log_audit(
+        db=db,
+        action="sensitive_field_revealed",
+        entity_type="person",
+        entity_id=person.id,
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        meta={"field": "mobile", "person": person.full_name},
+        ip=request.client.host if request.client else None,
+    )
+    return {"field": "mobile", "value": decrypt_field(person.mobile) if person.mobile else None}
 
 
 @router.get("/{club_id}/positions")
@@ -1778,9 +1804,19 @@ def get_club_audit_log(
     ctx: ClubContext = Depends(require_club_access(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    """View audit trail strictly via ScopedRepository."""
+    """View audit trail strictly via ScopedRepository, with the name and email of who acted."""
     audit_repo = ScopedRepository(db, AuditLog, club_id=ctx.club.id)
-    return audit_repo.list(skip=skip, limit=limit, order_by=AuditLog.created_at.desc())
+    entries = audit_repo.list(skip=skip, limit=limit, order_by=AuditLog.created_at.desc())
+    user_ids = {e.user_id for e in entries if e.user_id}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    out = []
+    for e in entries:
+        item = AuditLogOut.model_validate(e, from_attributes=True)
+        actor = users.get(e.user_id)
+        if actor:
+            item.actor_name, item.actor_email = actor.name, actor.email
+        out.append(item)
+    return out
 
 
 @router.post("/{club_id}/logo")

@@ -48,3 +48,37 @@ def test_cleanup_deletes_nothing_when_database_unreadable(db_session, monkeypatc
     assert logo.exists()
     assert report.orphans_count == 0
     assert any("Cleanup skipped" in line for line in report.logs)
+
+
+def test_cleanup_keeps_every_clubs_document_files_when_built_in_templates_exist(db_session):
+    """Regression: the per-club thumbnail loop reused `club_id`, which scoped the document scan to
+    the last club and deleted every other club's generated documents on startup."""
+    from server.app.models import Document, DocumentVersion, Template, TemplateVersion
+
+    storage = get_storage()
+    system = Template(id=str(uuid.uuid4()), club_id=None, slug=f"gc_sys_{uuid.uuid4().hex[:6]}", name="GC System",
+                      category="Test", is_system=True, status="published")
+    db_session.add(system)
+    db_session.flush()
+    tkey = storage.save(f"templates/gc_sys_{uuid.uuid4().hex[:6]}.docx", b"PK-test")
+    tver = TemplateVersion(id=str(uuid.uuid4()), template_id=system.id, version_no=1, schema_yaml="fields: []",
+                           docx_storage_key=tkey)
+    db_session.add(tver)
+
+    files = []
+    for tag in ("a", "b"):
+        club = _club(db_session, f"gcd{tag}{uuid.uuid4().hex[:6]}")
+        doc = Document(id=str(uuid.uuid4()), club_id=club.id, template_id=system.id, template_version_id=tver.id,
+                       title=f"Doc {tag}", status="ready")
+        db_session.add(doc)
+        db_session.flush()
+        key = storage.save(f"documents/{doc.id}/v1/doc_{tag}.pdf", b"%PDF-test")
+        db_session.add(DocumentVersion(id=str(uuid.uuid4()), document_id=doc.id, version_no=1, pdf_key=key,
+                                       record_snapshot={}))
+        files.append(storage.local_path(key))
+    db_session.commit()
+
+    storage_gc.run_storage_gc(apply=True)
+
+    for f in files:
+        assert f.exists(), f"cleanup deleted {f.name} although its document still exists"

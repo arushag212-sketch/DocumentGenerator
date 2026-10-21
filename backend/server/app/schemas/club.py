@@ -114,6 +114,7 @@ class ClubMemberOut(BaseModel):
 class AddMemberRequest(BaseModel):
     email: EmailStr
     role: str = Field("editor", pattern="^(admin|editor|viewer)$")
+    position: Optional[str] = Field(None, max_length=100)
 
 
 class UpdateMemberRoleRequest(BaseModel):

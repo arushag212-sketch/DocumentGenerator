@@ -92,3 +92,13 @@ def test_sign_out_other_devices_keeps_this_session(client):
     assert res.status_code == 200
     assert client.get("/api/v1/auth/me", headers=old_headers).status_code == 401
     assert client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {res.json()['access_token']}"}).status_code == 200
+
+
+def test_refresh_cookie_issues_a_new_session(client):
+    """Refresh keeps people signed in after the 30-minute access token expires."""
+    user = _user()
+    login = client.post("/api/v1/auth/login", json={"email": user.email, "password": "OldPassword123!"})
+    assert login.status_code == 200
+    res = client.post("/api/v1/auth/refresh", json={})
+    assert res.status_code == 200, res.text
+    assert res.json()["user"]["email"] == user.email

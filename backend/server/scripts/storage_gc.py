@@ -98,8 +98,10 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
                     referenced.add(str(thumb))
                     protected.add(str(thumb))
                     if tmpl.club_id is None:  # built-in: one preview per club
-                        for club_id in club_ids:
-                            per_club = active_storage.local_path(f"thumbnails/{tv.id}_{club_id}.{ext}")
+                        # Own loop variable: reusing club_id here scoped the document scan below to
+                        # one club and made every other club's document files look orphaned.
+                        for each_club_id in club_ids:
+                            per_club = active_storage.local_path(f"thumbnails/{tv.id}_{each_club_id}.{ext}")
                             referenced.add(str(per_club))
                             protected.add(str(per_club))
                 if tv.docx_storage_key:

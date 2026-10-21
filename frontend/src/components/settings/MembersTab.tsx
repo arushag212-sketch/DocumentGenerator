@@ -73,9 +73,9 @@ export const MembersTab: React.FC<MembersTabProps> = ({
 
     try {
       await api.clubs.addMember(clubId, {
-        user_email: email.trim(),
+        email: email.trim(),
         role,
-        title: title.trim() || undefined,
+        position: title.trim() || undefined,
       });
       setEmail('');
       setTitle('');
@@ -498,7 +498,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="student@example.com"
+                    placeholder="member@svnit.ac.in"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
@@ -512,10 +512,9 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                     onChange={(e) => setRole(e.target.value as RoleName)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
                   >
-                    <option value="editor">Editor (Draft Documents)</option>
-                    <option value="viewer">Viewer (Read Only)</option>
-                    <option value="treasurer">Treasurer (Financial Docs)</option>
-                    <option value="lead">Lead (Full Club Control)</option>
+                    {(myRole === 'owner' || myRole === 'admin') && <option value="admin">Admin (members, settings, approvals)</option>}
+                    <option value="editor">Editor (create documents)</option>
+                    <option value="viewer">Viewer (read only)</option>
                   </select>
                 </div>
 

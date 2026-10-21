@@ -541,7 +541,9 @@ class HomeCreateRequest(BaseModel):
 
 class HomeApplyAllRequest(BaseModel):
     event_id: str
-    changes: dict[str, Any]
+    # The results page sends "updates"; "changes" is accepted too
+    updates: Optional[dict[str, Any]] = None
+    changes: Optional[dict[str, Any]] = None
 
 
 class HomeAddDocumentRequest(BaseModel):
@@ -551,9 +553,12 @@ class HomeAddDocumentRequest(BaseModel):
 
 
 class HomeAiInstructRequest(BaseModel):
-    instruction: str
-    current_fields: dict[str, Any]
-    available_fields: list[dict[str, Any]]
+    instruction: str = Field(..., min_length=1, max_length=2000)
+    # The results page sends current_data (+ template_slug); current_fields/available_fields also work
+    current_data: Optional[dict[str, Any]] = None
+    current_fields: Optional[dict[str, Any]] = None
+    available_fields: Optional[list[dict[str, Any]]] = None
+    template_slug: Optional[str] = None
 
 
 class HomeCreateResponse(BaseModel):
@@ -819,14 +824,17 @@ def apply_all_endpoint(
     docs = doc_repo.all(Document.event_id == payload.event_id)
     if not docs:
         raise HTTPException(status_code=404, detail="No documents found for this event.")
+    changes = payload.updates or payload.changes or {}
 
     updated_docs = []
+    revised_count = 0
     for doc in docs:
         allowed = {f["key"] for f in workflow.editable_fields(db, doc)}
-        relevant_changes = {k: v for k, v in payload.changes.items() if k in allowed}
+        relevant_changes = {k: v for k, v in changes.items() if k in allowed}
         if relevant_changes:
             try:
                 workflow.revise_document(db, doc, ctx.user, relevant_changes, note="Applied across event documents")
+                revised_count += 1
             except HTTPException as exc:
                 if exc.detail and isinstance(exc.detail, dict) and exc.detail.get("code") == "NO_CHANGES":
                     pass
@@ -850,7 +858,7 @@ def apply_all_endpoint(
             "editable_fields": ef,
             "page_images": page_images,
         })
-    return {"documents": updated_docs}
+    return {"event_id": payload.event_id, "updated_documents_count": revised_count, "documents": updated_docs}
 
 
 @router.post("/add-document")
@@ -875,6 +883,10 @@ def add_document_endpoint(
     if existing_doc:
         ver = workflow.latest_version(db, existing_doc)
         base_data = dict(ver.record_snapshot or {})
+        # Shared event details carry over, but each document gets its own reference number;
+        # reusing the first document's ref_no hits the unique (club, ref_no) constraint.
+        for key in [k for k in base_data if k == "ref_no" or k.endswith("_ref_no")]:
+            base_data.pop(key, None)
     if payload.event_data:
         base_data.update(payload.event_data)
 
@@ -901,18 +913,16 @@ def add_document_endpoint(
     page_images = _page_images(ctx.club.id, doc.id, latest_ver, latest_ver.version_no)
     tmpl = db.query(Template).filter(Template.id == doc.template_id).first()
     return {
-        "document": {
-            "id": doc.id,
-            "template_slug": tmpl.slug if tmpl else "document",
-            "title": doc.title,
-            "ref_no": doc.ref_no,
-            "pdf_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/pdf",
-            "docx_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/docx",
-            "preview_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/preview",
-            "version_no": latest_ver.version_no,
-            "editable_fields": ef,
-            "page_images": page_images,
-        }
+        "id": doc.id,
+        "template_slug": tmpl.slug if tmpl else "document",
+        "title": doc.title,
+        "ref_no": doc.ref_no,
+        "pdf_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/pdf",
+        "docx_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/docx",
+        "preview_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc.id}/preview",
+        "version_no": latest_ver.version_no,
+        "editable_fields": ef,
+        "page_images": page_images,
     }
 
 
@@ -928,7 +938,11 @@ def ai_instruct_endpoint(
 
     check_rate_limit(f"ai_user:{ctx.user.id}", max_requests=10, window_seconds=60, db=db)
     llm = get_llm_client()
-    fields_summary = {f["key"]: f.get("label", f["key"]) for f in payload.available_fields if f.get("key")}
+    current = payload.current_data or payload.current_fields or {}
+    if payload.available_fields:
+        fields_summary = {f["key"]: f.get("label", f["key"]) for f in payload.available_fields if f.get("key")}
+    else:
+        fields_summary = {k: k.replace("_", " ").title() for k in current}
     schema = {
         "type": "object",
         "description": "JSON dictionary of field keys and their updated values",
@@ -936,7 +950,7 @@ def ai_instruct_endpoint(
     prompt = (
         f"You are helping a club member update document fields.\n"
         f"Instruction: {payload.instruction}\n"
-        f"Current field values: {json.dumps(payload.current_fields, default=str)}\n"
+        f"Current field values: {json.dumps(current, default=str)}\n"
         f"Available fields: {json.dumps(fields_summary)}\n"
         f"Return a JSON object containing ONLY the field keys that the user's instruction explicitly asks to change. "
         f"Do not invent facts or modify fields not mentioned in the instruction. "
@@ -953,4 +967,7 @@ def ai_instruct_endpoint(
             status_code=503,
             detail="AI assistant is temporarily unavailable. You can edit the fields directly in the form below.",
         )
-    return {"changes": changes}
+    explanation = (
+        "Updated " + ", ".join(fields_summary.get(k, k) for k in changes) + "." if changes else "No field changes were needed."
+    )
+    return {"proposed_updates": changes, "changes": changes, "explanation": explanation}

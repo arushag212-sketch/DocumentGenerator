@@ -11,6 +11,8 @@ Strict Integrity Rules:
 
 from __future__ import annotations
 
+import logging
+
 import io
 import json
 import os
@@ -74,6 +76,8 @@ def sanitize_filename(name: Any) -> str:
 
 MAX_BATCH_ROWS = 300
 
+
+logger = logging.getLogger("clubdocs.batch")
 
 class BatchGenerator:
     @staticmethod
@@ -759,7 +763,12 @@ class BatchGenerator:
                 shutil.rmtree(batch_dir, ignore_errors=True)
             if isinstance(e, HTTPException):
                 raise e
-            raise HTTPException(status_code=500, detail=f"Batch generation failed: {e}")
+            # Details go to the server log; people see a plain message, not SQL or file paths
+            logger.exception("Batch generation failed for club %s", club_id)
+            raise HTTPException(
+                status_code=500,
+                detail="The documents could not be generated. Please try again; if it keeps failing, contact your club admin.",
+            )
 
         # 4.5 Audit Log
         log_audit(
