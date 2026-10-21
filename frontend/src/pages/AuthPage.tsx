@@ -109,7 +109,7 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
       const isAllowed = domain === configuredDomain || domain.endsWith('.' + configuredDomain);
       if (!isAllowed) {
         setEmailFieldError(
-          `Please sign in with your official institute email (@${configuredDomain}). Personal accounts like Gmail can't be used.`
+          `Please sign in with your official SVNIT email (rollno@dept.${configuredDomain}). Personal accounts like Gmail can't be used.`
         );
         return;
       }
@@ -134,7 +134,12 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
       }
       navigate(from, { replace: true });
     } catch (err: any) {
-      const isDomain = err?.status === 403 && (err?.detail?.code === 'EMAIL_DOMAIN_NOT_ALLOWED' || (err?.message || '').toLowerCase().includes('email'));
+      const isDomain =
+        err?.status === 403 &&
+        (err?.detail?.code === 'EMAIL_DOMAIN_NOT_ALLOWED' ||
+          (err?.message || '').toLowerCase().includes('official svnit email') ||
+          (err?.message || '').toLowerCase().includes('email') ||
+          (err?.message || '').toLowerCase().includes('svnit'));
       setIsDomainError(Boolean(isDomain));
       setError(err.message || 'Login failed');
     } finally {
@@ -336,40 +341,31 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
               </div>
             )}
 
-            {(tab === 'login' || tab === 'register') && (
-              <div className="mb-5">
-                <GoogleSignInButton
-                  inviteCode={inviteCode.trim() || undefined}
-                  onSuccess={(_user) => {
-                    navigate(from, { replace: true });
-                  }}
-                  onError={(msg) => {
-                    setError(msg);
-                  }}
-                />
-                <p className="text-center text-xs text-slate-500 mt-2">
-                  Recommended: one click with your SVNIT Google account (@svnit.ac.in)
-                </p>
-                <div className="relative mt-5">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200" />
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="bg-white px-2.5 text-slate-400 font-medium">or use email and password</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {error && (
               <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-start gap-2">
                 <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <span>{error}</span>
+                  <span className="leading-relaxed">{error}</span>
                   {isDomainError && (
-                    <p className="mt-1.5 font-medium text-red-800">
-                      Tip: Use &ldquo;Sign in with Google&rdquo; above &mdash; that&rsquo;s the main way in.
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            window.google?.accounts?.id?.disableAutoSelect();
+                          } catch {
+                            // ignore
+                          }
+                          resetFormFeedback();
+                        }}
+                        className="inline-flex items-center gap-1 rounded bg-red-100 hover:bg-red-200 px-2.5 py-1 text-xs font-semibold text-red-800 transition-colors"
+                      >
+                        Use another account
+                      </button>
+                      <span className="text-red-800 font-medium">
+                        Tip: Use &ldquo;Sign in with Google&rdquo; with your official SVNIT account.
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -379,6 +375,32 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
               <div role="status" className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>{success}</span>
+              </div>
+            )}
+
+            {(tab === 'login' || tab === 'register') && (
+              <div className="mb-5">
+                <GoogleSignInButton
+                  inviteCode={inviteCode.trim() || undefined}
+                  onSuccess={(_user) => {
+                    navigate(from, { replace: true });
+                  }}
+                  onError={(msg, isDomain) => {
+                    setIsDomainError(Boolean(isDomain));
+                    setError(msg);
+                  }}
+                />
+                <p className="text-center text-xs text-slate-500 mt-2">
+                  Recommended: one click with your SVNIT Google account. Use your SVNIT email, e.g. rollno@dept.svnit.ac.in
+                </p>
+                <div className="relative mt-5">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-white px-2.5 text-slate-400 font-medium">or use email and password</span>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -396,7 +418,8 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
                       setLoginEmail(e.target.value);
                       if (emailFieldError) setEmailFieldError(null);
                     }}
-                    placeholder="you@svnit.ac.in"
+                    placeholder="u25cs051@coed.svnit.ac.in"
+                    helper="Use your SVNIT email, e.g. rollno@dept.svnit.ac.in"
                   />
                   {emailFieldError && (
                     <p className="text-xs text-red-600 mt-1.5">{emailFieldError}</p>
@@ -416,7 +439,7 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
             {tab === 'register' && (
               <form onSubmit={handleRegister} className="space-y-4">
                 <AuthInput icon={User} label="Full name" type="text" autoComplete="name" required value={fullName} onChange={(e: any) => setFullName(e.target.value)} placeholder="Your name" />
-                <AuthInput icon={Mail} label="SVNIT email" type="email" autoComplete="email" required value={registerEmail} onChange={(e: any) => setRegisterEmail(e.target.value)} placeholder="you@svnit.ac.in" />
+                <AuthInput icon={Mail} label="SVNIT email" type="email" autoComplete="email" required value={registerEmail} onChange={(e: any) => setRegisterEmail(e.target.value)} placeholder="u25cs051@coed.svnit.ac.in" helper="Use your SVNIT email, e.g. rollno@dept.svnit.ac.in" />
                 <PasswordInput icon={Lock} label="Password" autoComplete="new-password" required minLength={10} value={registerPassword} onChange={(e) => setRegisterPassword(e.target.value)} placeholder="At least 10 characters" helper="Common passwords are not allowed." resetKey={authResetKey} />
                 <AuthInput icon={KeyRound} label="Club invite code (optional)" type="text" value={inviteCode} onChange={(e: any) => setInviteCode(e.target.value.toUpperCase())} placeholder="e.g. ACM-A7B8C9" className="font-mono uppercase" />
                 <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5">
@@ -428,7 +451,7 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
             {tab === 'forgot' && (
               <div className="space-y-4">
                 <form onSubmit={handleForgotPassword} className="space-y-4">
-                  <AuthInput icon={Mail} label="Email" type="email" autoComplete="email" required value={forgotEmail} onChange={(e: any) => setForgotEmail(e.target.value)} placeholder="you@svnit.ac.in" />
+                  <AuthInput icon={Mail} label="Email" type="email" autoComplete="email" required value={forgotEmail} onChange={(e: any) => setForgotEmail(e.target.value)} placeholder="u25cs051@coed.svnit.ac.in" helper="Use your SVNIT email, e.g. rollno@dept.svnit.ac.in" />
                   <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5">
                     {loading ? 'Sending…' : 'Send reset link'}
                   </button>

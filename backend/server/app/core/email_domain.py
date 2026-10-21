@@ -7,7 +7,7 @@ from server.app.core.config import settings
 
 _domain = (settings.ALLOWED_EMAIL_DOMAIN or "svnit.ac.in").strip().lower()
 EMAIL_DOMAIN_REJECTION_MESSAGE = (
-    f"Please sign in with your official SVNIT email (@{_domain}). "
+    f"Please sign in with your official SVNIT email (rollno@dept.{_domain}). "
     "Personal accounts like Gmail can't be used."
 )
 EMAIL_DOMAIN_ERROR_CODE = "EMAIL_DOMAIN_NOT_ALLOWED"

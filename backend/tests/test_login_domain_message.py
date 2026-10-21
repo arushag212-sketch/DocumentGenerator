@@ -151,3 +151,97 @@ def test_password_login_allows_any_domain_when_allowed_domain_empty_in_test(clie
     )
     assert res.status_code == 200
     assert "access_token" in res.json()
+
+
+def test_google_auth_rejects_gmail_and_accepts_svnit(client: TestClient, monkeypatch):
+    """Google sign-in with someone@gmail.com -> 403; u25cs051@coed.svnit.ac.in -> 200."""
+    monkeypatch.setattr(settings, "ALLOWED_EMAIL_DOMAIN", "svnit.ac.in")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "test-client-id")
+
+    import google.oauth2.id_token
+
+    # 1. someone@gmail.com -> 403
+    monkeypatch.setattr(
+        google.oauth2.id_token,
+        "verify_oauth2_token",
+        lambda credential, req, audience, clock_skew_in_seconds: {
+            "iss": "https://accounts.google.com",
+            "email_verified": True,
+            "email": "someone@gmail.com",
+            "sub": "sub_gmail_123",
+            "name": "Gmail User",
+        },
+    )
+
+    res_gmail = client.post("/api/v1/auth/google", json={"credential": "mock_gmail_token"})
+    assert res_gmail.status_code == 403
+    err = res_gmail.json()["detail"]
+    assert err["code"] == EMAIL_DOMAIN_ERROR_CODE
+    assert err["message"] == EMAIL_DOMAIN_REJECTION_MESSAGE
+
+    # 2. u25cs051@coed.svnit.ac.in -> 200
+    monkeypatch.setattr(
+        google.oauth2.id_token,
+        "verify_oauth2_token",
+        lambda credential, req, audience, clock_skew_in_seconds: {
+            "iss": "https://accounts.google.com",
+            "email_verified": True,
+            "email": "u25cs051@coed.svnit.ac.in",
+            "sub": "sub_svnit_456",
+            "name": "SVNIT Student",
+        },
+    )
+
+    res_svnit = client.post("/api/v1/auth/google", json={"credential": "mock_svnit_token"})
+    assert res_svnit.status_code == 200
+    assert res_svnit.json()["user"]["email"] == "u25cs051@coed.svnit.ac.in"
+
+
+def test_change_password_and_old_password_invalidation(client: TestClient, db: Session):
+    """Change password: wrong current password fails (400), valid change succeeds (200),
+    old password fails login (401), new password succeeds (200)."""
+    email = f"student_{uuid.uuid4().hex[:8]}@svnit.ac.in"
+    old_pw = "OldPassword123!"
+    new_pw = "NewPassword456!"
+
+    user = User(
+        email=email,
+        name="Student User",
+        password_hash=get_password_hash(old_pw),
+        token_version=1,
+    )
+    db.add(user)
+    db.commit()
+
+    # 1. Login with old password
+    login_res = client.post("/api/v1/auth/login", json={"email": email, "password": old_pw})
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Attempt change password with wrong current password -> 400
+    wrong_res = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": "WrongCurrentPassword123!", "new_password": new_pw},
+        headers=headers,
+    )
+    assert wrong_res.status_code == 400
+    assert wrong_res.json()["detail"]["code"] == "WRONG_PASSWORD"
+
+    # 3. Valid password change -> 200
+    change_res = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": old_pw, "new_password": new_pw},
+        headers=headers,
+    )
+    assert change_res.status_code == 200
+
+    # 4. Old password no longer works -> 401
+    old_login = client.post("/api/v1/auth/login", json={"email": email, "password": old_pw})
+    assert old_login.status_code == 401
+    assert old_login.json()["detail"]["code"] == "INVALID_CREDENTIALS"
+
+    # 5. New password works -> 200
+    new_login = client.post("/api/v1/auth/login", json={"email": email, "password": new_pw})
+    assert new_login.status_code == 200
+    assert "access_token" in new_login.json()

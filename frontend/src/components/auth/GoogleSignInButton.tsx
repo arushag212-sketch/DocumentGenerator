@@ -10,6 +10,7 @@ declare global {
           initialize: (config: {
             client_id: string;
             callback: (response: { credential: string }) => void;
+            error_callback?: (error: any) => void;
             hd?: string;
             ux_mode?: 'popup' | 'redirect';
             auto_select?: boolean;
@@ -29,6 +30,7 @@ declare global {
             }
           ) => void;
           prompt?: (momentListener?: (notification: any) => void) => void;
+          disableAutoSelect: () => void;
         };
       };
     };
@@ -38,11 +40,14 @@ declare global {
 interface GoogleSignInButtonProps {
   inviteCode?: string;
   onSuccess: (user: User) => void;
-  onError: (message: string) => void;
+  onError: (message: string, isDomainError?: boolean) => void;
 }
 
 let gsiScriptPromise: Promise<void> | null = null;
 let hasWarnedMissingClientId = false;
+let isGsiInitialized = false;
+let globalGsiCallback: ((response: { credential: string }) => void) | null = null;
+let globalGsiErrorCallback: ((error: any) => void) | null = null;
 
 function loadGoogleScript(): Promise<void> {
   if (typeof window !== 'undefined' && window.google?.accounts?.id) {
@@ -104,7 +109,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
         if (!cancelled) setScriptReady(true);
       })
       .catch(() => {
-        if (!cancelled) latest.current.onError('Failed to load Google Sign-In script. Please check your network.');
+        if (!cancelled) latest.current.onError('Failed to load Google Sign-In script. Please check your network.', false);
       });
 
     return () => {
@@ -125,26 +130,53 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
     const handleCallback = async (response: { credential: string }) => {
       const { inviteCode: code, onSuccess: ok, onError: fail, loginWithGoogle: signIn } = latest.current;
-      if (!response.credential) {
-        fail('No authentication credential received from Google.');
+      if (!response?.credential) {
+        fail('Google sign-in was cancelled or blocked. Please try again with your SVNIT account.', false);
         return;
       }
       try {
         const user = await signIn(response.credential, code || undefined);
         ok(user);
       } catch (err: any) {
-        fail(err.message || 'Google sign-in failed');
+        const isDomain =
+          err?.status === 403 &&
+          (err?.detail?.code === 'EMAIL_DOMAIN_NOT_ALLOWED' ||
+            (err?.message || '').toLowerCase().includes('official svnit email') ||
+            (err?.message || '').toLowerCase().includes('email') ||
+            (err?.message || '').toLowerCase().includes('svnit'));
+        fail(err.message || 'Google sign-in failed', Boolean(isDomain));
       }
     };
 
-    window.google.accounts.id.initialize({
-      client_id: clientId,
-      callback: handleCallback,
-      hd: 'svnit.ac.in',
-      ux_mode: 'popup',
-      auto_select: false,
-      use_fedcm_for_prompt: true,
-    });
+    const handleErrorCallback = (error: any) => {
+      console.warn('Google Sign-In error:', error);
+      const { onError: fail } = latest.current;
+      fail('Google sign-in was cancelled or blocked. Please try again with your SVNIT account.', false);
+    };
+
+    globalGsiCallback = handleCallback;
+    globalGsiErrorCallback = handleErrorCallback;
+
+    if (!isGsiInitialized) {
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => {
+          if (globalGsiCallback) {
+            globalGsiCallback(response);
+          }
+        },
+        error_callback: (error) => {
+          if (globalGsiErrorCallback) {
+            globalGsiErrorCallback(error);
+          }
+        },
+        hd: 'svnit.ac.in',
+        ux_mode: 'popup',
+        auto_select: false,
+        use_fedcm_for_prompt: true,
+      });
+      isGsiInitialized = true;
+    }
 
     const parentWidth = container.parentElement?.clientWidth || 360;
     const buttonWidth = Math.min(Math.max(parentWidth, 240), 400);
