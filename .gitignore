@@ -38,3 +38,6 @@ Thumbs.db
 
 # Vite dependency cache
 frontend/.vite/
+
+# Local editor/assistant settings
+.claude/

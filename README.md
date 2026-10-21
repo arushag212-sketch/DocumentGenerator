@@ -121,6 +121,8 @@ Dockerfile, render.yaml, vercel.json, docker-compose.yml   Deployment
 - [AI setup](docs/AI_SETUP.md)
 - [Numbering rules](docs/NUMBERING_SPEC.md)
 - [Database schema](docs/DB_SCHEMA.md)
+- [Design decisions](docs/DECISIONS.md)
+- [Evaluation results](docs/EVALUATION.md)
 
 To share the code safely as a zip (no secrets, databases or dependencies):
 `powershell -ExecutionPolicy Bypass -File backend/scripts/make_share_zip.ps1`
