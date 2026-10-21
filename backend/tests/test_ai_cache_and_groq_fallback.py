@@ -282,7 +282,7 @@ def test_only_groq_configuration_works(monkeypatch):
     client = get_llm_client()
     assert client.is_available() is True
     assert isinstance(client, GroqLLMClient)
-    assert client.model_name == "llama-3.3-70b-versatile"
+    assert client.model_name == "openai/gpt-oss-120b"
 
 
 def test_fallback_draft_text():

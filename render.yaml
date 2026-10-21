@@ -29,9 +29,9 @@ services:
       - key: ALLOWED_EMAIL_DOMAIN
         value: svnit.ac.in
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.5-flash-lite
       - key: GROQ_MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b
       - key: AI_TEMPERATURE
         value: "0"
       - key: AI_CACHE_ENABLED

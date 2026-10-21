@@ -385,7 +385,7 @@ def check_ai() -> list[CheckResult]:
     # Groq AI Fallback
     groq_key = os.environ.get("GROQ_API_KEY")
     if groq_key and groq_key.strip():
-        groq_model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+        groq_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
         results.append(
             CheckResult(
                 name="Groq AI Integration (Fallback)",

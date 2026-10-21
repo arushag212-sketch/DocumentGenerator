@@ -85,7 +85,7 @@ class Settings(BaseModel):
     AI_CACHE_ENABLED: bool = True
     AI_CACHE_TTL_HOURS: int = 168
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
 
     # Google OAuth & Email Domain Policy
     GOOGLE_CLIENT_ID: str = ""
@@ -186,7 +186,7 @@ class Settings(BaseModel):
             self.AI_CACHE_TTL_HOURS = 168
 
         self.GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
-        self.GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+        self.GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 
 
 settings = Settings()

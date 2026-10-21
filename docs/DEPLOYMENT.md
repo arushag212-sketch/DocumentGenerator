@@ -79,7 +79,7 @@ Do the steps in this order. Keep every key and password in a password manager, n
 
 ClubDocs uses Google Gemini (`GEMINI_API_KEY`) as its primary AI engine for template drafting and document assistance with deterministic generation (`AI_TEMPERATURE=0`) and response caching (`AI_CACHE_ENABLED=true`, 7-day TTL).
 
-To handle free-tier Gemini quota and rate limits without failing user requests, configure Groq (`GROQ_API_KEY`) as an automatic fallback. When Gemini returns HTTP 429, timeout, or service errors, ClubDocs automatically retries on Groq (`llama-3.3-70b-versatile`). If both keys are set, Gemini is tried first and Groq seamlessly takes over on quota errors.
+To handle free-tier Gemini quota and rate limits without failing user requests, configure Groq (`GROQ_API_KEY`) as an automatic fallback. When Gemini returns HTTP 429, timeout, or service errors, ClubDocs automatically retries on Groq (`openai/gpt-oss-120b`). If both keys are set, Gemini is tried first and Groq seamlessly takes over on quota errors.
 
 ## 5. Email (optional)
 

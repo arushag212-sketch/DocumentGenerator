@@ -165,10 +165,8 @@ def discover_groq_models(api_key: Optional[str] = None, force_refresh: bool = Fa
         return list(_CACHED_GROQ_MODELS)
 
     fallback_candidates = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
-        "qwen/qwen3.8-27b",
         "openai/gpt-oss-120b",
+        "qwen/qwen3.8-27b",
         "openai/gpt-oss-20b",
     ]
 
@@ -193,7 +191,7 @@ def discover_groq_models(api_key: Optional[str] = None, force_refresh: bool = Fa
                     continue
                 valid_models.append(m_id)
             if valid_models:
-                pref_order = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+                pref_order = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
                 ordered = [p for p in pref_order if p in valid_models] + [v for v in valid_models if v not in pref_order]
                 _CACHED_GROQ_MODELS = ordered
                 _GROQ_CACHE_TIMESTAMP = now
@@ -698,7 +696,7 @@ class GroqLLMClient(LLMClient):
         temperature: Optional[float] = None,
     ):
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
-        self.model = model or os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+        self.model = model or os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
         if temperature is not None:
             self._temperature = float(temperature)
         else:
