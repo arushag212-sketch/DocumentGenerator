@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Optional
 from server.app.core.config import settings
 
-EMAIL_DOMAIN_REJECTION_MESSAGE = "Please sign in with your SVNIT email (@svnit.ac.in)."
+_domain = (settings.ALLOWED_EMAIL_DOMAIN or "svnit.ac.in").strip().lower()
+EMAIL_DOMAIN_REJECTION_MESSAGE = (
+    f"Please sign in with your official SVNIT email (@{_domain}). "
+    "Personal accounts like Gmail can't be used."
+)
 EMAIL_DOMAIN_ERROR_CODE = "EMAIL_DOMAIN_NOT_ALLOWED"
 
 

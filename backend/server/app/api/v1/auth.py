@@ -496,6 +496,13 @@ def login(payload: UserLogin, request: Request, response: Response, db: Session 
     check_rate_limit(f"login_ip_{client_ip}", max_requests=60, window_seconds=60, db=db)
     check_rate_limit(f"login_email_{clean_email}", max_requests=10, window_seconds=60, db=db)
 
+    # Reject non-institute emails before looking up user
+    if not is_allowed_email(clean_email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": EMAIL_DOMAIN_ERROR_CODE, "message": EMAIL_DOMAIN_REJECTION_MESSAGE},
+        )
+
     user = db.query(User).filter(User.email == clean_email).first()
 
     now = datetime.now(timezone.utc)

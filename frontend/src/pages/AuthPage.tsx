@@ -70,6 +70,8 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isDomainError, setIsDomainError] = useState(false);
+  const [emailFieldError, setEmailFieldError] = useState<string | null>(null);
 
   useEffect(() => {
     const inv = getInviteParam();
@@ -92,11 +94,27 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
   const resetFormFeedback = () => {
     setError(null);
     setSuccess(null);
+    setEmailFieldError(null);
+    setIsDomainError(false);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     resetFormFeedback();
+
+    const configuredDomain = ((import.meta.env as any).VITE_ALLOWED_EMAIL_DOMAIN || '').trim().toLowerCase();
+    if (configuredDomain) {
+      const email = loginEmail.trim().toLowerCase();
+      const domain = email.includes('@') ? email.split('@').pop() || '' : '';
+      const isAllowed = domain === configuredDomain || domain.endsWith('.' + configuredDomain);
+      if (!isAllowed) {
+        setEmailFieldError(
+          `Please sign in with your official institute email (@${configuredDomain}). Personal accounts like Gmail can't be used.`
+        );
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -116,6 +134,8 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
       }
       navigate(from, { replace: true });
     } catch (err: any) {
+      const isDomain = err?.status === 403 && (err?.detail?.code === 'EMAIL_DOMAIN_NOT_ALLOWED' || (err?.message || '').toLowerCase().includes('email'));
+      setIsDomainError(Boolean(isDomain));
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
@@ -344,7 +364,14 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
             {error && (
               <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-start gap-2">
                 <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>{error}</span>
+                <div className="flex-1">
+                  <span>{error}</span>
+                  {isDomainError && (
+                    <p className="mt-1.5 font-medium text-red-800">
+                      Tip: Use &ldquo;Sign in with Google&rdquo; above &mdash; that&rsquo;s the main way in.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -357,7 +384,24 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
 
             {tab === 'login' && (
               <form onSubmit={handleLogin} className="space-y-4">
-                <AuthInput icon={Mail} label="Email" type="email" autoComplete="email" required value={loginEmail} onChange={(e: any) => setLoginEmail(e.target.value)} placeholder="you@svnit.ac.in" />
+                <div>
+                  <AuthInput
+                    icon={Mail}
+                    label="Email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={loginEmail}
+                    onChange={(e: any) => {
+                      setLoginEmail(e.target.value);
+                      if (emailFieldError) setEmailFieldError(null);
+                    }}
+                    placeholder="you@svnit.ac.in"
+                  />
+                  {emailFieldError && (
+                    <p className="text-xs text-red-600 mt-1.5">{emailFieldError}</p>
+                  )}
+                </div>
                 <PasswordInput icon={Lock} label="Password" autoComplete="current-password" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Your password" resetKey={authResetKey} />
                 <div className="flex justify-end text-xs">
                   <button type="button" onClick={() => { setTab('forgot'); resetFormFeedback(); setAuthResetKey((k) => k + 1); }} className="text-brand-700 hover:underline">Forgot password?</button>
