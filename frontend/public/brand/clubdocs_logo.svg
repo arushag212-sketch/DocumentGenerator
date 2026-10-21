@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ClubDocs">
+  <rect width="512" height="512" rx="112" fill="#1b365d"/>
+  <path d="M136 96h176l64 64v256H136z" fill="#ffffff"/>
+  <path d="M312 96v64h64z" fill="#c3d0e2"/>
+  <rect x="176" y="192" width="160" height="20" rx="10" fill="#1b365d"/>
+  <rect x="176" y="240" width="160" height="20" rx="10" fill="#94abcb"/>
+  <rect x="176" y="288" width="96" height="20" rx="10" fill="#94abcb"/>
+  <circle cx="352" cy="384" r="84" fill="#1b365d"/>
+  <circle cx="352" cy="384" r="68" fill="#c59b27"/>
+  <path d="M320 386l22 22 44-46" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
