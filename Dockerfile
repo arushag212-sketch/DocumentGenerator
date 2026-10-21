@@ -59,6 +59,7 @@ COPY backend/scripts /app/scripts
 COPY backend/assets /app/assets
 COPY backend/templates /app/templates
 COPY backend/config /app/config
+COPY backend/demo /app/demo
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/pyproject.toml /app/pyproject.toml
 
