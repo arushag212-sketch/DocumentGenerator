@@ -17,6 +17,10 @@ else
     python -m server.scripts.seed --no-clean
 fi
 
+if [ "${SEED_DEMO_CLUBS:-false}" = "true" ]; then
+  python -m server.scripts.seed_demo_clubs --owners-only || echo "Demo club setup failed (non-fatal)."
+fi
+
 # Run health doctor after migrations and seed; notices are diagnostic only.
 echo "Running system doctor check..."
 python -m server.scripts.doctor || echo "Doctor reported non-fatal notices."

@@ -59,3 +59,7 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: SEED_DEMO_CLUBS
+        value: "true"
+      - key: DEMO_OWNER_PASSWORD
+        sync: false

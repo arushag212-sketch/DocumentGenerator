@@ -89,6 +89,17 @@ Brevo's free plan (about 300 emails a day) works; so does a Gmail account with a
 - **Backups:** the free Supabase plan has no automatic backups. Occasionally export the database
   (**Database → Backups**, or `pg_dump`) and download the `clubdocs` bucket.
 
+### Demo clubs on the live site
+
+ClubDocs includes a one-time production setup that provisions 5 official demo clubs (ACM, GDGC, CHRD, Drishti, and Raag) directly on the Render server during startup. It creates normal database records with their official logos and exactly one owner account per club:
+- `acm.owner@demo.svnit.ac.in`
+- `gdgc.owner@demo.svnit.ac.in`
+- `chrd.owner@demo.svnit.ac.in`
+- `drishti.owner@demo.svnit.ac.in`
+- `raag.owner@demo.svnit.ac.in`
+
+`DEMO_OWNER_PASSWORD` must be set on Render (minimum 12 characters). Clubs that already exist in the database are never changed or overwritten. Once the clubs exist, `SEED_DEMO_CLUBS` can optionally be set to `"false"` on Render, though leaving it enabled is safe because later runs only skip existing clubs.
+
 ## Troubleshooting
 
 | What you see | Likely cause |
