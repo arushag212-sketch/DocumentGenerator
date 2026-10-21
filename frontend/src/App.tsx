@@ -85,13 +85,14 @@ const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   // 3. No active role in the selected club (request pending, rejected or withdrawn) -> onboarding,
   //    which shows the live request status or lets the user pick another club.
-  const hasActiveRole = Boolean(permissions?.role);
+  const hasActiveRole = Boolean(permissions?.role) || Boolean(permissions?.is_platform_admin);
   if (activeClub && !hasActiveRole && currentPath !== '/onboarding/club') {
     return <Navigate to="/onboarding/club" replace />;
   }
 
   // 4. User is active member but position not chosen -> redirect to /onboarding/position
   if (
+    permissions?.is_member &&
     permissions?.role &&
     (!permissions.position || permissions.position.trim() === '') &&
     currentPath !== '/onboarding/position' &&

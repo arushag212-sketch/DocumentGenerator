@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -20,6 +20,18 @@ export const OnboardingPositionPage: React.FC = () => {
   const [customPosition, setCustomPosition] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeClub) return;
+    api.clubs
+      .getPermissions(activeClub.id)
+      .then((perms) => {
+        if (perms && perms.is_member === false) {
+          navigate('/dashboard', { replace: true });
+        }
+      })
+      .catch(() => {});
+  }, [activeClub?.id, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -732,13 +732,18 @@ def approve_join_request(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    final_position = jr.position
+    if payload.position is not None:
+        stored_pos, mapped_role, note = validate_and_normalize_position(payload.position)
+        final_position = stored_pos
+
     # If signatory is ticked, sync before approving so conflict raises 409 and request stays pending
     if payload.is_signatory:
         sync_membership_position_to_role_held(
             db=db,
             club=ctx.club,
             user=target_user,
-            position=jr.position,
+            position=final_position,
             is_signatory=True,
             signatory_role=payload.signatory_role,
             conflict_resolution=payload.conflict_resolution,
@@ -754,12 +759,12 @@ def approve_join_request(
     if m:
         m.role = granted_role
         m.status = "active"
-        m.position = jr.position
+        m.position = final_position
     else:
         membership_repo.create(
             user_id=jr.user_id,
             role=granted_role,
-            position=jr.position,
+            position=final_position,
             status="active",
         )
 
@@ -771,7 +776,14 @@ def approve_join_request(
         entity_id=jr.id,
         club_id=ctx.club.id,
         user_id=ctx.user.id,
-        meta={"assigned_role": granted_role, "requested_role": jr.requested_role, "position": jr.position, "target_user_id": jr.user_id},
+        meta={
+            "assigned_role": granted_role,
+            "requested_role": jr.requested_role,
+            "position": final_position,
+            "requested_position": jr.position,
+            "approved_position": final_position,
+            "target_user_id": jr.user_id,
+        },
         ip=client_ip,
     )
 
@@ -874,7 +886,13 @@ def get_club_permissions(
     is_admin = current_user.is_platform_admin
     # Role in active club: if user has explicit membership, use that role;
     # if platform admin without explicit membership, default role to 'owner'
-    role = membership.role if membership else ("owner" if is_admin else None)
+    is_member = membership is not None
+    if is_member:
+        role = membership.role
+        position = membership.position
+    else:
+        role = "owner"
+        position = None
 
     if not membership and not is_admin:
         raise HTTPException(
@@ -890,6 +908,7 @@ def get_club_permissions(
 
     return ClubPermissionsOut(
         is_platform_admin=is_admin,
+        is_member=is_member,
         role=role,
         is_owner=(role == Role.OWNER),
         can_edit_members=can_edit_members,
@@ -897,7 +916,7 @@ def get_club_permissions(
         can_create_documents=can_create_documents,
         can_finalize_documents=can_finalize_documents,
         can_view_sensitive=can_view_sensitive,
-        position=membership.position if membership else None,
+        position=position,
     )
 
 

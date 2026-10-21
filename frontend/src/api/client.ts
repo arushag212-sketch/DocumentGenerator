@@ -257,7 +257,7 @@ export const api = {
       apiFetch<JoinRequest | null>(`/clubs/${clubId}/join-requests/my`),
     listJoinRequests: (clubId: string | number) =>
       apiFetch<JoinRequest[]>(`/clubs/${clubId}/join-requests`),
-    approveJoinRequest: (clubId: string | number, reqId: string, data: { role: string; is_signatory?: boolean; signatory_role?: string; conflict_resolution?: string }) =>
+    approveJoinRequest: (clubId: string | number, reqId: string, data: { role?: string; position?: string; is_signatory?: boolean; signatory_role?: string; conflict_resolution?: string }) =>
       apiFetch<void>(`/clubs/${clubId}/join-requests/${reqId}/approve`, {
         method: 'POST',
         body: JSON.stringify(data),

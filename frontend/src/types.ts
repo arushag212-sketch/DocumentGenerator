@@ -71,6 +71,7 @@ export interface AuditLog {
 
 export interface ClubPermissions {
   is_platform_admin: boolean;
+  is_member?: boolean;
   role: RoleName | null;
   can_edit_members: boolean;
   can_edit_settings: boolean;

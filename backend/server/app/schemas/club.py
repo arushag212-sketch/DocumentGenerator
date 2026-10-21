@@ -58,6 +58,7 @@ class JoinRequestCreate(BaseModel):
 class ApproveJoinRequest(BaseModel):
     # Omit to grant the access level the applicant requested.
     role: Optional[str] = Field(None, pattern="^(owner|admin|editor|viewer)$")
+    position: Optional[str] = None
     is_signatory: bool = False
     signatory_role: Optional[str] = None
     conflict_resolution: Optional[str] = Field(None, pattern="^(replace|keep_both)$")
@@ -386,6 +387,7 @@ class SetupWizardRequest(BaseModel):
 
 class ClubPermissionsOut(BaseModel):
     is_platform_admin: bool
+    is_member: bool = True
     role: Optional[str] = None
     is_owner: bool = False
     can_edit_members: bool = False
