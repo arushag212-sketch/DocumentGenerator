@@ -16,7 +16,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
-from PIL import Image, ImageDraw
+import re
+import textwrap
+import docx
+from docx.table import Table
+from docx.text.paragraph import Paragraph
+from PIL import Image, ImageDraw, ImageFont
+from server.app.core.config import settings
 import pymupdf
 from sqlalchemy.orm import Session
 
@@ -276,14 +282,200 @@ def _template_docx(tmpl: Template, ver: TemplateVersion, local_storage) -> Optio
 # Each conversion runs its own LibreOffice profile; cap the gallery's card renders so opening it
 # doesn't start a dozen at once, and give the Preview viewer separate slots so it never waits
 # behind that queue.
-_RENDER_SLOTS = threading.BoundedSemaphore(2)
-_PREVIEW_SLOTS = threading.BoundedSemaphore(2)
+class _ConfigurableSemaphore:
+    """Bounded semaphore that uses 1 slot in LOW_MEMORY_MODE, 2 slots normally."""
+
+    def __init__(self, normal_val: int = 2, low_val: int = 1):
+        self._normal = threading.BoundedSemaphore(normal_val)
+        self._low = threading.BoundedSemaphore(low_val)
+
+    def _curr(self) -> threading.BoundedSemaphore:
+        return self._low if getattr(settings, "LOW_MEMORY_MODE", False) else self._normal
+
+    def acquire(self, *args, **kwargs):
+        return self._curr().acquire(*args, **kwargs)
+
+    def release(self, *args, **kwargs):
+        return self._curr().release(*args, **kwargs)
+
+    def __enter__(self):
+        return self._curr().__enter__()
+
+    def __exit__(self, *args):
+        return self._curr().__exit__(*args)
+
+    @property
+    def _value(self):
+        return self._curr()._value
+
+    @property
+    def _initial_value(self):
+        return self._curr()._initial_value
+
+
+_RENDER_SLOTS = _ConfigurableSemaphore(2, 1)
+_PREVIEW_SLOTS = _ConfigurableSemaphore(2, 1)
 
 
 def thumbnail_stem(tmpl: Template, ver: TemplateVersion, club_id: Optional[str]) -> str:
     """Built-in templates are shared, so each club gets its own preview (its own letterhead and
     name); a club's own template has a single preview."""
+    if getattr(settings, "LOW_MEMORY_MODE", False):
+        return str(ver.id)
     return f"{ver.id}_{club_id}" if tmpl.club_id is None and club_id else str(ver.id)
+
+
+def _parse_hex_color(hex_str: Optional[str], default: tuple[int, int, int] = (79, 129, 189)) -> tuple[int, int, int]:
+    if not hex_str:
+        return default
+    s = str(hex_str).strip().lstrip("#")
+    if len(s) == 6:
+        try:
+            return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+        except ValueError:
+            pass
+    elif len(s) == 3:
+        try:
+            return (int(s[0] * 2, 16), int(s[1] * 2, 16), int(s[2] * 2, 16))
+        except ValueError:
+            pass
+    return default
+
+
+def _get_preview_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
+    candidates = []
+    if bold:
+        candidates.extend([
+            settings.ASSETS_DIR / "fonts" / "Tinos-Bold.ttf",
+            settings.ASSETS_DIR / "fonts" / "OpenSans-Bold.ttf",
+            settings.ASSETS_DIR / "fonts" / "Roboto-Bold.ttf",
+        ])
+    candidates.extend([
+        settings.ASSETS_DIR / "fonts" / "OpenSans-Regular.ttf",
+        settings.ASSETS_DIR / "fonts" / "Roboto-Regular.ttf",
+        settings.ASSETS_DIR / "fonts" / "Tinos-Regular.ttf",
+    ])
+    for p in candidates:
+        if p.exists():
+            try:
+                return ImageFont.truetype(str(p), size)
+            except Exception:
+                pass
+    try:
+        return ImageFont.load_default()
+    except Exception:
+        return None
+
+
+def _render_lightweight_thumbnail(
+    db: Session,
+    tmpl: Template,
+    ver: TemplateVersion,
+    club_slug: str,
+    docx_path: Path,
+    thumb_path: Path,
+) -> Path:
+    """Build a lightweight preview image with Pillow from the template DOCX without LibreOffice."""
+    try:
+        doc = docx.Document(str(docx_path))
+    except Exception as exc:
+        logger.warning("Failed to open DOCX for lightweight preview of %s (v%s): %s", tmpl.slug, ver.version_no, exc)
+        return get_neutral_placeholder()
+
+    try:
+        # White A4-proportioned page: 420 x 594 px
+        img = Image.new("RGB", (420, 594), color=(255, 255, 255))
+        draw = ImageDraw.Draw(img)
+
+        # Subtle border around document page
+        draw.rectangle([(0, 0), (419, 593)], outline=(226, 232, 240), width=1)
+
+        font_title = _get_preview_font(13, bold=True)
+        font_body = _get_preview_font(9)
+
+        y = 28
+        left_x = 28
+        right_x = 392
+        max_y = 555
+
+        # Club custom templates use the club's letterhead title in club's brand colour.
+        # Built-in templates (tmpl.club_id is None) use a shared preview without club letterhead.
+        if tmpl.club_id is not None:
+            brand_color = (79, 129, 189)
+            letterhead_title = None
+            if club_slug:
+                try:
+                    db_config = build_club_config_from_db(db, club_slug)
+                    letterhead_title = (getattr(db_config, "letterhead_title", None) or "").strip()
+                    brand_color = _parse_hex_color(getattr(db_config, "brand_color", None))
+                except Exception:
+                    pass
+            title_text = letterhead_title or (tmpl.name or tmpl.slug.replace("_", " ").title()).strip()
+            draw.text((left_x, y), title_text, fill=brand_color, font=font_title)
+            y += 18
+            draw.line([(left_x, y), (right_x, y)], fill=brand_color, width=1)
+            y += 12
+        else:
+            title_text = (tmpl.name or tmpl.slug.replace("_", " ").title()).strip()
+            draw.text((left_x, y), title_text, fill=(30, 41, 59), font=font_title)
+            y += 18
+            draw.line([(left_x, y), (right_x, y)], fill=(203, 213, 225), width=1)
+            y += 12
+
+        def _clean_text(val: str) -> str:
+            t = re.sub(r"\{%.*?%\}", "", val)
+            t = re.sub(r"\{\{\s*(\w+?)(?:\.\w+)?\s*\}\}", r"[\1]", t)
+            t = re.sub(r"\{\{.*?\}\}", "...", t)
+            t = re.sub(r"[\t\r\n]+", "  ", t)
+            t = re.sub(r" +", " ", t)
+            return t.strip()
+
+        for child in doc.element.body:
+            if y >= max_y:
+                break
+            if child.tag.endswith("p"):
+                p = Paragraph(child, doc)
+                text = _clean_text(p.text)
+                if not text:
+                    continue
+                lines = textwrap.wrap(text, width=54)
+                for line in lines:
+                    if y >= max_y:
+                        break
+                    draw.text((left_x, y), line, fill=(51, 65, 85), font=font_body)
+                    y += 13
+                y += 4
+            elif child.tag.endswith("tbl"):
+                tbl = Table(child, doc)
+                for row in tbl.rows:
+                    if y >= max_y:
+                        break
+                    cells = []
+                    for c in row.cells:
+                        ct = _clean_text(c.text)
+                        if ct and (not cells or ct != cells[-1]):
+                            cells.append(ct)
+                    if cells:
+                        row_text = "  |  ".join(cells)
+                        lines = textwrap.wrap(row_text, width=52)
+                        for line in lines:
+                            if y >= max_y:
+                                break
+                            draw.text((left_x + 6, y), line, fill=(71, 85, 105), font=font_body)
+                            y += 13
+                        y += 2
+
+        try:
+            img.save(str(thumb_path), format="WEBP", quality=88, method=6)
+        except Exception:
+            try:
+                img.save(str(thumb_path), format="JPEG", quality=90)
+            except Exception:
+                img.save(str(thumb_path), format="PNG")
+        return thumb_path
+    except Exception as exc:
+        logger.warning("Lightweight thumbnail rendering failed for %s (v%s): %s", tmpl.slug, ver.version_no, exc)
+        return get_neutral_placeholder()
 
 
 def render_template_thumbnail(
@@ -321,6 +513,12 @@ def render_template_thumbnail(
 
     if not docx_path or not docx_path.exists():
         return get_neutral_placeholder()
+
+    if getattr(settings, "LOW_MEMORY_MODE", False):
+        with _RENDER_SLOTS:
+            if thumb_path.exists():
+                return thumb_path
+            return _render_lightweight_thumbnail(db, tmpl, ver, club_slug, docx_path, thumb_path)
 
     with _RENDER_SLOTS:
         if thumb_path.exists():  # rendered by another request while this one waited
@@ -374,30 +572,46 @@ def _render_thumbnail(db, tmpl, ver, club_slug, docx_path, thumb_path, local_sto
 
         if render_res.pdf_path and render_res.pdf_path.exists():
             pdf_doc = pymupdf.open(str(render_res.pdf_path))
-            # Full-size pages for the Preview viewer, from the same render
-            for idx, pg in enumerate(pdf_doc):
-                if idx >= MAX_PREVIEW_PAGES:
-                    break
-                page_scale = PAGE_PREVIEW_WIDTH_PX / max(pg.rect.width, 1.0)
-                ppix = pg.get_pixmap(matrix=pymupdf.Matrix(page_scale, page_scale))
-                Image.frombytes("RGB", [ppix.width, ppix.height], ppix.samples).save(
-                    str(thumb_path.parent / f"{thumb_path.stem}_p{idx + 1}.webp"), format="WEBP", quality=88, method=6
-                )
-            if len(pdf_doc) > 0:
-                page = pdf_doc[0]
-                rect = page.rect
-                # Sharp on high-DPI screens: the gallery card is ~360 px wide, shown at up to 2.5x
-                scale = THUMBNAIL_WIDTH_PX / max(rect.width, 1.0)
-                mat = pymupdf.Matrix(scale, scale)
-                pix = page.get_pixmap(matrix=mat)
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                try:
-                    img.save(str(thumb_path), format="WEBP", quality=88, method=6)
-                except Exception:
-                    img.save(str(thumb_path), format="JPEG", quality=90)
+            try:
+                # Full-size pages for the Preview viewer, from the same render
+                for idx, pg in enumerate(pdf_doc):
+                    if idx >= MAX_PREVIEW_PAGES:
+                        break
+                    if getattr(settings, "LOW_MEMORY_MODE", False):
+                        longest_side = max(pg.rect.width, pg.rect.height, 1.0)
+                        page_scale = min(PAGE_PREVIEW_WIDTH_PX / max(pg.rect.width, 1.0), 1200.0 / longest_side)
+                    else:
+                        page_scale = PAGE_PREVIEW_WIDTH_PX / max(pg.rect.width, 1.0)
+                    mat = pymupdf.Matrix(page_scale, page_scale)
+                    ppix = pg.get_pixmap(matrix=mat)
+                    try:
+                        Image.frombytes("RGB", [ppix.width, ppix.height], ppix.samples).save(
+                            str(thumb_path.parent / f"{thumb_path.stem}_p{idx + 1}.webp"), format="WEBP", quality=88, method=6
+                        )
+                    finally:
+                        ppix = None
+                if len(pdf_doc) > 0:
+                    page = pdf_doc[0]
+                    rect = page.rect
+                    # Sharp on high-DPI screens: the gallery card is ~360 px wide, shown at up to 2.5x
+                    if getattr(settings, "LOW_MEMORY_MODE", False):
+                        longest_side = max(rect.width, rect.height, 1.0)
+                        scale = min(THUMBNAIL_WIDTH_PX / max(rect.width, 1.0), 1200.0 / longest_side)
+                    else:
+                        scale = THUMBNAIL_WIDTH_PX / max(rect.width, 1.0)
+                    mat = pymupdf.Matrix(scale, scale)
+                    pix = page.get_pixmap(matrix=mat)
+                    try:
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        try:
+                            img.save(str(thumb_path), format="WEBP", quality=88, method=6)
+                        except Exception:
+                            img.save(str(thumb_path), format="JPEG", quality=90)
+                    finally:
+                        pix = None
+                    return thumb_path
+            finally:
                 pdf_doc.close()
-                return thumb_path
-            pdf_doc.close()
     except Exception as e:
         logger.warning("Thumbnail generation failed for template %s (v%s): %s", tmpl.slug, ver.version_no, e)
     finally:

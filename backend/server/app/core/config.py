@@ -78,6 +78,8 @@ class Settings(BaseModel):
     ASSETS_DIR: Path = BASE_DIR / "assets"
     DATA_DIR: Path = BASE_DIR / "data"
 
+    LOW_MEMORY_MODE: bool = False
+
     # Google OAuth & Email Domain Policy
     GOOGLE_CLIENT_ID: str = ""
     ALLOWED_EMAIL_DOMAIN: str = ""
@@ -155,6 +157,10 @@ class Settings(BaseModel):
         cors_env = os.environ.get("CORS_ORIGINS", "").strip()
         if cors_env:
             self.CORS_ORIGINS = [o.strip().rstrip("/") for o in cors_env.split(",") if o.strip()]
+
+        low_mem = os.environ.get("LOW_MEMORY_MODE")
+        if low_mem is not None:
+            self.LOW_MEMORY_MODE = low_mem.strip().lower() in ("true", "1", "yes", "on")
 
 
 settings = Settings()
