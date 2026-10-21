@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   Undo2,
@@ -78,7 +78,34 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onTranslate,
   translating = false,
 }) => {
-  const [showTranslateMenu, setShowTranslateMenu] = useState(false);
+  // The menu is placed against the window: the toolbar strip scrolls sideways, which would
+  // otherwise clip it and show scroll arrows next to the button.
+  const [translateMenuPos, setTranslateMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const showTranslateMenu = translateMenuPos !== null;
+  const setShowTranslateMenu = (open: boolean) => {
+    if (!open) setTranslateMenuPos(null);
+  };
+  const toggleTranslateMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (showTranslateMenu) return setTranslateMenuPos(null);
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTranslateMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  };
+
+  useEffect(() => {
+    if (!showTranslateMenu) return;
+    const close = () => setTranslateMenuPos(null);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    window.addEventListener('mousedown', close);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [showTranslateMenu]);
 
   const canUndo = editor?.can?.().undo?.() ?? false;
   const canRedo = editor?.can?.().redo?.() ?? false;
@@ -375,18 +402,26 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           )}
 
           {onTranslate && (
-            <div className="relative">
+            <div>
               <button
-                onClick={() => setShowTranslateMenu(!showTranslateMenu)}
+                onClick={toggleTranslateMenu}
+                onMouseDown={(e) => e.stopPropagation()}
                 disabled={translating}
                 className="p-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 transition"
                 title="Translate template"
                 aria-label="Translate template"
+                aria-haspopup="menu"
+                aria-expanded={showTranslateMenu}
               >
                 <Languages className="w-3.5 h-3.5" />
               </button>
-              {showTranslateMenu && (
-                <div className="absolute right-0 top-full mt-1 w-32 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50 text-xs">
+              {translateMenuPos && (
+                <div
+                  role="menu"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  style={{ position: 'fixed', top: translateMenuPos.top, right: translateMenuPos.right }}
+                  className="w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50 text-xs"
+                >
                   <button
                     onClick={() => {
                       setShowTranslateMenu(false);
