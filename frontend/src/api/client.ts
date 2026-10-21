@@ -703,11 +703,15 @@ export const api = {
     get: (clubId: string | number) => apiFetch<ClubAnalytics>(`/clubs/${clubId}/analytics`),
   },
   verify: {
-    get: (code: string) => apiFetch<VerificationResult>(`/verify/${encodeURIComponent(code)}`),
+    get: (code: string) =>
+      apiFetch<VerificationResult>(`/verify/${encodeURIComponent(code.replace(/\s+/g, '').toUpperCase())}`),
     file: (code: string, file: File) => {
       const form = new FormData();
       form.append('file', file);
-      return apiFetch<VerificationResult>(`/verify/${encodeURIComponent(code)}`, { method: 'POST', body: form });
+      return apiFetch<VerificationResult>(`/verify/${encodeURIComponent(code.replace(/\s+/g, '').toUpperCase())}`, {
+        method: 'POST',
+        body: form,
+      });
     },
   },
   home: {

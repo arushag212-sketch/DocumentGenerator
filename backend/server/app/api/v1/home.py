@@ -29,7 +29,7 @@ from server.app.core.input_validation import (
 from server.app.core.permissions import ClubContext, Role, require_club_access
 from server.app.core.rate_limit import check_rate_limit
 from server.app.core.scoped_repo import ScopedRepository
-from server.app.models import Club, Document, Event, NumberingSeries, Person, RoleHeld, Template, TemplateVersion, Venue
+from server.app.models import Club, Document, DocumentVersion, Event, NumberingSeries, Person, RoleHeld, Template, TemplateVersion, Venue
 
 
 router = APIRouter(prefix="/clubs/{club_id}/home", tags=["home"])
@@ -105,6 +105,7 @@ class HomeGeneratedDoc(BaseModel):
     docx_url: str
     preview_url: str
     version_no: int
+    verification_code: Optional[str] = None
 
 
 class HomeGenerateResponse(BaseModel):
@@ -501,10 +502,17 @@ def generate_user_need(
     )
 
     # 5. Format documents list for simplified Home result page
+    doc_repo = ScopedRepository(db, Document, club_id=ctx.club.id)
     docs_out: list[HomeGeneratedDoc] = []
     for doc_info in batch_result.get("documents", []):
         doc_id = doc_info.get("id") or doc_info.get("document_id")
         ver_no = doc_info.get("version_no", 1)
+        doc_rec = doc_repo.get(doc_id) if doc_id else None
+        ver_code = None
+        if doc_rec and doc_rec.current_version_id:
+            ver = db.query(DocumentVersion).filter(DocumentVersion.id == doc_rec.current_version_id).first()
+            if ver:
+                ver_code = ver.verification_code
         docs_out.append(
             HomeGeneratedDoc(
                 id=doc_id,
@@ -515,6 +523,7 @@ def generate_user_need(
                 docx_url=f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/docx",
                 preview_url=f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/preview",
                 version_no=ver_no,
+                verification_code=ver_code,
             )
         )
 
@@ -758,6 +767,7 @@ def create_documents_endpoint(
             "docx_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/docx",
             "preview_url": f"/api/v1/clubs/{ctx.club.id}/documents/{doc_id}/preview",
             "version_no": ver_no,
+            "verification_code": latest_ver.verification_code if latest_ver else None,
             "editable_fields": ef,
             "page_images": page_images,
         })

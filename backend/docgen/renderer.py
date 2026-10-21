@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -67,12 +69,15 @@ class RenderResult:
     """Result of rendering a document."""
 
     def __init__(self, docx_path: Path, pdf_path: Optional[Path] = None,
-                 template_id: str = "", version: int = 1, converter: str = ""):
+                 template_id: str = "", version: int = 1, converter: str = "",
+                 verification_code: str = "", pdf_sha256: Optional[str] = None):
         self.docx_path = docx_path
         self.pdf_path = pdf_path
         self.template_id = template_id
         self.version = version
         self.converter = converter
+        self.verification_code = verification_code
+        self.pdf_sha256 = pdf_sha256
 
     def __repr__(self) -> str:
         return f"RenderResult(docx={self.docx_path}, pdf={self.pdf_path}, converter={self.converter})"
@@ -99,7 +104,8 @@ class Renderer:
                output_dir: Path | None = None,
                version: int = 1,
                convert_pdf: bool = True,
-               allow_blanks: bool = False) -> RenderResult:
+               allow_blanks: bool = False,
+               verification_code: str | None = None) -> RenderResult:
         """Render a template with event data.
 
         Args:
@@ -110,6 +116,7 @@ class Renderer:
             version: Version number for the output filename
             convert_pdf: Whether to convert the rendered DOCX to PDF (raises if soffice missing)
             allow_blanks: If True, unfilled fields render as clean blank underlines without raising validation errors
+            verification_code: Specific verification code to use, or generated if not supplied
 
         Returns:
             RenderResult with paths to generated files
@@ -120,6 +127,26 @@ class Renderer:
         # Build context from event record
         context = self._build_context(event, schema, extra_context, allow_blanks=allow_blanks)
 
+        # 1. Verification code (unguessable XXXXXXXX-XXXXXXXX format)
+        code = verification_code or (extra_context and extra_context.get("verification_code")) or context.get("verification_code")
+        if not code:
+            code = secrets.token_hex(4).upper() + "-" + secrets.token_hex(4).upper()
+        context["verification_code"] = code
+
+        # 2. Formulate verification footer line:
+        # "Ref: <ref no> · Verification code: <code> · Verify at <APP_BASE_URL>/verify"
+        ref_no = context.get("ref_no")
+        ref_no_str = str(ref_no).strip() if ref_no else ""
+        from server.app.core.config import Settings, settings
+        if not hasattr(Settings, "APP_BASE_URL"):
+            Settings.APP_BASE_URL = property(lambda self: os.environ.get("APP_BASE_URL", "http://localhost:5173").rstrip("/"))
+        base_url = str(settings.APP_BASE_URL).rstrip("/")
+        verify_url = f"{base_url}/verify"
+        if ref_no_str:
+            footer_line = f"Ref: {ref_no_str} · Verification code: {code} · Verify at {verify_url}"
+        else:
+            footer_line = f"Verification code: {code} · Verify at {verify_url}"
+
         # Render DOCX with SandboxedEnvironment and StrictUndefined (autoescape=True)
         if hasattr(docx_source, "seek"):
             docx_source.seek(0)
@@ -129,6 +156,7 @@ class Renderer:
         self._apply_club_banner(doc)
         self._apply_club_logo(doc)
         safe_render_docx(doc, context, timeout=30.0)
+        self._apply_verification_footer_docx(doc, footer_line)
 
         # Output path
         if output_dir is None:
@@ -143,8 +171,24 @@ class Renderer:
         # Convert to PDF if requested
         pdf_path = None
         converter_used = ""
+        pdf_sha256 = None
         if convert_pdf:
             pdf_path, converter_used = self._convert_to_pdf(docx_path)
+            if pdf_path and pdf_path.exists():
+                try:
+                    import pymupdf
+                    doc_pdf = pymupdf.open(str(pdf_path))
+                    has_code = any(code in page.get_text() for page in doc_pdf)
+                    if not has_code:
+                        for page in doc_pdf:
+                            rect = page.rect
+                            box = pymupdf.Rect(36, rect.height - 30, rect.width - 36, rect.height - 10)
+                            page.insert_textbox(box, footer_line, fontsize=8, fontname="helv", color=(0.5, 0.5, 0.5), align=1)
+                        doc_pdf.save(str(pdf_path), incremental=False, encryption=0)
+                    doc_pdf.close()
+                except Exception:
+                    pass
+                pdf_sha256 = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
 
         return RenderResult(
             docx_path=docx_path,
@@ -152,7 +196,34 @@ class Renderer:
             template_id=template_id,
             version=version,
             converter=converter_used,
+            verification_code=code,
+            pdf_sha256=pdf_sha256,
         )
+
+    def _apply_verification_footer_docx(self, doc: DocxTemplate, footer_text: str) -> None:
+        """Append 8pt grey centred verification footer to every page/section in DOCX."""
+        from docx.shared import Pt, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        sections = doc.docx.sections if hasattr(doc, "docx") and doc.docx else doc.sections
+        for i, section in enumerate(sections):
+            footers = [section.footer]
+            if getattr(section, "different_first_page_header_footer", False) and section.first_page_footer:
+                footers.append(section.first_page_footer)
+            for footer in footers:
+                if i == 0 or not footer.is_linked_to_previous:
+                    footer.is_linked_to_previous = False
+                    if len(footer.paragraphs) == 1 and not footer.paragraphs[0].text.strip():
+                        p = footer.paragraphs[0]
+                    else:
+                        p = footer.add_paragraph()
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    p.paragraph_format.space_before = Pt(0)
+                    p.paragraph_format.space_after = Pt(0)
+                    p.paragraph_format.line_spacing = 1.0
+                    run = p.add_run(footer_text)
+                    run.font.size = Pt(8)
+                    run.font.color.rgb = RGBColor(128, 128, 128)
 
     def _apply_club_banner(self, doc: DocxTemplate) -> None:
         """Swap the system templates' placeholder header banner for this club's banner."""

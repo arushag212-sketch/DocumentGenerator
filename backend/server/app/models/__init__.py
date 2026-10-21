@@ -6,6 +6,10 @@ Club-scoped tables have club_id with an index.
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+import re
+import secrets
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -20,6 +24,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +33,10 @@ from server.app.core.database import Base
 
 def generate_uuid() -> str:
     return str(uuid.uuid4())
+
+
+def generate_verification_code() -> str:
+    return secrets.token_hex(4).upper() + '-' + secrets.token_hex(4).upper()
 
 
 def utc_now() -> datetime:
@@ -330,6 +339,8 @@ class DocumentVersion(TimestampMixin, Base):
     diff_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     source: Mapped[str] = mapped_column(String(50), default="generated", nullable=False)  # generated | manually_edited_upload
+    verification_code: Mapped[Optional[str]] = mapped_column(String(32), default=generate_verification_code, nullable=True, unique=True, index=True)
+    pdf_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("document_id", "version_no", name="uq_doc_version"),
@@ -413,3 +424,43 @@ class AICache(Base):
     response: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     hits: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+@event.listens_for(DocumentVersion, "before_insert")
+def _set_version_verification_and_hash(mapper, connection, target):
+    if not target.verification_code and target.docx_key:
+        try:
+            import docx
+            doc_path = Path(target.docx_key)
+            if doc_path.exists():
+                doc = docx.Document(str(doc_path))
+                for s in doc.sections:
+                    for p in s.footer.paragraphs:
+                        m = re.search(r"Verification code:\s*([A-F0-9]{8}-[A-F0-9]{8})", p.text, re.IGNORECASE)
+                        if m:
+                            target.verification_code = m.group(1).upper()
+                            break
+                    if target.verification_code:
+                        break
+        except Exception:
+            pass
+    if not target.verification_code:
+        target.verification_code = generate_verification_code()
+    if not target.pdf_sha256 and target.pdf_key:
+        try:
+            p = Path(target.pdf_key)
+            if p.exists():
+                target.pdf_sha256 = hashlib.sha256(p.read_bytes()).hexdigest()
+        except Exception:
+            pass
+
+
+@event.listens_for(DocumentVersion, "before_update")
+def _update_version_hash(mapper, connection, target):
+    if not target.pdf_sha256 and target.pdf_key:
+        try:
+            p = Path(target.pdf_key)
+            if p.exists():
+                target.pdf_sha256 = hashlib.sha256(p.read_bytes()).hexdigest()
+        except Exception:
+            pass

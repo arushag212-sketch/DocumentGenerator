@@ -349,6 +349,7 @@ class DocumentVersionOut(BaseModel):
     created_at: datetime
     created_by: Optional[str] = None
     change_summary: Optional[str] = None
+    verification_code: Optional[str] = None
 
 
 class DocumentDetailOut(BaseModel):
@@ -371,6 +372,7 @@ class DocumentDetailOut(BaseModel):
     can_edit: bool = False
     can_review: bool = False
     template_name: Optional[str] = None
+    verification_code: Optional[str] = None
 
 
 # ---------------- HELPER FUNCTIONS ----------------
@@ -2595,6 +2597,8 @@ def generate_document(
         overrides={},
         docx_key=str(docx_path),
         pdf_key=str(pdf_path),
+        verification_code=render_result.verification_code,
+        pdf_sha256=render_result.pdf_sha256,
         created_by=ctx.user.id,
         source="generated",
     )
@@ -2638,8 +2642,10 @@ def generate_document(
                 pdf_available=pdf_path.exists(),
                 created_at=ver_record.created_at,
                 created_by=ctx.user.name,
+                verification_code=ver_record.verification_code,
             )
         ],
+        verification_code=ver_record.verification_code,
         record_snapshot=event.flat_dict(),
     )
 
@@ -2964,6 +2970,7 @@ def get_document_details(
                 created_at=v.created_at,
                 created_by=(authors.get(v.created_by) if v.created_by else None) or "Generated",
                 change_summary=v.diff_summary,
+                verification_code=v.verification_code,
             )
             for v in versions
         ],
@@ -2973,6 +2980,7 @@ def get_document_details(
         can_edit=ctx.is_editor,
         can_review=ctx.is_admin,
         template_name=tmpl.name if tmpl else None,
+        verification_code=latest_ver.verification_code,
     )
 
 

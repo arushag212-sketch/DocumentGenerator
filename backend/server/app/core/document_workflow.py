@@ -163,6 +163,8 @@ def revise_document(db: Session, doc: Document, user: User, changes: dict[str, A
     if not diffs:
         raise HTTPException(status_code=400, detail={"code": "NO_CHANGES", "message": "Nothing was changed."})
 
+    code = secrets.token_hex(4).upper() + "-" + secrets.token_hex(4).upper()
+    snapshot["verification_code"] = code
     new_ver = DocumentVersion(
         document_id=doc.id,
         template_version_id=current.template_version_id or doc.template_version_id,
@@ -171,11 +173,15 @@ def revise_document(db: Session, doc: Document, user: User, changes: dict[str, A
         overrides={**(current.overrides or {}), **changes},
         diff_summary="; ".join(diffs),
         created_by=user.id,
+        verification_code=code,
         source="revised",
     )
     db.add(new_ver)
     db.flush()
     regenerate_document_version(db, doc.id, new_ver.version_no, club_id=doc.club_id)
+    if new_ver.pdf_key and Path(new_ver.pdf_key).exists():
+        new_ver.pdf_sha256 = hashlib.sha256(Path(new_ver.pdf_key).read_bytes()).hexdigest()
+        db.flush()
     doc.current_version_id = new_ver.id
     doc.status = "ready"
     _log(db, doc, new_ver.version_no, "revised", user, note or "; ".join(diffs))
@@ -232,15 +238,23 @@ def approve(db: Session, doc: Document, user: User, role_label: str, comment: Op
         regenerate_document_version(db, doc.id, ver.version_no, club_id=doc.club_id)
         pdf_path = storage.local_path(ver.pdf_key)
 
-    code = secrets.token_hex(4).upper() + "-" + secrets.token_hex(4).upper()
+    code = ver.verification_code or (secrets.token_hex(4).upper() + "-" + secrets.token_hex(4).upper())
+    ver.verification_code = code
     when = datetime.now(IST).strftime("%d/%m/%Y %I:%M %p IST")
     signed_path = pdf_path.with_name(pdf_path.stem + "_approved.pdf")
+    import os
+    from server.app.core.config import Settings, settings
+    if not hasattr(Settings, "APP_BASE_URL"):
+        Settings.APP_BASE_URL = property(lambda self: os.environ.get("APP_BASE_URL", "http://localhost:5173").rstrip("/"))
+    base_url = str(settings.APP_BASE_URL).rstrip("/")
     _stamp_pdf(pdf_path, signed_path, [
         f"Electronically approved by {user.name} ({role_label}) on {when}.",
-        f"Verification code {code} — verify this copy at /verify/{code}",
+        f"Verification code {code} — verify this copy at {base_url}/verify",
     ])
     digest = hashlib.sha256(signed_path.read_bytes()).hexdigest()
     ver.pdf_key = str(signed_path)
+    if not ver.pdf_sha256:
+        ver.pdf_sha256 = digest
     doc.status = "approved"
     return _log(db, doc, ver.version_no, "approved", user, comment, verification_code=code, pdf_sha256=digest)
 

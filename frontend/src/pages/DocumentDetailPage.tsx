@@ -12,6 +12,9 @@ import {
   MessageSquare,
   AlertCircle,
   X,
+  Copy,
+  Check,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -148,6 +151,7 @@ export const DocumentDetailPage: React.FC = () => {
   const [note, setNote] = useState('');
   const [comment, setComment] = useState('');
   const [emailOpen, setEmailOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     if (!clubId || !id) return;
@@ -219,6 +223,7 @@ export const DocumentDetailPage: React.FC = () => {
   }
 
   const approvedEntry = (doc.activity || []).find((a) => a.action === 'approved' && a.verification_code);
+  const vCode = (doc as any)?.verification_code || (doc.versions?.[0] as any)?.verification_code || approvedEntry?.verification_code;
   const canSubmit = doc.can_edit && ['ready', 'generated', 'changes_requested'].includes(doc.status);
   const canDecide = doc.can_review && doc.status === 'submitted';
   const fields = doc.editable_fields || [];
@@ -274,6 +279,54 @@ export const DocumentDetailPage: React.FC = () => {
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-6">
+          {/* Verification Code */}
+          {vCode && (
+            <div className="surface-card p-5">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  Verification code
+                </h2>
+                <Link
+                  to={`/verify/${vCode}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-medium text-brand-700 hover:underline inline-flex items-center gap-1"
+                >
+                  Open verify page <ExternalLink className="w-3 h-3" />
+                </Link>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                Printed in the footer of this document. Anyone can verify it without signing in.
+              </p>
+              <div className="flex items-center justify-between gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                <code className="font-mono text-xs font-semibold text-slate-800 tracking-wider">
+                  {vCode}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(vCode);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="btn-secondary text-xs py-1 px-2 flex items-center gap-1"
+                  title="Copy verification code"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" /> Copy
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Review */}
           <div
             ref={reviewRef}
