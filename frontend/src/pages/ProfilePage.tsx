@@ -6,6 +6,7 @@ import { api } from '../api/client';
 import { PageHeader } from '../components/layout/AppShell';
 import { notify } from '../components/common/Toaster';
 import { openWelcomeTour } from '../components/onboarding/WelcomeTour';
+import { PasswordInput } from '../components/auth/PasswordInput';
 
 const Section: React.FC<{ icon: React.ElementType; title: string; description?: string; children: React.ReactNode }> = ({
   icon: Icon,
@@ -52,6 +53,7 @@ export const ProfilePage: React.FC = () => {
   const [pwError, setPwError] = useState<string | null>(null);
   const [savingPw, setSavingPw] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [pwResetKey, setPwResetKey] = useState(0);
 
   if (!user) return null;
   const hasPassword = Boolean(user.has_password);
@@ -85,6 +87,7 @@ export const ProfilePage: React.FC = () => {
       setCurrentPw('');
       setNewPw('');
       setConfirmPw('');
+      setPwResetKey((k) => k + 1);
       notify(hasPassword ? 'Password changed. Other devices were signed out.' : 'Password set. You can now also sign in with email.', 'success');
     } catch (err: any) {
       setPwError(err.message || 'Could not change the password.');
@@ -164,13 +167,13 @@ export const ProfilePage: React.FC = () => {
             {hasPassword && (
               <div className="max-w-sm">
                 <label className="field-label" htmlFor="pw-current">Current password</label>
-                <input id="pw-current" type="password" className="input-field" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} autoComplete="current-password" required />
+                <PasswordInput id="pw-current" className="input-field" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} autoComplete="current-password" required resetKey={pwResetKey} />
               </div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="field-label" htmlFor="pw-new">New password</label>
-                <input id="pw-new" type="password" className="input-field" value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" minLength={10} required />
+                <PasswordInput id="pw-new" className="input-field" value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" minLength={10} required resetKey={pwResetKey} />
                 {meter && (
                   <div className="mt-2">
                     <div className="h-1.5 rounded-full bg-slate-100">
@@ -182,7 +185,7 @@ export const ProfilePage: React.FC = () => {
               </div>
               <div>
                 <label className="field-label" htmlFor="pw-confirm">Repeat new password</label>
-                <input id="pw-confirm" type="password" className="input-field" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} autoComplete="new-password" required />
+                <PasswordInput id="pw-confirm" className="input-field" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} autoComplete="new-password" required resetKey={pwResetKey} />
                 {confirmPw && newPw === confirmPw && (
                   <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700"><Check className="h-3.5 w-3.5" /> Passwords match</p>
                 )}

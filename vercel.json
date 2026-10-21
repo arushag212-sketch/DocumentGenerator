@@ -3,7 +3,6 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "framework": "vite",
-  "cleanUrls": true,
   "rewrites": [
     {
       "source": "/api/:match*",

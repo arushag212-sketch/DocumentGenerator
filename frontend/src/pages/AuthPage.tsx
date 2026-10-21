@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { Lock, Mail, User, KeyRound, ShieldAlert, CheckCircle2, ArrowRight, Sparkles, FileCheck2, ShieldCheck } from 'lucide-react';
 import { DocPreviewArt } from '../components/brand/DocPreviewArt';
+import { PasswordInput } from '../components/auth/PasswordInput';
 const AuthInput: React.FC<{
   icon: any;
   label?: string;
@@ -65,6 +66,7 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
     status: string;
   } | null>(null);
 
+  const [authResetKey, setAuthResetKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -102,6 +104,7 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
       params.append('username', loginEmail.trim());
       params.append('password', loginPassword);
       await login(params);
+      setAuthResetKey((k) => k + 1);
 
       // If logging in via an invite link, accept the invite
       if (inviteCode.trim()) {
@@ -141,6 +144,7 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
       params.append('username', registerEmail.trim());
       params.append('password', registerPassword);
       await login(params);
+      setAuthResetKey((k) => k + 1);
       navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Registration failed');
@@ -177,6 +181,7 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
     try {
       const res = await api.auth.resetPassword(resetToken.trim(), newPassword);
       setSuccess(`${res.message}. You can now sign in with your new password.`);
+      setAuthResetKey((k) => k + 1);
       setTimeout(() => {
         setTab('login');
         setLoginPassword('');
@@ -272,6 +277,7 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
                     onClick={() => {
                       setTab(t);
                       resetFormFeedback();
+                      setAuthResetKey((k) => k + 1);
                     }}
                     className={`rounded-md py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                       tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
@@ -352,9 +358,9 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
             {tab === 'login' && (
               <form onSubmit={handleLogin} className="space-y-4">
                 <AuthInput icon={Mail} label="Email" type="email" autoComplete="email" required value={loginEmail} onChange={(e: any) => setLoginEmail(e.target.value)} placeholder="you@svnit.ac.in" />
-                <AuthInput icon={Lock} label="Password" type="password" autoComplete="current-password" required value={loginPassword} onChange={(e: any) => setLoginPassword(e.target.value)} placeholder="Your password" />
+                <PasswordInput icon={Lock} label="Password" autoComplete="current-password" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Your password" resetKey={authResetKey} />
                 <div className="flex justify-end text-xs">
-                  <button type="button" onClick={() => { setTab('forgot'); resetFormFeedback(); }} className="text-brand-700 hover:underline">Forgot password?</button>
+                  <button type="button" onClick={() => { setTab('forgot'); resetFormFeedback(); setAuthResetKey((k) => k + 1); }} className="text-brand-700 hover:underline">Forgot password?</button>
                 </div>
                 <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5">
                   {loading ? 'Signing in…' : 'Sign in'}
@@ -367,7 +373,7 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
               <form onSubmit={handleRegister} className="space-y-4">
                 <AuthInput icon={User} label="Full name" type="text" autoComplete="name" required value={fullName} onChange={(e: any) => setFullName(e.target.value)} placeholder="Your name" />
                 <AuthInput icon={Mail} label="SVNIT email" type="email" autoComplete="email" required value={registerEmail} onChange={(e: any) => setRegisterEmail(e.target.value)} placeholder="you@svnit.ac.in" />
-                <AuthInput icon={Lock} label="Password" type="password" autoComplete="new-password" required minLength={10} value={registerPassword} onChange={(e: any) => setRegisterPassword(e.target.value)} placeholder="At least 10 characters" helper="Common passwords are not allowed." />
+                <PasswordInput icon={Lock} label="Password" autoComplete="new-password" required minLength={10} value={registerPassword} onChange={(e) => setRegisterPassword(e.target.value)} placeholder="At least 10 characters" helper="Common passwords are not allowed." resetKey={authResetKey} />
                 <AuthInput icon={KeyRound} label="Club invite code (optional)" type="text" value={inviteCode} onChange={(e: any) => setInviteCode(e.target.value.toUpperCase())} placeholder="e.g. ACM-A7B8C9" className="font-mono uppercase" />
                 <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5">
                   {loading ? 'Creating account…' : 'Create account'}
@@ -384,8 +390,8 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
                   </button>
                 </form>
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                  <button type="button" onClick={() => { setTab('login'); resetFormFeedback(); }} className="text-slate-500 hover:text-slate-800">← Back to sign in</button>
-                  <button type="button" onClick={() => { setTab('reset'); resetFormFeedback(); }} className="text-brand-700 hover:underline">I have a reset code</button>
+                  <button type="button" onClick={() => { setTab('login'); resetFormFeedback(); setAuthResetKey((k) => k + 1); }} className="text-slate-500 hover:text-slate-800">← Back to sign in</button>
+                  <button type="button" onClick={() => { setTab('reset'); resetFormFeedback(); setAuthResetKey((k) => k + 1); }} className="text-brand-700 hover:underline">I have a reset code</button>
                 </div>
               </div>
             )}
@@ -393,12 +399,12 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
             {tab === 'reset' && (
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <AuthInput icon={KeyRound} label="Reset code" type="text" required value={resetToken} onChange={(e: any) => setResetToken(e.target.value)} placeholder="Paste the code from the email" className="font-mono" />
-                <AuthInput icon={Lock} label="New password" type="password" autoComplete="new-password" required minLength={10} value={newPassword} onChange={(e: any) => setNewPassword(e.target.value)} placeholder="At least 10 characters" />
+                <PasswordInput icon={Lock} label="New password" autoComplete="new-password" required minLength={10} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 10 characters" resetKey={authResetKey} />
                 <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5">
                   {loading ? 'Updating…' : 'Set new password'}
                 </button>
                 <div className="text-center pt-1">
-                  <button type="button" onClick={() => { setTab('login'); resetFormFeedback(); }} className="text-xs text-slate-500 hover:text-slate-800">← Back to sign in</button>
+                  <button type="button" onClick={() => { setTab('login'); resetFormFeedback(); setAuthResetKey((k) => k + 1); }} className="text-xs text-slate-500 hover:text-slate-800">← Back to sign in</button>
                 </div>
               </form>
             )}
