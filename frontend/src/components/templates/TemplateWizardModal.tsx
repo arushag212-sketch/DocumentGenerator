@@ -76,9 +76,9 @@ export const TemplateWizardModal: React.FC<TemplateWizardModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col border border-slate-200">
+      <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full max-h-[85vh] sm:max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
         {/* Header */}
-        <div className="px-6 py-4 bg-white border-b border-slate-200 flex items-center justify-between">
+        <div className="px-5 py-4 sm:px-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-brand-600 text-white rounded-xl shadow-xs">
               <Wand2 className="w-5 h-5" />
@@ -90,13 +90,13 @@ export const TemplateWizardModal: React.FC<TemplateWizardModalProps> = ({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1">
+          <button onClick={onClose} className="p-2.5 sm:p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition" aria-label="Close dialog">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-5">
+        <div className="p-4 sm:p-6 space-y-5 flex-1 overflow-y-auto">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center justify-between">
               <span>{error}</span>

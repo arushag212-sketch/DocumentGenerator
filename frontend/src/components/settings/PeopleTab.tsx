@@ -227,7 +227,7 @@ export const PeopleTab: React.FC<PeopleTabProps> = ({ clubId, permissions }) => 
           <div className="p-8 text-center text-slate-500 text-sm">No officials yet. Add the faculty chairman and student head first.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-left text-sm min-w-[600px]">
               <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
                 <tr>
                   <th className="py-2.5 px-4 font-medium">Name</th>
@@ -302,10 +302,10 @@ export const PeopleTab: React.FC<PeopleTabProps> = ({ clubId, permissions }) => 
       {form && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="official-title">
           <div className="absolute inset-0 bg-slate-900/30" onClick={() => setForm(null)} />
-          <form onSubmit={save} className="relative surface-card w-full max-w-lg p-5 space-y-4">
+          <form onSubmit={save} className="relative surface-card w-full max-w-lg p-4 sm:p-5 space-y-4 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 id="official-title" className="section-title">{form.id ? 'Edit official' : 'Add official'}</h3>
-              <button type="button" className="btn-ghost !p-1.5" onClick={() => setForm(null)} aria-label="Close">
+              <button type="button" className="btn-ghost !p-2 min-w-[44px] min-h-[44px] flex items-center justify-center" onClick={() => setForm(null)} aria-label="Close">
                 <X className="w-4 h-4" />
               </button>
             </div>

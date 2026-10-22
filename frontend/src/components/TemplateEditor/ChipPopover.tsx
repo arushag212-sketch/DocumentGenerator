@@ -66,7 +66,7 @@ export const ChipPopover: React.FC<ChipPopoverProps> = ({
     <div
       ref={popoverRef}
       style={{ top: `${stylePos.top}px`, left: `${stylePos.left}px` }}
-      className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-2xl p-4 w-80 text-xs space-y-3.5 animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-2xl p-4 w-80 max-w-[calc(100vw-24px)] text-xs space-y-3.5 animate-in fade-in zoom-in-95 duration-100"
       role="dialog"
       aria-label="Edit Field Chip"
     >
@@ -81,7 +81,7 @@ export const ChipPopover: React.FC<ChipPopoverProps> = ({
         </div>
         <button
           onClick={onClose}
-          className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+          className="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
           aria-label="Close"
         >
           <X className="w-3.5 h-3.5" />

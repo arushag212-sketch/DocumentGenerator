@@ -42,7 +42,7 @@ export const ImageBlockPopover: React.FC<ImageBlockPopoverProps> = ({
   };
 
   return (
-    <div className="fixed bottom-16 left-1/2 transform -translate-x-1/2 z-40 bg-white border border-slate-200 rounded-xl shadow-2xl p-3 w-96 text-xs space-y-2.5 animate-in fade-in select-none">
+    <div className="fixed bottom-16 left-1/2 transform -translate-x-1/2 z-40 bg-white border border-slate-200 rounded-xl shadow-2xl p-3 w-96 max-w-[calc(100vw-24px)] text-xs space-y-2.5 animate-in fade-in select-none">
       <div className="flex items-center justify-between pb-1 border-b border-slate-100">
         <div>
           <span className="font-bold text-slate-800 flex items-center gap-1.5">
@@ -51,7 +51,7 @@ export const ImageBlockPopover: React.FC<ImageBlockPopoverProps> = ({
           </span>
           <span className="text-[11px] text-slate-400 block">Drag image corner handle to resize with cursor</span>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 font-bold p-1">
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 font-bold p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" aria-label="Close image settings">
           ✕
         </button>
       </div>

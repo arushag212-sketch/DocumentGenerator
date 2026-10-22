@@ -163,7 +163,7 @@ const TableFieldEditor: React.FC<{
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="w-full text-xs text-left">
+          <table className="w-full text-xs text-left min-w-[500px]">
             <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
               <tr>
                 <th className="px-2.5 py-2 w-8 text-center text-slate-400">#</th>
@@ -192,7 +192,7 @@ const TableFieldEditor: React.FC<{
                           )
                         }
                         placeholder={`Enter ${col.label.toLowerCase()}`}
-                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-brand-700 focus:outline-none"
+                        className="w-full px-2 py-1.5 sm:py-1 min-h-[36px] bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-brand-700 focus:outline-none"
                       />
                     </td>
                   ))}
@@ -200,7 +200,7 @@ const TableFieldEditor: React.FC<{
                     <button
                       type="button"
                       onClick={() => handleRemoveRow(rIdx)}
-                      className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
+                      className="p-2 sm:p-1 min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-slate-400 hover:text-red-600 rounded transition-colors"
                       title="Remove row"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -697,7 +697,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
             </div>
 
             {/* Preview Viewport */}
-            <div className="bg-slate-100 p-4 min-h-[640px] max-h-[820px] overflow-y-auto flex flex-col items-center gap-4">
+            <div className="bg-slate-100 p-4 max-h-[38vh] sm:max-h-[45vh] lg:min-h-[640px] lg:max-h-[820px] overflow-y-auto flex flex-col items-center gap-4">
               {activeDoc ? (
                 previewMode === 'image' ? (
                   activeDoc.page_images && activeDoc.page_images.length > 0 ? (
@@ -724,7 +724,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                   <iframe
                     src={`${activeDoc.pdf_url.includes('?') ? activeDoc.pdf_url : `${activeDoc.pdf_url}?`}disposition=inline#toolbar=0`}
                     title={activeDoc.title}
-                    className="w-full h-[760px] rounded-lg border border-slate-300 bg-white"
+                    className="w-full h-[38vh] sm:h-[45vh] lg:h-[760px] rounded-lg border border-slate-300 bg-white"
                   />
                 )
               ) : (

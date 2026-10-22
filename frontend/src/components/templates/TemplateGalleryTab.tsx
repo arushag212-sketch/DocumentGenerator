@@ -282,7 +282,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
           {canManage && onOpenEditor && (
             <>
               <button
@@ -585,7 +585,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="p-4 bg-slate-50/70 border-t border-slate-100 flex items-center gap-2">
+              <div className="p-4 bg-slate-50/70 border-t border-slate-100 flex flex-wrap sm:flex-nowrap items-center gap-2">
                 <button
                   type="button"
                   data-testid={`preview-btn-${tmpl.slug}`}
@@ -661,7 +661,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
       {/* Unified Action Modal */}
       {actionModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 {actionModal.type === 'fork' && <><Copy className="w-4 h-4 text-amber-600" /> Customize Template (Fork)</>}
@@ -672,7 +672,8 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
               <button
                 type="button"
                 onClick={() => setActionModal(null)}
-                className="text-slate-400 hover:text-slate-600"
+                className="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -766,7 +767,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
       {/* Ambiguous Logo Selection Modal */}
       {ambiguousLogoModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-200">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 border border-slate-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                 Select club logo
@@ -777,7 +778,8 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                   setAmbiguousLogoModal(null);
                   if (onOpenEditor) onOpenEditor(tmplId);
                 }}
-                className="text-slate-400 hover:text-slate-600"
+                className="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+                aria-label="Close dialog"
               >
                 <X className="w-4 h-4" />
               </button>

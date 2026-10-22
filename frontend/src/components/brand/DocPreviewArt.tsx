@@ -8,7 +8,7 @@ import { CheckCircle2 } from 'lucide-react';
 export const DocPreviewArt: React.FC<{ className?: string }> = ({ className = '' }) => (
   <div className={`relative select-none ${className}`} aria-hidden="true">
     {/* Certificate behind */}
-    <div className="absolute -right-6 top-6 w-[78%] aspect-[1.414/1] rotate-6 rounded-lg bg-[#fffaf0] shadow-xl ring-1 ring-black/5">
+    <div className="absolute -right-3 sm:-right-6 top-6 w-[78%] aspect-[1.414/1] rotate-6 rounded-lg bg-[#fffaf0] shadow-xl ring-1 ring-black/5">
       <div className="absolute inset-2 rounded border-2 border-double border-svnit-gold/60" />
       <div className="flex h-full flex-col items-center justify-center gap-1.5 px-6">
         <div className="h-1.5 w-1/3 rounded-full bg-svnit-gold/50" />
@@ -61,7 +61,7 @@ export const DocPreviewArt: React.FC<{ className?: string }> = ({ className = ''
     </div>
 
     {/* Status chip */}
-    <div className="absolute -left-3 bottom-10 flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-emerald-700 shadow-lg ring-1 ring-black/5">
+    <div className="absolute -left-2 sm:-left-3 bottom-10 flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-emerald-700 shadow-lg ring-1 ring-black/5">
       <CheckCircle2 className="h-3.5 w-3.5" />
       Approved · ACM/26-27/EVT/014
     </div>

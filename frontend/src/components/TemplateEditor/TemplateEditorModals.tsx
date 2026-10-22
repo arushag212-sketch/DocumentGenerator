@@ -100,7 +100,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
             <button
               onClick={onClose}
               aria-label="Close preview"
-              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+              className="p-2.5 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
             >
               <X className="w-5 h-5" />
             </button>
@@ -214,7 +214,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
       aria-labelledby="validation-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-6 animate-in fade-in"
     >
-      <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full p-6 border border-slate-200">
+      <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full p-4 sm:p-6 border border-slate-200 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-emerald-600" />
@@ -222,7 +222,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
               Compiler Validation Report
             </h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button onClick={onClose} className="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition" aria-label="Close dialog">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -240,7 +240,7 @@ export const ValidationModal: React.FC<ValidationModalProps> = ({
         <div className="mt-6 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs"
+            className="px-4 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs"
           >
             OK
           </button>
@@ -272,7 +272,7 @@ export const UnreviewedAiModal: React.FC<UnreviewedAiModalProps> = ({
       aria-labelledby="unreviewed-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-6 animate-in fade-in"
     >
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 border border-amber-200">
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-4 sm:p-6 border border-amber-200 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
         <div className="flex items-center gap-3 mb-4 text-amber-700">
           <AlertCircle className="w-6 h-6 text-amber-600 shrink-0" />
           <h3 id="unreviewed-modal-title" className="font-bold text-base">
@@ -292,14 +292,14 @@ export const UnreviewedAiModal: React.FC<UnreviewedAiModalProps> = ({
         <div className="flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+            className="px-4 py-2 min-h-[44px] sm:min-h-0 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
           >
             Review In Editor
           </button>
           <button
             onClick={onApproveAll}
             disabled={reviewing}
-            className="px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs disabled:opacity-50"
+            className="px-4 py-2 min-h-[44px] sm:min-h-0 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs disabled:opacity-50"
           >
             {reviewing ? 'Approving…' : 'Approve All & Continue'}
           </button>

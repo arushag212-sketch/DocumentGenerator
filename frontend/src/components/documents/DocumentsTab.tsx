@@ -246,7 +246,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
           )}
         </form>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 pt-2 border-t border-slate-100 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-2 border-t border-slate-100 text-xs">
           {/* Template Filter */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">Type / Template</label>
@@ -413,7 +413,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
         /* Documents Table */
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs sm:text-sm">
+            <table className="w-full min-w-[720px] text-left border-collapse text-xs sm:text-sm">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs font-semibold">
                   <th className="py-3 px-4">Document Title</th>
@@ -483,7 +483,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
 
                     {/* Actions */}
                     <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex items-center justify-end gap-1.5 relative right-0">
                         <Link
                           to={docLink(doc.id)}
                           className="inline-flex items-center px-2.5 py-1 bg-brand-700 hover:bg-brand-800 text-white rounded text-xs font-semibold transition-colors"
@@ -602,7 +602,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <a
                   href={`/api/v1/clubs/${clubId}/documents/${previewDoc.id}/pdf`}
                   download

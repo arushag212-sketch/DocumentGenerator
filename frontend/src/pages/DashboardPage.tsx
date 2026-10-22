@@ -102,33 +102,35 @@ function MonthlyChart({ data }: { data: ClubAnalytics['by_month'] }) {
           </tbody>
         </table>
       ) : (
-        <div className="relative">
-          <div className="flex items-end gap-3 h-40 border-b border-slate-200" role="img" aria-label="Documents generated per month">
-            {data.map((d, i) => (
-              <div
-                key={d.month}
-                className="relative flex-1 h-full flex items-end justify-center"
-                onMouseEnter={() => setHover(i)}
-                onMouseLeave={() => setHover(null)}
-              >
-                {hover === i && (
-                  <div className="absolute bottom-full mb-1 px-2 py-1 rounded-md bg-slate-900 text-white text-xs whitespace-nowrap z-10">
-                    {d.month}: <span className="font-semibold tabular-nums">{d.documents}</span>
-                  </div>
-                )}
+        <div className="overflow-x-auto pb-2">
+          <div className="relative min-w-[320px]">
+            <div className="flex items-end gap-3 h-40 border-b border-slate-200" role="img" aria-label="Documents generated per month">
+              {data.map((d, i) => (
                 <div
-                  className={`w-full max-w-[36px] rounded-t transition-colors ${hover === i ? 'bg-brand-800' : 'bg-brand-600'}`}
-                  style={{ height: `${d.documents === 0 ? 0 : Math.max(3, (d.documents / max) * 100)}%` }}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-3 mt-1.5">
-            {data.map((d) => (
-              <span key={d.month} className="flex-1 text-center text-xs text-slate-500">
-                {d.month.split(' ')[0]}
-              </span>
-            ))}
+                  key={d.month}
+                  className="relative flex-1 h-full flex items-end justify-center"
+                  onMouseEnter={() => setHover(i)}
+                  onMouseLeave={() => setHover(null)}
+                >
+                  {hover === i && (
+                    <div className="absolute bottom-full mb-1 px-2 py-1 rounded-md bg-slate-900 text-white text-xs whitespace-nowrap z-10">
+                      {d.month}: <span className="font-semibold tabular-nums">{d.documents}</span>
+                    </div>
+                  )}
+                  <div
+                    className={`w-full max-w-[36px] rounded-t transition-colors ${hover === i ? 'bg-brand-800' : 'bg-brand-600'}`}
+                    style={{ height: `${d.documents === 0 ? 0 : Math.max(3, (d.documents / max) * 100)}%` }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-1.5">
+              {data.map((d) => (
+                <span key={d.month} className="flex-1 text-center text-xs text-slate-500">
+                  {d.month.split(' ')[0]}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -217,7 +219,7 @@ export const DashboardPage: React.FC = () => {
 
       <GettingStarted stats={stats} />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <StatTile label="This month" value={stats?.documents_this_month ?? '–'} hint="documents generated" icon={FilePlus2} />
         <StatTile label="All documents" value={stats?.documents_total ?? '–'} hint={stats ? `${stats.events_total} events` : undefined} icon={Files} tone="slate" to="/documents" />
         <StatTile label="Awaiting review" value={stats?.awaiting_review ?? '–'} hint={stats ? `${stats.approvals} approved` : undefined} icon={Hourglass} tone="amber" to="/documents?status=submitted" />

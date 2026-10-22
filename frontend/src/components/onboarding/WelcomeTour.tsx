@@ -128,7 +128,7 @@ export const WelcomeTour: React.FC = () => {
             ))}
           </div>
 
-          <div className="mt-5 flex items-center justify-between">
+          <div className="mt-5 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
             {step === 0 ? (
               <button type="button" onClick={close} className="btn-ghost">Skip</button>
             ) : (

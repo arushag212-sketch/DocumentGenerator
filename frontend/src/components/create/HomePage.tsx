@@ -250,7 +250,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
         {/* Optional Document Type Picker (Collapsed by Default) */}
         <div className="pt-2 border-t border-slate-100">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <button
               type="button"
               onClick={() => setShowTypePicker(!showTypePicker)}

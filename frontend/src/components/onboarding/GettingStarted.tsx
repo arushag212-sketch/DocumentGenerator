@@ -146,7 +146,7 @@ export const GettingStarted: React.FC<{ stats: ClubAnalytics | null }> = ({ stat
 
   return (
     <section className="surface-card mb-6 overflow-hidden" aria-labelledby="getting-started-title">
-      <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 border-b border-slate-100 px-4 sm:px-5 py-3 sm:py-4">
         <div>
           <h2 id="getting-started-title" className="section-title">Getting started</h2>
           <p className="mt-0.5 text-xs text-slate-500">

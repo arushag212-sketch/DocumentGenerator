@@ -109,11 +109,11 @@ export const VerifyPage: React.FC = () => {
               </div>
             )}
 
-            <dl className="p-5 grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
+            <dl className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-y-2 text-sm">
               <dt className="text-slate-500">Document</dt>
               <dd className="text-slate-900 font-medium">{result.document_title}</dd>
               <dt className="text-slate-500">Reference</dt>
-              <dd className="text-slate-900 font-mono">{result.ref_no || '—'}</dd>
+              <dd className="text-slate-900 font-mono break-all">{result.ref_no || '—'}</dd>
               <dt className="text-slate-500">Club</dt>
               <dd className="text-slate-900">{result.club_name}</dd>
               <dt className="text-slate-500">Version</dt>

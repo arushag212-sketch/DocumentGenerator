@@ -84,7 +84,7 @@ export const BatchRowsPanel: React.FC<{
         </div>
         <div className="flex gap-2 flex-shrink-0">
           <button type="button" className="btn-ghost text-sm" onClick={() => setOpen(true)}>Change</button>
-          <button type="button" className="btn-ghost !p-1.5" aria-label="Remove rows" onClick={() => onChange(null)}>
+          <button type="button" className="btn-ghost !p-2.5 sm:!p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" aria-label="Remove rows" onClick={() => onChange(null)}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -113,7 +113,7 @@ export const BatchRowsPanel: React.FC<{
             Upload a CSV or paste a Google Sheets link shared as &quot;Anyone with the link&quot;. Up to 300 rows.
           </p>
         </div>
-        <button type="button" className="btn-ghost !p-1.5" aria-label="Close" onClick={() => setOpen(false)}>
+        <button type="button" className="btn-ghost !p-2.5 sm:!p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center" aria-label="Close" onClick={() => setOpen(false)}>
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -179,16 +179,16 @@ export const BatchRowsPanel: React.FC<{
           <p className="text-sm text-slate-700">
             {parsed.row_count} rows found. Match each column to a field, or leave it unused.
           </p>
-          <div className="border border-slate-200 rounded-lg divide-y divide-slate-100">
+          <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-x-auto">
             {parsed.headers.map((h) => (
-              <div key={h} className="grid grid-cols-2 gap-3 items-center px-3 py-2">
+              <div key={h} className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 items-center px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-900 truncate">{h}</p>
                   <p className="text-xs text-slate-500 truncate">e.g. {parsed.rows[0]?.[h] || '—'}</p>
                 </div>
                 <select
                   aria-label={`Field for column ${h}`}
-                  className="input-field !py-1.5"
+                  className="input-field w-full rounded-lg !py-1.5"
                   value={mapping[h] || ''}
                   onChange={(e) => setMapping((m) => ({ ...m, [h]: e.target.value || null }))}
                 >

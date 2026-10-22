@@ -165,9 +165,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   useEffect(() => {
     const fit = () => {
       if (userZoomRef.current) return;
+      const isDesktop = window.innerWidth >= 1024;
+      const isWide = window.innerWidth >= 1280;
       const pageWidth = designSettings.orientation === 'landscape' ? 1123 : 794;
-      const side = (leftOpen ? 288 : 48) + (rightOpen && !isMobile ? 360 : 48);
-      const available = window.innerWidth - side - 48;
+      const side = (leftOpen && isDesktop ? 288 : (isDesktop ? 48 : 0)) + (rightOpen && isWide ? 360 : (isDesktop && !isMobile ? 48 : 0));
+      const available = window.innerWidth - side - (isDesktop ? 48 : 24);
       const next = Math.max(0.3, Math.min(1, Math.floor((available / pageWidth) * 20) / 20));
       setZoom(next);
     };

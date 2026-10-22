@@ -83,7 +83,7 @@ export const AuditTab: React.FC<AuditTabProps> = ({ clubId }) => {
           <div className="p-8 text-center text-slate-500 text-sm">No audit activity logged yet.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[680px]">
               <thead className="bg-slate-100/60 text-slate-600 uppercase text-xs tracking-wider border-b border-slate-200">
                 <tr>
                   <th className="py-3 px-6">Timestamp</th>

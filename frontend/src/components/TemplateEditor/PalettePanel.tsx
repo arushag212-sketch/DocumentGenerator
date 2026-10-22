@@ -93,7 +93,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
 
   if (!isOpen) {
     return (
-      <aside className="border-r border-slate-200 bg-slate-50 flex flex-col items-center py-3 px-1 transition-all select-none">
+      <aside className="hidden lg:flex border-r border-slate-200 bg-slate-50 flex-col items-center py-3 px-1 transition-all select-none">
         <button
           onClick={onToggle}
           className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition"
@@ -115,7 +115,14 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
   }
 
   return (
-    <aside className="w-72 lg:w-80 border-r border-slate-200 bg-white flex flex-col h-[calc(100vh-53px)] select-none transition-all">
+    <>
+      {/* Mobile backdrop overlay */}
+      <div
+        className="lg:hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 transition-opacity"
+        onClick={onToggle}
+        aria-hidden="true"
+      />
+      <aside className="fixed inset-y-0 left-0 z-50 w-72 sm:w-80 bg-white shadow-2xl flex flex-col h-full lg:static lg:z-auto lg:h-[calc(100vh-53px)] lg:w-80 lg:shadow-none lg:border-r lg:border-slate-200 select-none transition-all">
       {/* Header with Navigation Tabs */}
       <div className="border-b border-slate-200 bg-slate-50/80 px-2 py-1.5 flex items-center justify-between">
         <div className="flex items-center gap-1 text-xs font-semibold">
@@ -170,7 +177,7 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
         <button
           type="button"
           onClick={onToggle}
-          className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition"
+          className="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition"
           title="Collapse Panel"
           aria-label="Collapse sidebar"
         >
@@ -440,5 +447,6 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
         )}
       </div>
     </aside>
+    </>
   );
 };

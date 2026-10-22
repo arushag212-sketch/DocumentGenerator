@@ -92,7 +92,7 @@ function ClubSwitcher() {
                   setActiveClubId(c.id);
                   setOpen(false);
                 }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 text-left hover:bg-slate-50"
+                className="w-full flex items-center gap-2.5 px-2.5 py-2.5 lg:py-2 min-h-[44px] lg:min-h-0 text-left hover:bg-slate-50"
               >
                 <ClubMark clubId={c.id} name={c.name} size={24} />
                 <span className="min-w-0 flex-1">
@@ -107,7 +107,7 @@ function ClubSwitcher() {
             <Link
               to="/onboarding/club"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-2.5 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              className="flex items-center gap-2 px-2.5 py-2.5 lg:py-2 min-h-[44px] lg:min-h-0 text-sm text-slate-700 hover:bg-slate-50"
             >
               <Plus className="w-4 h-4" />
               Join or register a club
@@ -129,6 +129,35 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const isClubAdmin = Boolean(user?.is_platform_admin || activeClub?.my_role === 'owner' || activeClub?.my_role === 'admin');
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setMobileOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.touchAction = originalTouchAction;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobileOpen]);
 
   useEffect(() => {
     if (!activeClub || !isClubAdmin) {
@@ -192,7 +221,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           <ClubSwitcher />
         </div>
         {hasClubAccess && canCreate && (
-          <Link to="/home" className="btn-primary w-full justify-center">
+          <Link to="/home" className="btn-primary w-full justify-center min-h-[44px] lg:min-h-0 flex items-center gap-2">
             <FilePlus2 className="w-4 h-4" />
             New document
           </Link>
@@ -203,7 +232,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         {groups.map((group, gi) => (
           <div key={gi}>
             {group.label && <p className="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group.label}</p>}
-            <ul className="space-y-0.5">
+            <ul className="space-y-1 lg:space-y-0.5">
               {group.items.map((item) => {
                 const active = isActive(item);
                 const Icon = item.icon;
@@ -212,7 +241,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                     <NavLink
                       to={item.to}
                       aria-current={active ? 'page' : undefined}
-                      className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors ${
+                      className={`group flex items-center gap-2.5 px-2.5 py-2.5 lg:py-2 min-h-[44px] lg:min-h-0 rounded-lg text-sm transition-colors ${
                         active
                           ? 'bg-brand-50 text-brand-800 font-semibold shadow-[inset_3px_0_0_#1b365d]'
                           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -240,7 +269,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             to="/profile"
             title="Your profile"
             className={({ isActive: onProfile }) =>
-              `flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${onProfile ? 'bg-brand-50' : 'hover:bg-slate-100'}`
+              `flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2 lg:py-1.5 min-h-[44px] lg:min-h-0 transition-colors ${onProfile ? 'bg-brand-50' : 'hover:bg-slate-100'}`
             }
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-xs font-semibold text-white">
@@ -251,7 +280,13 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
               <span className="block text-xs text-slate-500 truncate">View profile</span>
             </span>
           </NavLink>
-          <button type="button" onClick={logout} className="btn-ghost !p-2" title="Sign out" aria-label="Sign out">
+          <button
+            type="button"
+            onClick={logout}
+            className="btn-ghost !p-0 min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:!p-2 flex items-center justify-center rounded-lg"
+            title="Sign out"
+            aria-label="Sign out"
+          >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
@@ -268,16 +303,24 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
       {/* Mobile drawer */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div className="absolute inset-0 bg-slate-900/30" onClick={() => setMobileOpen(false)} />
-          <aside className="relative w-72 bg-white h-full shadow-xl">
+        <div
+          className="lg:hidden fixed inset-0 z-50 flex"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
+        >
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside className="relative w-72 max-w-[calc(100vw-3rem)] bg-white h-full shadow-2xl flex flex-col">
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="absolute top-3 right-3 btn-ghost !p-1.5"
+              className="absolute top-2 right-2 z-10 btn-ghost !p-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg"
               aria-label="Close menu"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5 text-slate-500" />
             </button>
             {sidebar}
           </aside>
@@ -286,19 +329,26 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="lg:hidden sticky top-0 z-40 flex items-center gap-3 h-14 px-4 bg-white/95 backdrop-blur border-b border-slate-200">
-          <button type="button" onClick={() => setMobileOpen(true)} className="btn-ghost !p-1.5" aria-label="Open menu">
-            <Menu className="w-5 h-5" />
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="btn-ghost !p-0 min-h-[44px] min-w-[44px] flex items-center justify-center -ml-2 rounded-lg"
+            aria-label="Open menu"
+          >
+            <Menu className="w-6 h-6 text-slate-700" />
           </button>
           <span className="flex-1 text-sm font-semibold text-slate-900 truncate">{activeClub?.name || 'ClubDocs'}</span>
           <Link
             to="/profile"
             aria-label="Your profile"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-xs font-semibold text-white"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center -mr-2 rounded-lg"
           >
-            {initials}
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-xs font-semibold text-white">
+              {initials}
+            </span>
           </Link>
         </header>
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 min-w-0 overflow-x-hidden">{children}</main>
       </div>
       <WelcomeTour />
     </div>

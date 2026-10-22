@@ -47,7 +47,8 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<RightTabType>('chat');
 
-  if (!isOpen && !isMobile) {
+  if (!isOpen) {
+    if (isMobile) return null;
     return (
       <aside className="border-l border-slate-200 bg-slate-50 flex flex-col items-center py-3 px-1 transition-all select-none">
         <button
@@ -75,7 +76,15 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
     : 'w-80 lg:w-96 border-l border-slate-200 bg-white flex flex-col h-[calc(100vh-53px)] transition-all select-none';
 
   return (
-    <aside className={containerClasses}>
+    <>
+      {isMobile && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 z-30 lg:hidden"
+          onClick={onToggle}
+          aria-hidden="true"
+        />
+      )}
+      <aside className={containerClasses}>
       {/* Tab Navigation Header */}
       <div className="flex items-center justify-between border-b border-slate-200 px-2 py-1.5 bg-slate-50/80">
         <div className="flex items-center gap-1 text-xs font-semibold">
@@ -130,8 +139,9 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
 
         <button
           onClick={onToggle}
-          className="p-1 text-slate-400 hover:text-slate-600 rounded transition"
+          className="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded transition"
           title="Collapse Panel"
+          aria-label="Collapse panel"
         >
           {isMobile ? <X className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
@@ -212,5 +222,6 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
         )}
       </div>
     </aside>
+    </>
   );
 };

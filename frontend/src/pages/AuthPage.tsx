@@ -284,13 +284,13 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
           <span className="text-xs text-slate-500">SVNIT Surat</span>
         </Link>
 
-        <div className="w-full max-w-[420px]">
+        <div className="w-full max-w-[26.25rem]">
           <div className="mb-6">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{heading.title}</h1>
             <p className="mt-1.5 text-sm text-slate-500">{heading.sub}</p>
           </div>
 
-          <div className="surface-card p-6 shadow-sm sm:p-7">
+          <div className="surface-card p-4 shadow-sm sm:p-7">
             {(tab === 'login' || tab === 'register') && (
               <div className="mb-6 grid grid-cols-2 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Sign in or create account">
                 {(['login', 'register'] as const).map((t) => (

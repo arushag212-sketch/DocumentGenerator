@@ -1096,7 +1096,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
       {/* VENUE MODAL */}
       {venueForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4">
             <h3 className="font-bold text-base text-slate-900">
               {venueForm.id ? 'Edit Campus Venue' : 'Add Campus Venue'}
             </h3>
@@ -1187,7 +1187,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
       {/* CREATE NUMBERING MODAL */}
       {isAdmin && createSeriesForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4">
             <h3 className="font-bold text-base text-slate-900">
               Create Numbering Series
             </h3>
@@ -1290,7 +1290,7 @@ export const AdminTab: React.FC<AdminTabProps> = ({ clubId, permissions, onRefre
       {/* NUMBERING MODAL */}
       {seriesForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4">
             <h3 className="font-bold text-base text-slate-900">
               Edit Numbering Series: {seriesForm.series_key || (seriesForm as any).key}
             </h3>

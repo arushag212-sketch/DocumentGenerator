@@ -38,6 +38,12 @@ Thumbs.db
 
 # Vite dependency cache
 frontend/.vite/
+.vite/
 
-# Local editor/assistant settings
+# Local data and storage
+data/
+storage/
+
+# Agent and assistant artifacts
+.agents/
 .claude/

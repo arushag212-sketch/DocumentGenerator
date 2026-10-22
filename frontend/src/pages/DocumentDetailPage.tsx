@@ -80,10 +80,10 @@ function EmailDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="email-title">
       <div className="absolute inset-0 bg-slate-900/30" onClick={onClose} />
-      <form onSubmit={submit} className="relative w-full max-w-md surface-card p-5 space-y-4">
+      <form onSubmit={submit} className="relative w-full max-w-md surface-card p-4 sm:p-5 space-y-4 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h2 id="email-title" className="section-title">Email this document</h2>
-          <button type="button" className="btn-ghost !p-1.5" onClick={onClose} aria-label="Close">
+          <button type="button" className="btn-ghost !p-2 min-w-[44px] min-h-[44px] flex items-center justify-center" onClick={onClose} aria-label="Close">
             <X className="w-4 h-4" />
           </button>
         </div>

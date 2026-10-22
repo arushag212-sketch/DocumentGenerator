@@ -286,14 +286,15 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in">
           <form
             onSubmit={handleCreateField}
-            className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full p-5 space-y-3.5 animate-in zoom-in-95"
+            className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-5 space-y-3.5 animate-in zoom-in-95"
           >
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-sm">Create New Field</h3>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded transition"
+                className="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded transition"
+                aria-label="Close dialog"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -386,13 +387,13 @@ export const FieldsPanel: React.FC<FieldsPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                className="px-3 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs transition"
+                className="px-4 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs transition"
               >
                 Create and Insert
               </button>

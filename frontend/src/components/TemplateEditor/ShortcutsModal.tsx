@@ -36,21 +36,22 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[85vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
           <div className="flex items-center gap-2">
             <Command className="w-5 h-5 text-brand-600" />
             <h3 className="font-bold text-slate-800 text-sm">Keyboard Shortcuts Cheat Sheet</h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition"
+            className="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition"
+            aria-label="Close dialog"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-5 max-h-[70vh] overflow-y-auto space-y-5">
+        <div className="p-5 max-h-[85vh] sm:max-h-[70vh] overflow-y-auto flex-1 space-y-5">
           {shortcuts.map((group, idx) => (
             <div key={idx}>
               <h4 className="text-xs font-bold text-slate-400 mb-2">
@@ -73,10 +74,10 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
           ))}
         </div>
 
-        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 text-right">
+        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 text-right shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-semibold transition"
+            className="px-4 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-semibold transition"
           >
             Done
           </button>

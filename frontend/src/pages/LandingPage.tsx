@@ -68,7 +68,7 @@ export const LandingPage: React.FC = () => (
         </Link>
         <nav className="flex items-center gap-2">
           <Link to="/verify" className="btn-ghost hidden sm:inline-flex">Verify a document</Link>
-          <Link to="/login" className="btn-primary">
+          <Link to="/login" className="btn-primary justify-center">
             Sign in
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
@@ -98,7 +98,7 @@ export const LandingPage: React.FC = () => (
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
               to="/login"
-              className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-brand-800 shadow-sm transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-800"
+              className="inline-flex w-full sm:w-auto text-center justify-center items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-brand-800 shadow-sm transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-800"
             >
               <GoogleG className="h-4 w-4" />
               Sign in with your SVNIT email
@@ -118,7 +118,7 @@ export const LandingPage: React.FC = () => (
           </ul>
         </div>
         <div className="flex justify-center md:justify-end">
-          <DocPreviewArt className="w-64 sm:w-72" />
+          <DocPreviewArt className="w-56 sm:w-72" />
         </div>
       </div>
     </section>
@@ -165,7 +165,7 @@ export const LandingPage: React.FC = () => (
 
     {/* Closing call to action */}
     <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-      <div className="flex flex-col items-start justify-between gap-6 rounded-2xl bg-brand-800 px-8 py-10 text-white md:flex-row md:items-center">
+      <div className="flex flex-col items-start justify-between gap-6 rounded-2xl bg-brand-800 px-5 py-7 sm:px-8 sm:py-10 text-white md:flex-row md:items-center">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Ready for your next event?</h2>
           <p className="mt-1.5 text-brand-100">Sign in with your SVNIT Google account. Your club can invite you, or you can start one.</p>
