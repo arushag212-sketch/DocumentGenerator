@@ -114,7 +114,8 @@ def get_db_protected_and_referenced_paths(club_id: Optional[str] = None) -> Tupl
                         protected.add(Path(tv.docx_storage_key).as_posix())
 
         # 3. Documents and Document Versions
-        q_docs = db.query(Document)
+        # Documents in the Trash keep their files until they are purged, so Restore works
+        q_docs = db.query(Document).execution_options(include_deleted=True)
         if club_id:
             q_docs = q_docs.filter(Document.club_id == club_id)
         for doc in q_docs.all():
@@ -218,7 +219,8 @@ def run_storage_gc(apply: bool = False, club_id: Optional[str] = None) -> GCRepo
         from server.app.models import Document, DocumentVersion
 
         db = SessionLocal()
-        q_docs = db.query(Document)
+        # Documents in the Trash keep their files until they are purged, so Restore works
+        q_docs = db.query(Document).execution_options(include_deleted=True)
         if club_id:
             q_docs = q_docs.filter(Document.club_id == club_id)
         for doc in q_docs.all():

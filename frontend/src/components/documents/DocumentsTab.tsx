@@ -13,10 +13,12 @@ import {
   ArrowUpDown,
   Tag,
   X,
+  Trash2,
 } from 'lucide-react';
 import { StatusBadge } from '../../pages/DocumentDetailPage';
 import { api } from '../../api/client';
 import { GeneratedDocument } from '../../types';
+import { DeleteDocsDialog, TrashDialog, isDeletable } from './DocumentTrash';
 
 interface DocumentsTabProps {
   clubId: string | number;
@@ -47,6 +49,10 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [previewMode, setPreviewMode] = useState<'pdf' | 'image'>('pdf');
+  // Delete / Trash
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [toDelete, setToDelete] = useState<any[] | null>(null);
+  const [trashOpen, setTrashOpen] = useState(false);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,6 +91,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
         page_size: pageSize,
       });
       setDocuments(res.items || []);
+      setSelectedIds(new Set());
       setTotal(res.total || 0);
       setTotalPages(res.total_pages || 1);
     } catch (err: any) {
@@ -202,6 +209,15 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setTrashOpen(true)}
+            className="btn-ghost inline-flex items-center gap-1.5"
+            title="Deleted documents (restorable for 30 days)"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span className="text-xs font-semibold">Trash</span>
           </button>
           {onNavigateToEvents && (
             <button
@@ -412,10 +428,39 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
       ) : (
         /* Documents Table */
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          {selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-100 bg-red-50/60 px-4 py-2.5 text-sm">
+              <span className="font-semibold text-slate-800">{selectedIds.size} selected</span>
+              <div className="flex items-center gap-2">
+                <button type="button" className="btn-ghost text-xs" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setToDelete(documents.filter((d) => selectedIds.has(d.id)))}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete selected
+                </button>
+              </div>
+            </div>
+          )}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left border-collapse text-xs sm:text-sm">
+            <table className="w-full min-w-[760px] text-left border-collapse text-xs sm:text-sm">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-xs font-semibold">
+                  <th className="py-3 pl-4 pr-1 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all deletable documents on this page"
+                      className="h-4 w-4 rounded border-slate-300"
+                      checked={documents.some((d) => isDeletable(d.status)) && documents.filter((d) => isDeletable(d.status)).every((d) => selectedIds.has(d.id))}
+                      onChange={(e) =>
+                        setSelectedIds(e.target.checked ? new Set(documents.filter((d) => isDeletable(d.status)).map((d) => d.id)) : new Set())
+                      }
+                    />
+                  </th>
                   <th className="py-3 px-4">Document Title</th>
                   <th className="py-3 px-4">Reference No</th>
                   <th className="py-3 px-4">Template Type</th>
@@ -427,7 +472,27 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {documents.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr key={doc.id} className={`transition-colors ${selectedIds.has(doc.id) ? 'bg-red-50/40' : 'hover:bg-slate-50/60'}`}>
+                    <td className="py-3.5 pl-4 pr-1">
+                      {isDeletable(doc.status) ? (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${doc.title}`}
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={selectedIds.has(doc.id)}
+                          onChange={(e) =>
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(doc.id);
+                              else next.delete(doc.id);
+                              return next;
+                            })
+                          }
+                        />
+                      ) : (
+                        <span className="sr-only">Approved documents can be cancelled from their page</span>
+                      )}
+                    </td>
                     {/* Document Title & Pages */}
                     <td className="py-3.5 px-4">
                       <div className="font-semibold text-slate-900 flex items-center gap-1.5">
@@ -518,6 +583,17 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
                           <Download className="w-3 h-3" />
                           DOCX
                         </a>
+                        {isDeletable(doc.status) && (
+                          <button
+                            type="button"
+                            onClick={() => setToDelete([doc])}
+                            title="Delete (move to Trash)"
+                            aria-label={`Delete ${doc.title}`}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -571,6 +647,19 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
           </div>
         </div>
       )}
+
+      {toDelete && (
+        <DeleteDocsDialog
+          clubId={clubId}
+          docs={toDelete}
+          onClose={() => setToDelete(null)}
+          onDone={() => {
+            setToDelete(null);
+            fetchDocuments();
+          }}
+        />
+      )}
+      {trashOpen && <TrashDialog clubId={clubId} onClose={() => setTrashOpen(false)} onRestored={fetchDocuments} />}
 
       {/* DOCUMENT PREVIEW MODAL */}
       {previewDoc && (

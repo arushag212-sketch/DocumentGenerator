@@ -1,4 +1,4 @@
-import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse, HomeCreateResponse, HomeGeneratedDoc, ClubAnalytics, VerificationResult } from '../types';
+import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse, HomeCreateResponse, HomeGeneratedDoc, ClubAnalytics, VerificationResult, TrashItem } from '../types';
 
 function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`;
@@ -413,6 +413,22 @@ export const api = {
   },
 
   documents: {
+    // Trash: deleted documents can be restored for 30 days; approved ones are cancelled instead
+    remove: (clubId: string | number, docId: string) =>
+      apiFetch<{ deleted: string; purge_on: string }>(`/clubs/${clubId}/documents/${docId}`, { method: 'DELETE' }),
+    bulkRemove: (clubId: string | number, ids: string[]) =>
+      apiFetch<{ deleted: string[]; skipped: { id: string; title?: string; reason: string }[] }>(
+        `/clubs/${clubId}/documents/bulk-delete`,
+        { method: 'POST', body: JSON.stringify({ ids }) }
+      ),
+    trash: (clubId: string | number) => apiFetch<TrashItem[]>(`/clubs/${clubId}/documents/trash`),
+    restore: (clubId: string | number, docId: string) =>
+      apiFetch<{ restored: string }>(`/clubs/${clubId}/documents/${docId}/restore`, { method: 'POST' }),
+    cancel: (clubId: string | number, docId: string, reason: string) =>
+      apiFetch<{ cancelled: string }>(`/clubs/${clubId}/documents/${docId}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
     getTemplateSchema: (clubId: string | number, templateId: string) =>
       apiFetch<TemplateDetail>(`/clubs/${clubId}/documents/templates/${templateId}/schema`),
     extract: (clubId: string | number, text: string) =>

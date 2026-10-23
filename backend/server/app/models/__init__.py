@@ -26,7 +26,7 @@ from sqlalchemy import (
     UniqueConstraint,
     event,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship, with_loader_criteria
 
 from server.app.core.database import Base
 
@@ -315,6 +315,11 @@ class Document(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)  # draft | needs_info | ready | finalized
     current_version_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     created_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    # Trash: set when deleted (or cancelled, for approved documents). Deleted rows are hidden from
+    # every query unless it asks for them with execution_options(include_deleted=True).
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    deleted_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    cancel_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("club_id", "ref_no", name="uq_document_club_ref_no"),
@@ -464,3 +469,18 @@ def _update_version_hash(mapper, connection, target):
                 target.pdf_sha256 = hashlib.sha256(p.read_bytes()).hexdigest()
         except Exception:
             pass
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _hide_deleted_documents(execute_state):
+    """Documents in the Trash are invisible to every ORM query (lists, counts, lookups, exports)
+    unless the query opts in with ``execution_options(include_deleted=True)``."""
+    if (
+        execute_state.is_select
+        and not execute_state.is_column_load
+        and not execute_state.is_relationship_load
+        and not execute_state.execution_options.get("include_deleted", False)
+    ):
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(Document, lambda cls: cls.deleted_at.is_(None), include_aliases=True)
+        )

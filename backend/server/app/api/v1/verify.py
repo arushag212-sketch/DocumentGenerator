@@ -60,7 +60,8 @@ def _lookup(
     club: Optional[Club] = None
 
     if ver is not None:
-        doc = db.get(Document, ver.document_id)
+        # Deleted and cancelled documents must still answer, so the page can say so
+        doc = db.get(Document, ver.document_id, execution_options={"include_deleted": True})
         if doc is None:
             raise HTTPException(status_code=404, detail="The document no longer exists.")
         club = db.query(Club).filter(Club.id == doc.club_id).first()
@@ -90,7 +91,7 @@ def _lookup(
         .first()
     )
     if review is not None:
-        doc = ScopedRepository(db, Document, club_id=review.club_id).get(review.document_id)
+        doc = ScopedRepository(db, Document, club_id=review.club_id, include_deleted=True).get(review.document_id)
         club = db.query(Club).filter(Club.id == review.club_id).first()
         if doc is None or club is None:
             raise HTTPException(status_code=404, detail="The approved document no longer exists.")
@@ -121,6 +122,17 @@ def _out(
 ) -> VerificationOut:
     is_approved = review is not None
     status_str = "approved" if is_approved else "generated, not yet approved"
+    valid = True
+    if doc.status == "cancelled":
+        valid = False
+        status_str = "cancelled"
+        when = doc.deleted_at.strftime("%d/%m/%Y") if doc.deleted_at else ""
+        reason = f" Reason: {doc.cancel_reason}" if doc.cancel_reason else ""
+        message = message or f"The club cancelled this document on {when}, so it is no longer valid.{reason}"
+    elif doc.deleted_at is not None:
+        valid = False
+        status_str = "deleted"
+        message = message or "The club deleted this document, so it is no longer valid."
 
     date_gen_dt = (ver.created_at if ver and ver.created_at else None) or (
         review.created_at if review and review.created_at else doc.created_at
@@ -137,7 +149,7 @@ def _out(
     version_no = ver.version_no if ver else (review.version_no if review else doc.current_version_no or 1)
 
     return VerificationOut(
-        valid=True,
+        valid=valid,
         ref_no=doc.ref_no,
         document_title=doc.title,
         club_name=club.name,

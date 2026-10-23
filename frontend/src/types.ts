@@ -168,10 +168,28 @@ export interface VerificationResult {
   ref_no?: string | null;
   club_name: string;
   version_no: number;
-  approved_by: string;
-  approved_at: string;
+  approved_by?: string | null;
+  approved_at?: string | null;
   sha256?: string | null;
   file_matches?: boolean | null;
+  date_generated?: string | null;
+  /** "approved", "generated, not yet approved", "cancelled" or "deleted" */
+  status?: string;
+  message?: string | null;
+}
+
+export interface TrashItem {
+  id: string;
+  title: string;
+  ref_no?: string | null;
+  status: string;
+  deleted_at: string;
+  deleted_by?: string | null;
+  cancel_reason?: string | null;
+  cancelled: boolean;
+  /** Date it is removed for good; null for cancelled documents, which are kept */
+  purge_on?: string | null;
+  can_restore: boolean;
 }
 
 export interface GeneratedDocument {

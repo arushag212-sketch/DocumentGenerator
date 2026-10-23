@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Download,
@@ -15,10 +15,13 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Trash2,
+  Ban,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { DocumentActivity, EditableField, GeneratedDocument } from '../types';
+import { CancelDocDialog, DeleteDocsDialog, isDeletable } from '../components/documents/DocumentTrash';
 
 const STATUS: Record<string, { label: string; className: string }> = {
   ready: { label: 'Ready', className: 'bg-slate-100 text-slate-700 border-slate-200' },
@@ -26,6 +29,7 @@ const STATUS: Record<string, { label: string; className: string }> = {
   submitted: { label: 'Awaiting review', className: 'bg-amber-50 text-amber-800 border-amber-200' },
   changes_requested: { label: 'Changes requested', className: 'bg-red-50 text-red-700 border-red-200' },
   approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  cancelled: { label: 'Cancelled', className: 'bg-amber-50 text-amber-800 border-amber-200' },
 };
 
 const ACTION_TEXT: Record<DocumentActivity['action'], string> = {
@@ -151,6 +155,9 @@ export const DocumentDetailPage: React.FC = () => {
   const [note, setNote] = useState('');
   const [comment, setComment] = useState('');
   const [emailOpen, setEmailOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
@@ -256,6 +263,26 @@ export const DocumentDetailPage: React.FC = () => {
           {doc.can_edit && (
             <button type="button" className="btn-secondary" onClick={() => setEmailOpen(true)}>
               <Mail className="w-4 h-4" /> Email
+            </button>
+          )}
+          {doc.can_edit && isDeletable(doc.status) && (
+            <button
+              type="button"
+              className="btn-secondary text-red-700 hover:bg-red-50"
+              onClick={() => setDeleteOpen(true)}
+              title="Move to Trash (restorable for 30 days)"
+            >
+              <Trash2 className="w-4 h-4" /> Delete
+            </button>
+          )}
+          {doc.can_review && doc.status === 'approved' && (
+            <button
+              type="button"
+              className="btn-secondary text-amber-700 hover:bg-amber-50"
+              onClick={() => setCancelOpen(true)}
+              title="Withdraw this approved document"
+            >
+              <Ban className="w-4 h-4" /> Cancel document
             </button>
           )}
         </div>
@@ -546,6 +573,22 @@ export const DocumentDetailPage: React.FC = () => {
         </aside>
       </div>
 
+      {deleteOpen && (
+        <DeleteDocsDialog
+          clubId={clubId}
+          docs={[{ id: doc.id, title: doc.title, ref_no: doc.ref_no }]}
+          onClose={() => setDeleteOpen(false)}
+          onDone={() => navigate('/documents')}
+        />
+      )}
+      {cancelOpen && (
+        <CancelDocDialog
+          clubId={clubId}
+          doc={{ id: doc.id, title: doc.title, ref_no: doc.ref_no }}
+          onClose={() => setCancelOpen(false)}
+          onDone={() => navigate('/documents')}
+        />
+      )}
       {emailOpen && (
         <EmailDialog
           onClose={() => setEmailOpen(false)}

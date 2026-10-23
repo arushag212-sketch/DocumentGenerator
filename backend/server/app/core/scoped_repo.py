@@ -12,16 +12,22 @@ T = TypeVar("T")
 class ScopedRepository(Generic[T]):
     """Repository enforcing that all queries and writes require and check club_id."""
 
-    def __init__(self, db: Session, model_cls: Type[T], club_id: str):
+    def __init__(self, db: Session, model_cls: Type[T], club_id: str, *, include_deleted: bool = False):
         if not club_id:
             raise ValueError("club_id is required for ScopedRepository to prevent cross-club leakage")
         self.db = db
         self.model_cls = model_cls
         self.club_id = club_id
+        # Documents in the Trash are hidden from every query; the Trash and verify code opt in.
+        self.include_deleted = include_deleted
+
+    def _select(self, *columns: Any):
+        stmt = select(*columns) if columns else select(self.model_cls)
+        return stmt.execution_options(include_deleted=True) if self.include_deleted else stmt
 
     def get(self, entity_id: str) -> Optional[T]:
         """Fetch an entity strictly scoped to the repository's club_id."""
-        stmt = select(self.model_cls).where(
+        stmt = self._select().where(
             self.model_cls.id == entity_id,  # type: ignore[attr-defined]
             self.model_cls.club_id == self.club_id,  # type: ignore[attr-defined]
         )
@@ -29,7 +35,7 @@ class ScopedRepository(Generic[T]):
 
     def find_first(self, *filters: Any) -> Optional[T]:
         """Find the first entity matching the given filters, strictly scoped to club_id."""
-        stmt = select(self.model_cls).where(
+        stmt = self._select().where(
             self.model_cls.club_id == self.club_id,  # type: ignore[attr-defined]
             *filters,
         )
@@ -43,7 +49,7 @@ class ScopedRepository(Generic[T]):
         order_by: Optional[Any] = None,
     ) -> list[T]:
         """List entities strictly scoped to the repository's club_id."""
-        stmt = select(self.model_cls).where(
+        stmt = self._select().where(
             self.model_cls.club_id == self.club_id  # type: ignore[attr-defined]
         )
         if filters:
@@ -59,7 +65,7 @@ class ScopedRepository(Generic[T]):
 
     def all(self, *filters: Any) -> list[T]:
         """Return all matching entities scoped to this club_id."""
-        stmt = select(self.model_cls).where(
+        stmt = self._select().where(
             self.model_cls.club_id == self.club_id,  # type: ignore[attr-defined]
             *filters,
         )
@@ -70,7 +76,7 @@ class ScopedRepository(Generic[T]):
     def count(self, *filters: Any) -> int:
         """Count entities strictly scoped to this club_id."""
         from sqlalchemy import func
-        stmt = select(func.count(self.model_cls.id)).where(  # type: ignore[attr-defined]
+        stmt = self._select(func.count(self.model_cls.id)).where(  # type: ignore[attr-defined]
             self.model_cls.club_id == self.club_id,  # type: ignore[attr-defined]
             *filters,
         )

@@ -11,6 +11,7 @@ from server.app.core.storage import LocalDiskStorage, get_storage
 from server.app.core.tenancy import user_can_access_asset
 from server.app.api.v1.auth import router as auth_router
 from server.app.api.v1.clubs import router as clubs_router
+from server.app.api.v1.document_trash import router as document_trash_router
 from server.app.api.v1.documents import router as documents_router
 from server.app.api.v1.events import router as events_router
 from server.app.api.v1.home import router as home_router
@@ -22,6 +23,8 @@ from server.app.api.v1.analytics import router as analytics_router
 api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(clubs_router)
+# Before documents_router so /trash and /bulk-delete aren't read as a document id
+api_router.include_router(document_trash_router)
 api_router.include_router(documents_router)
 api_router.include_router(events_router)
 api_router.include_router(home_router)
