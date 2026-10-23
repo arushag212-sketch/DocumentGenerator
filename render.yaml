@@ -59,6 +59,9 @@ services:
         sync: false
       - key: PLATFORM_ADMIN_EMAILS
         sync: false
+      # Every new account joins this club as an editor ("Demo Club SVNIT")
+      - key: DEMO_CLUB_SLUG
+        value: demo
       - key: CORS_ORIGINS
         sync: false
       - key: APP_BASE_URL

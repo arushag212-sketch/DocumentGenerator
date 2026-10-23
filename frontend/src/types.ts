@@ -8,6 +8,8 @@ export interface User {
   /** How the account can sign in (shown on the profile page) */
   has_password?: boolean;
   uses_google?: boolean;
+  /** Slug of the shared demo club new accounts join (explained once in the welcome tour) */
+  demo_club_slug?: string | null;
 }
 
 export interface Club {

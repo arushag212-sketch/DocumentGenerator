@@ -92,6 +92,8 @@ class Settings(BaseModel):
     ALLOWED_EMAIL_DOMAIN: str = ""
     # Google-verified emails that become platform admins on sign-in (comma-separated env var)
     PLATFORM_ADMIN_EMAILS: list[str] = []
+    # Slug of a demo club every new account joins as an editor (empty = off)
+    DEMO_CLUB_SLUG: str = ""
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -159,6 +161,7 @@ class Settings(BaseModel):
         self.PLATFORM_ADMIN_EMAILS = [
             e.strip().lower() for e in os.environ.get("PLATFORM_ADMIN_EMAILS", "").split(",") if e.strip()
         ]
+        self.DEMO_CLUB_SLUG = os.environ.get("DEMO_CLUB_SLUG", "").strip().lower()
 
         # Allowed browser origins, comma-separated (e.g. the Vercel site). Replaces the local defaults.
         cors_env = os.environ.get("CORS_ORIGINS", "").strip()

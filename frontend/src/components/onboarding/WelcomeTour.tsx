@@ -1,13 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, LayoutTemplate, MessageSquareText, Send, X, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Users, LayoutTemplate, MessageSquareText, Send, X, ArrowLeft, ArrowRight, FlaskConical } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 /** Fire this event (e.g. from a "Take the tour" button) to show the tour again. */
 export const OPEN_TOUR_EVENT = 'clubdocs-open-tour';
 export const openWelcomeTour = () => window.dispatchEvent(new Event(OPEN_TOUR_EVENT));
 
-const STEPS = [
+// First card for people in the shared demo club, which every new account joins
+const DEMO_STEP = {
+  icon: FlaskConical,
+  title: 'You are in a demo club',
+  text: 'Every new account joins Demo Club SVNIT as an editor so you can try ClubDocs straight away. Create documents and templates freely; it is a shared practice space, not a real club. To work for your own club, register it or ask to join it from the club switcher.',
+};
+
+const BASE_STEPS = [
   {
     icon: Users,
     title: 'This is your club’s space',
@@ -54,6 +61,8 @@ export const WelcomeTour: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const key = storageKey(user?.id);
+  const inDemoClub = Boolean(user?.demo_club_slug && activeClub?.slug === user.demo_club_slug);
+  const STEPS = inDemoClub ? [DEMO_STEP, ...BASE_STEPS] : BASE_STEPS;
 
   useEffect(() => {
     if (user && activeClub?.my_role && !readSeen(key)) {

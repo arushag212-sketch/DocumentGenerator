@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from server.app.core.audit import log_audit
 from server.app.core.config import settings
 from server.app.core.database import get_db
+from server.app.core.demo_club import join_demo_club
 from server.app.core.email import get_email_sender
 from server.app.core.permissions import get_current_user
 from server.app.core.rate_limit import check_rate_limit
@@ -81,6 +82,7 @@ def _build_user_out(user: User, db: Session) -> UserOut:
         memberships=summaries,
         has_password=bool(user.password_hash),
         uses_google=bool(user.google_sub),
+        demo_club_slug=settings.DEMO_CLUB_SLUG or None,
     )
 
 
@@ -283,6 +285,7 @@ def register(payload: UserRegister, request: Request, response: Response, db: Se
     db.add(user)
     db.flush()
     db.refresh(user)
+    join_demo_club(db, user, client_ip)
 
     if invite_obj:
         _apply_invite_to_user(invite_obj, user, db, client_ip)
@@ -403,6 +406,7 @@ def google_auth(
             db.add(user)
             db.flush()
             db.refresh(user)
+            join_demo_club(db, user, client_ip)
 
     # 6. Respect existing account states the same way /login does (disabled, locked)
     now = datetime.now(timezone.utc)

@@ -164,11 +164,17 @@ def regenerate_document_version(
         version=version_no,
         convert_pdf=True,
         allow_blanks=True,
+        # The rebuilt copy prints the version's own code, so it still verifies
+        verification_code=ver.verification_code,
     )
 
     ver.template_version_id = tmpl_ver.id if tmpl_ver else template_version_id
     ver.docx_key = str(render_result.docx_path)
     ver.pdf_key = str(render_result.pdf_path)
+    if not ver.verification_code:
+        ver.verification_code = render_result.verification_code
+    if not ver.pdf_sha256:
+        ver.pdf_sha256 = render_result.pdf_sha256
     # Let the request/background job own the transaction boundary.  The
     # regenerated files and their metadata are one unit of work; committing
     # here could make a partial regeneration durable before a later failure.

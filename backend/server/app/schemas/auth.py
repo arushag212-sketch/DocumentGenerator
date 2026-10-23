@@ -60,6 +60,8 @@ class UserOut(BaseModel):
     # How the account can sign in, for the profile page
     has_password: bool = False
     uses_google: bool = False
+    # Club every new account joins for trying the app; the website explains it once
+    demo_club_slug: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
