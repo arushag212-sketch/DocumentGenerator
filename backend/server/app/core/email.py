@@ -1,4 +1,4 @@
-"""Email sender interface, SMTP implementation, and development console fallback."""
+"""Email sender interface, Brevo (HTTPS) and SMTP implementations, and development console fallback."""
 
 from __future__ import annotations
 
@@ -207,11 +207,59 @@ class SMTPEmailSender(EmailSender):
         self._send(to_email, subject, text)
 
 
+class BrevoEmailSender(SMTPEmailSender):
+    """Sends through Brevo's HTTPS API. Free hosts such as Render block outgoing SMTP ports,
+    but HTTPS gets through. Same messages as SMTPEmailSender; only the delivery differs."""
+
+    API_URL = "https://api.brevo.com/v3/smtp/email"
+
+    def __init__(self, api_key: str, from_email: str, from_name: str = "SVNIT ClubDocs"):
+        super().__init__(host="", from_email=from_email)
+        self.api_key = api_key
+        self.from_name = from_name
+
+    def _post(self, payload: dict) -> None:
+        import requests
+
+        payload["sender"] = {"name": self.from_name, "email": self.from_email}
+        res = requests.post(
+            self.API_URL,
+            json=payload,
+            headers={"api-key": self.api_key, "accept": "application/json"},
+            timeout=30,
+        )
+        if res.status_code >= 300:
+            # Brevo explains the problem (unverified sender, bad key, ...) in the body
+            raise RuntimeError(f"Brevo returned HTTP {res.status_code}: {res.text[:300]}")
+
+    def _send(self, to_email: str, subject: str, text_body: str, html_body: Optional[str] = None) -> None:
+        payload = {"to": [{"email": to_email}], "subject": subject, "textContent": text_body}
+        if html_body:
+            payload["htmlContent"] = html_body
+        self._post(payload)
+
+    def send_document(self, to_emails, subject, body, attachments, reply_to=None) -> None:
+        import base64
+
+        payload = {
+            "to": [{"email": e} for e in to_emails],
+            "subject": subject,
+            "textContent": body,
+            "attachment": [
+                {"name": filename, "content": base64.b64encode(data).decode("ascii")}
+                for filename, data, _mime in attachments
+            ],
+        }
+        if reply_to:
+            payload["replyTo"] = {"email": reply_to}
+        self._post(payload)
+
+
 _default_sender: Optional[EmailSender] = None
 
 
 def email_delivery_configured() -> bool:
-    """True when mail really leaves the server (SMTP set up), not just the log."""
+    """True when mail really leaves the server (Brevo or SMTP set up), not just the log."""
     return not isinstance(get_email_sender(), ConsoleEmailSender)
 
 
@@ -220,8 +268,16 @@ def get_email_sender() -> EmailSender:
     if _default_sender is not None:
         return _default_sender
 
+    brevo_key = (os.environ.get("BREVO_API_KEY") or "").strip()
     smtp_host = os.environ.get("SMTP_HOST")
-    if smtp_host and smtp_host.strip():
+    if brevo_key:
+        from_email = (os.environ.get("EMAIL_FROM") or os.environ.get("SMTP_FROM") or "").strip()
+        _default_sender = BrevoEmailSender(
+            api_key=brevo_key,
+            from_email=from_email or "noreply@svnit.ac.in",
+            from_name=(os.environ.get("EMAIL_FROM_NAME") or "SVNIT ClubDocs").strip(),
+        )
+    elif smtp_host and smtp_host.strip():
         port = int(os.environ.get("SMTP_PORT", "587"))
         user = os.environ.get("SMTP_USER") or os.environ.get("SMTP_USERNAME")
         password = os.environ.get("SMTP_PASSWORD") or os.environ.get("SMTP_PASS")

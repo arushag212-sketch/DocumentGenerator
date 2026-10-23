@@ -59,6 +59,11 @@ services:
         sync: false
       - key: PLATFORM_ADMIN_EMAILS
         sync: false
+      # Email goes out through Brevo's HTTPS API (Render free blocks SMTP ports)
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
       # Every new account joins this club as an editor ("Demo Club SVNIT")
       - key: DEMO_CLUB_SLUG
         value: demo
