@@ -23,13 +23,15 @@ import { api } from '../api/client';
 import { DocumentActivity, EditableField, GeneratedDocument } from '../types';
 import { CancelDocDialog, DeleteDocsDialog, isDeletable } from '../components/documents/DocumentTrash';
 
-const STATUS: Record<string, { label: string; className: string }> = {
-  ready: { label: 'Ready', className: 'bg-slate-100 text-slate-700 border-slate-200' },
-  generated: { label: 'Ready', className: 'bg-slate-100 text-slate-700 border-slate-200' },
-  submitted: { label: 'Awaiting review', className: 'bg-amber-50 text-amber-800 border-amber-200' },
-  changes_requested: { label: 'Changes requested', className: 'bg-red-50 text-red-700 border-red-200' },
-  approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  cancelled: { label: 'Cancelled', className: 'bg-amber-50 text-amber-800 border-amber-200' },
+// Status pills: colour carries the state (grey ready, amber waiting, red needs work, green done)
+const STATUS: Record<string, { label: string; className: string; dot: string }> = {
+  draft: { label: 'Draft', className: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400' },
+  ready: { label: 'Ready', className: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
+  generated: { label: 'Ready', className: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
+  submitted: { label: 'Awaiting review', className: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+  changes_requested: { label: 'Changes requested', className: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
+  approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  cancelled: { label: 'Cancelled', className: 'bg-slate-100 text-slate-500 border-slate-200 line-through decoration-slate-400/60', dot: 'bg-slate-400' },
 };
 
 const ACTION_TEXT: Record<DocumentActivity['action'], string> = {
@@ -42,8 +44,13 @@ const ACTION_TEXT: Record<DocumentActivity['action'], string> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const s = STATUS[status] || { label: status, className: 'bg-slate-100 text-slate-700 border-slate-200' };
-  return <span className={`badge ${s.className}`}>{s.label}</span>;
+  const s = STATUS[status] || { label: status, className: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
+  return (
+    <span className={`badge ${s.className}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden="true" />
+      {s.label}
+    </span>
+  );
 }
 
 function formatDate(value: string) {

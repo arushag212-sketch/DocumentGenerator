@@ -2,20 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Shared primitives for app pages (match the navy #1b365d brand used across the portal) */
+/* Design system: shared primitives for every app page.
+   One brand colour (SVNIT navy), slate neutrals, status colours only for status.
+   Controls are 36px tall (40px on touch), cards are rounded-xl with a hairline border and soft shadow. */
 @layer base {
   body {
     @apply bg-slate-50 text-slate-900;
     font-feature-settings: 'cv11', 'ss01';
   }
+  ::selection {
+    @apply bg-brand-100 text-brand-900;
+  }
 }
 
 @layer components {
+  /* Surfaces */
   .surface-card {
-    @apply bg-white border border-slate-200 rounded-xl;
+    @apply bg-white border border-slate-200/80 rounded-xl shadow-card;
+  }
+  .surface-card-hover {
+    @apply transition-shadow hover:shadow-raised hover:border-slate-300/80;
+  }
+
+  /* Page and section headings */
+  .page-header {
+    @apply flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-6;
   }
   .page-title {
-    @apply text-xl font-semibold text-slate-900 tracking-tight;
+    @apply text-2xl font-semibold text-slate-900 tracking-tight;
   }
   .page-subtitle {
     @apply text-sm text-slate-500 mt-1;
@@ -23,33 +37,82 @@
   .section-title {
     @apply text-sm font-semibold text-slate-900;
   }
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-slate-400;
+  }
+
+  /* Buttons: one height, one radius, one focus ring */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 h-10 lg:h-9 text-sm font-medium
+      transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+      focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-500;
+  }
+  .btn-primary {
+    @apply btn bg-brand-700 text-white shadow-sm hover:bg-brand-800 active:bg-brand-900;
+  }
+  .btn-secondary {
+    @apply btn bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-50 hover:text-slate-900;
+  }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium text-slate-600 rounded-lg
-      hover:bg-slate-100 hover:text-slate-900 transition-colors disabled:opacity-50;
+    @apply btn px-3 text-slate-600 hover:bg-slate-100 hover:text-slate-900;
   }
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2 bg-white text-red-600 text-sm font-semibold
-      border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50;
+    @apply btn bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300;
   }
+  .btn-sm {
+    @apply h-9 lg:h-8 px-2.5 text-[13px];
+  }
+  .btn-icon {
+    @apply inline-flex items-center justify-center h-10 w-10 lg:h-9 lg:w-9 rounded-lg text-slate-500 transition-colors
+      hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500;
+  }
+
+  /* Forms */
   .field-label {
     @apply block text-sm font-medium text-slate-700 mb-1.5;
   }
+  .field-help {
+    @apply mt-1.5 text-xs text-slate-500;
+  }
   .input-field {
-    @apply w-full text-sm px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-800 placeholder:text-slate-400
-      focus:outline-none focus:ring-2 focus:ring-[#1b365d]/40 focus:border-[#1b365d] transition-shadow;
+    @apply w-full text-sm h-10 px-3 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 shadow-sm
+      focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-600 transition-shadow
+      disabled:bg-slate-50 disabled:text-slate-500;
   }
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2 bg-brand-700 hover:bg-brand-800 text-white text-sm font-semibold
-      rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-      focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#1b365d];
+  textarea.input-field {
+    @apply h-auto py-2;
   }
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold
-      border border-slate-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-      focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-400;
-  }
+
+  /* Badges: pills; colour comes from the status, not decoration */
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border;
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap;
+  }
+
+  /* Tables */
+  .data-table {
+    @apply w-full text-left text-sm;
+  }
+  .data-table thead th {
+    @apply px-4 py-2.5 text-xs font-medium text-slate-500 bg-slate-50/80 border-b border-slate-200 whitespace-nowrap;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3 border-b border-slate-100 align-middle;
+  }
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* Loading placeholder */
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-slate-200/70;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/60 to-transparent;
+  }
+
+  .kbd {
+    @apply rounded border border-slate-300 bg-white px-1 py-px font-mono text-[11px] text-slate-700;
   }
 }
 
@@ -136,9 +199,6 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

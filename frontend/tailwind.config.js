@@ -36,7 +36,19 @@ export default {
           gold: '#c59b27',
           dark: '#0f172a',
         }
-      }
+      },
+      // One elevation scale for the whole app: hairline cards, raised hovers, floating menus/dialogs
+      boxShadow: {
+        card: '0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.04)',
+        raised: '0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.04)',
+        popover: '0 12px 32px -6px rgba(16, 24, 40, 0.18), 0 4px 8px -4px rgba(16, 24, 40, 0.06)',
+      },
+      keyframes: {
+        shimmer: { '100%': { transform: 'translateX(100%)' } },
+      },
+      animation: {
+        shimmer: 'shimmer 1.4s infinite',
+      },
     },
   },
   plugins: [],
