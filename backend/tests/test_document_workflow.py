@@ -112,6 +112,30 @@ def test_email_document(client: TestClient, setup, monkeypatch):
     assert bad.status_code == 400
 
 
+def test_email_not_configured_in_production_says_so(client: TestClient, setup, monkeypatch):
+    from server.app.core.config import settings
+
+    sender = email_module.ConsoleEmailSender()
+    monkeypatch.setattr(email_module, "_default_sender", sender)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    base = f"/api/v1/clubs/{setup['club_id']}/documents/{setup['doc_id']}"
+    res = client.post(f"{base}/email", json={"to": ["hod@example.com"], "attach": "pdf"}, headers=setup["headers"])
+    assert res.status_code == 503
+    assert "isn't set up" in res.json()["detail"]
+    assert sender.sent_messages == []
+
+
+def test_email_send_failure_is_reported(client: TestClient, setup, monkeypatch):
+    class Failing(email_module.ConsoleEmailSender):
+        def send_document(self, *a, **k):
+            raise OSError("connection refused")
+
+    monkeypatch.setattr(email_module, "_default_sender", Failing())
+    base = f"/api/v1/clubs/{setup['club_id']}/documents/{setup['doc_id']}"
+    res = client.post(f"{base}/email", json={"to": ["hod@example.com"], "attach": "pdf"}, headers=setup["headers"])
+    assert res.status_code == 502
+
+
 def test_event_change_regenerates_documents(client: TestClient, setup):
     h, club = setup["headers"], setup["club_id"]
     upd = client.put(f"/api/v1/clubs/{club}/events/{setup['event_id']}", json={"record": {"venue": "Auditorium"}}, headers=h)

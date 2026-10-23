@@ -210,6 +210,11 @@ class SMTPEmailSender(EmailSender):
 _default_sender: Optional[EmailSender] = None
 
 
+def email_delivery_configured() -> bool:
+    """True when mail really leaves the server (SMTP set up), not just the log."""
+    return not isinstance(get_email_sender(), ConsoleEmailSender)
+
+
 def get_email_sender() -> EmailSender:
     global _default_sender
     if _default_sender is not None:

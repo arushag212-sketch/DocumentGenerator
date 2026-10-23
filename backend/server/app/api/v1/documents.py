@@ -3231,8 +3231,17 @@ def email_document_endpoint(
     """Email the latest version (PDF and/or DOCX) to up to 20 recipients."""
     from email.utils import parseaddr
 
-    from server.app.core.email import get_email_sender
+    from server.app.core.config import settings
+    from server.app.core.email import email_delivery_configured, get_email_sender
     from server.app.core.rate_limit import check_rate_limit
+
+    # Without SMTP the message would only reach the server log; say so instead of reporting "sent"
+    if settings.ENVIRONMENT == "production" and not email_delivery_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email isn't set up on this server yet, so nothing was sent. "
+                   "Download the document and send it from your own email for now.",
+        )
 
     recipients = []
     for raw in payload.to:
@@ -3258,8 +3267,12 @@ def email_document_endpoint(
 
     body = (payload.message or "").strip() or f"Please find attached {doc_record.title}."
     body += f"\n\nRef. No.: {doc_record.ref_no or '-'}\nSent by {ctx.user.name}, {ctx.club.name}"
-    get_email_sender().send_document(recipients, f"{doc_record.title} — {ctx.club.name}", body, attachments,
-                                     reply_to=ctx.user.email)
+    try:
+        get_email_sender().send_document(recipients, f"{doc_record.title} — {ctx.club.name}", body, attachments,
+                                         reply_to=ctx.user.email)
+    except Exception as exc:
+        logger.warning("Emailing document %s failed: %s", doc_record.id, exc)
+        raise HTTPException(status_code=502, detail="The email could not be sent. Please try again later.")
     workflow.log_email(db, doc_record, ctx.user, recipients)
     return {"sent_to": recipients}
 
