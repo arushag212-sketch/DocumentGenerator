@@ -155,6 +155,7 @@ class Renderer:
             doc = DocxTemplate(str(docx_source))
         self._apply_club_banner(doc)
         self._apply_club_logo(doc)
+        self._repeat_table_headers(doc)
         safe_render_docx(doc, context, timeout=30.0)
         self._apply_verification_footer_docx(doc, footer_line)
 
@@ -224,6 +225,31 @@ class Renderer:
                     run = p.add_run(footer_text)
                     run.font.size = Pt(8)
                     run.font.color.rgb = RGBColor(128, 128, 128)
+
+    def _repeat_table_headers(self, doc: DocxTemplate) -> None:
+        """Repeat the heading row of every growing table on each page it spans.
+
+        A growing table has a ``{%tr for ... %}`` loop row; the row just above it is its heading.
+        Fixed key/value tables have no loop row and are left alone.
+        """
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        doc.init_docx()
+        for tbl in doc.docx.element.body.iter(qn("w:tbl")):
+            rows = tbl.findall(qn("w:tr"))
+            for i, row in enumerate(rows):
+                text = "".join(t.text or "" for t in row.iter(qn("w:t")))
+                if i == 0 or "{%" not in text or "for " not in text:
+                    continue
+                head = rows[i - 1]
+                tr_pr = head.find(qn("w:trPr"))
+                if tr_pr is None:
+                    tr_pr = OxmlElement("w:trPr")
+                    head.insert(0, tr_pr)
+                if tr_pr.find(qn("w:tblHeader")) is None:
+                    tr_pr.append(OxmlElement("w:tblHeader"))
+                break
 
     def _apply_club_banner(self, doc: DocxTemplate) -> None:
         """Swap the system templates' placeholder header banner for this club's banner."""

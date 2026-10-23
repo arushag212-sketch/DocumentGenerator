@@ -6,8 +6,9 @@ import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 
 from server.app.api.v1 import api_router
 from server.app.core.config import settings
@@ -23,6 +24,20 @@ app = FastAPI(
     redoc_url="/redoc" if _show_api_docs else None,
     openapi_url=f"{settings.API_V1_STR}/openapi.json" if _show_api_docs else None,
 )
+
+
+@app.exception_handler(ValidationError)
+async def _invalid_data(request: Request, exc: ValidationError):
+    """Data that doesn't fit a model inside an endpoint (e.g. a table row of the wrong shape) is the
+    caller's mistake: answer 400 with the field names instead of crashing with 500."""
+    problems = []
+    for err in exc.errors()[:5]:
+        where = ".".join(str(p) for p in err.get("loc", ()) if p != "value") or "data"
+        problems.append(f"{where}: {err.get('msg', 'invalid value')}")
+    return JSONResponse(
+        status_code=400,
+        content={"detail": {"code": "INVALID_DATA", "message": "Some details are in the wrong format. " + "; ".join(problems)}},
+    )
 
 # 1. CORS Configuration - Tightened to configured origins
 app.add_middleware(
