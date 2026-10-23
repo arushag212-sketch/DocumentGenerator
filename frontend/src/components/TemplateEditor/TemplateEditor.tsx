@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../api/client';
 import { migrateTipTapContent } from './extensions';
 import { EditorErrorBoundary } from './EditorErrorBoundary';
+import { Plus, Tag, Palette, Sparkles } from 'lucide-react';
 import { Toolbar } from './Toolbar';
-import { PalettePanel } from './PalettePanel';
+import { PalettePanel, type LeftSidebarTab } from './PalettePanel';
 import { Canvas } from './Canvas';
-import { RightTabsPanel } from './RightTabsPanel';
+import { RightTabsPanel, type RightTabType } from './RightTabsPanel';
 import { useTemplateEditor } from './useTemplateEditor';
 import { useEditorAutosave } from './useEditorAutosave';
 import { ShortcutsModal } from './ShortcutsModal';
@@ -61,6 +62,24 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [leftTab, setLeftTab] = useState<LeftSidebarTab>('blocks');
+  const [rightTab, setRightTab] = useState<RightTabType>('chat');
+  // Below desktop width the panels open as sheets over the page, one at a time
+  const isCompact = () => window.innerWidth < 1024;
+  const openLeft = (tab: LeftSidebarTab) => {
+    // With no cursor placed yet (usual on phones), new blocks go to the end, not above the title
+    if (tab === 'blocks' && editor && !editor.isFocused && editor.state.selection.from <= 1) {
+      editor.commands.setTextSelection(editor.state.doc.content.size);
+    }
+    setLeftTab(tab);
+    setLeftOpen(true);
+    if (isCompact()) setRightOpen(false);
+  };
+  const openRight = (tab: RightTabType) => {
+    setRightTab(tab);
+    setRightOpen(true);
+    if (isCompact()) setLeftOpen(false);
+  };
 
   // Modals
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -144,7 +163,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   useEffect(() => {
     const handleResize = () => {
       const width = window.innerWidth;
-      setIsMobile(width < 768);
+      // Phones and tablets: the right panel opens as a sheet over the page instead of squeezing it
+      setIsMobile(width < 1024);
       if (width < 1024) setLeftOpen(false);
       // Below desktop width the side panels would squeeze the page to a sliver.
       if (width < 1280) setRightOpen(false);
@@ -229,7 +249,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     onBack();
   };
 
-  // Global Keyboard Shortcuts (Ctrl+S, Ctrl+P, Esc)
+  // Global Keyboard Shortcuts (Ctrl+S, Ctrl+P, Esc). Preview goes through a ref so the shortcut
+  // always uses the current fields and sample values, not the ones from the first render.
+  const previewRef = useRef<() => void>(() => {});
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // Ctrl+S / Cmd+S
@@ -242,7 +264,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
       // Ctrl+P / Cmd+P
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        handlePreview();
+        previewRef.current();
       }
       // Esc closes popovers / modals
       if (e.key === 'Escape') {
@@ -387,6 +409,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
     }
   };
 
+  previewRef.current = handlePreview;
+
   // Keep the "Review & Publish (N)" badge in sync with AI-suggested blocks and fields.
   useEffect(() => {
     if (!editor) return;
@@ -499,7 +523,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
         onOpenShortcuts={() => setShowShortcuts(true)}
         onPreview={handlePreview}
         onPublish={handlePublish}
-        onOpenAddField={() => setLeftOpen(true)}
+        onOpenAddField={() => openLeft('fields')}
         previewLoading={previewLoading}
         unreviewedAiCount={unreviewedAiCount}
         isPublished={template?.status === 'published'}
@@ -535,6 +559,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             editor={editor}
             isOpen={leftOpen}
             onToggle={() => setLeftOpen(!leftOpen)}
+            activeTab={leftTab}
+            onTabChange={setLeftTab}
+            onBlockInserted={() => isCompact() && setLeftOpen(false)}
             fields={fields}
             onAddField={(newField) => {
               setFields((prev) => [...prev, newField]);
@@ -597,7 +624,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
             clubLogoOptions={clubLogoOptions}
             showSlashMenu={showSlashMenu}
             onCloseSlashMenu={() => setShowSlashMenu(false)}
-            onOpenAddField={() => setLeftOpen(true)}
+            onOpenAddField={() => openLeft('fields')}
             fields={fields}
             inlinePicker={inlinePicker}
             onCloseInlinePicker={() => setInlinePicker(null)}
@@ -614,46 +641,40 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           templateId={templateId}
           editor={editor}
           fields={fields}
-          onAddField={(newField) => {
-            setFields((prev) => [...prev, newField]);
-            markUnsaved();
-          }}
           designSettings={designSettings}
-          onDesignChange={(updates) => {
-            setDesignSettings((prev) => ({ ...prev, ...updates }));
-            markUnsaved();
-          }}
-          onAutoStyle={() => {
-            const svnit = THEMES.find((t) => t.id === 'svnit_gold');
-            if (svnit) {
-              setDesignSettings((prev) => ({
-                ...prev,
-                theme: svnit.id,
-                headingColor: svnit.heading_color,
-                textColor: svnit.text_color,
-                tableHeaderBg: svnit.table_header_bg,
-                tableHeaderTextColor: svnit.table_header_text,
-                borderColor: svnit.border_color,
-                dividerColor: svnit.divider_color,
-                fontFamily: svnit.body_font,
-                headingFontFamily: svnit.heading_font,
-                pageBorder: svnit.border_style,
-                pageBg: svnit.page_bg,
-              }));
-              markUnsaved();
-              showToast('Applied official SVNIT style standards.', 'success');
-            }
-          }}
           onApplyChatAction={handleApplyChatAction}
           onUndoChatAction={handleUndoChatAction}
-          sampleValues={sampleValues}
-          onSampleChange={(key, value) => setSampleValues((prev) => ({ ...prev, [key]: value }))}
-          onPreview={handlePreview}
           isOpen={rightOpen}
           onToggle={() => setRightOpen(!rightOpen)}
+          activeTab={rightTab}
+          onTabChange={setRightTab}
           isMobile={isMobile}
         />
       </div>
+
+
+      {/* Phone / tablet action bar: the side panels have no room on small screens */}
+      <nav className="lg:hidden shrink-0 grid grid-cols-4 border-t border-slate-200 bg-white" aria-label="Editor tools">
+        {[
+          { label: 'Add', icon: Plus, onClick: () => openLeft('blocks'), active: leftOpen && leftTab === 'blocks' },
+          { label: 'Fields', icon: Tag, onClick: () => openLeft('fields'), active: leftOpen && leftTab === 'fields' },
+          { label: 'Design', icon: Palette, onClick: () => openLeft('design'), active: leftOpen && leftTab === 'design' },
+          { label: 'AI help', icon: Sparkles, onClick: () => openRight('chat'), active: rightOpen },
+        ].map(({ label, icon: Icon, onClick, active }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={onClick}
+            aria-pressed={active}
+            className={`flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-[11px] font-semibold transition ${
+              active ? 'text-brand-700 bg-brand-50' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <Icon className="w-5 h-5" />
+            {label}
+          </button>
+        ))}
+      </nav>
 
       <ShortcutsModal isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <FindReplaceModal isOpen={showFindReplace} onClose={() => setShowFindReplace(false)} editor={editor} />

@@ -202,15 +202,15 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
   };
 
   return (
-    <aside className={`flex h-full w-full flex-col bg-white ${className}`} aria-label="AI Chat Copilot">
+    <aside className={`flex h-full w-full flex-col bg-white ${className}`} aria-label="AI help">
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-3 py-2">
         <div className="flex items-center gap-1.5">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-100 text-brand-700">
             <Sparkles className="h-3.5 w-3.5" />
           </span>
           <div>
-            <h2 className="text-xs font-bold text-slate-900">AI Chat Copilot</h2>
-            <p className="text-xs text-slate-500">Natural language template edits</p>
+            <h2 className="text-xs font-bold text-slate-900">AI help</h2>
+            <p className="text-xs text-slate-500">Describe a change in plain words and AI makes it</p>
           </div>
         </div>
         {onClose && (
@@ -359,7 +359,7 @@ export const EditorChatPanel: React.FC<EditorChatPanelProps> = ({
             className="w-full resize-none border-0 bg-transparent px-2.5 py-1.5 text-xs text-slate-800 outline-none placeholder:text-slate-400"
           />
           <div className="flex items-center justify-between px-2 pb-1.5">
-            <span className="text-xs text-slate-400">Enter to send · Shift+Enter for a new line</span>
+            <span className="hidden lg:inline text-xs text-slate-400">Enter to send · Shift+Enter for a new line</span>
             <div className="flex items-center gap-1">
               {recognitionRef.current && (
                 <button

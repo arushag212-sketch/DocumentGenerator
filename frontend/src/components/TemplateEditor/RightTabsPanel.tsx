@@ -1,30 +1,28 @@
 import React, { useState } from 'react';
-import { Sparkles, Tag, Palette, ShieldCheck, ChevronRight, ChevronLeft, X } from 'lucide-react';
+import { Sparkles, ShieldCheck, ChevronRight, ChevronLeft, X } from 'lucide-react';
 import { EditorErrorBoundary } from './EditorErrorBoundary';
-import { FieldsPanel, TemplateField } from './FieldsPanel';
-import { DesignPanel, DesignSettings } from './DesignPanel';
+import { TemplateField } from './FieldsPanel';
+import { DesignSettings } from './DesignPanel';
 import { ChecksPanel } from './ChecksPanel';
 import { EditorChatPanel } from '../assistant/EditorChatPanel';
 
-export type RightTabType = 'chat' | 'fields' | 'design' | 'checks';
+// Fields and Design live in the left panel only, so the two sides never repeat each other
+export type RightTabType = 'chat' | 'checks';
 
 interface RightTabsPanelProps {
   clubId: string;
   templateId: string;
   editor: any;
   fields: TemplateField[];
-  onAddField: (field: TemplateField) => void;
   designSettings: DesignSettings;
-  onDesignChange: (settings: Partial<DesignSettings>) => void;
-  onAutoStyle?: () => void;
   onApplyChatAction: (action: any, actionId?: string) => { ok: boolean; message?: string } | void;
   onUndoChatAction?: (actionId: string) => boolean;
-  sampleValues?: Record<string, string>;
-  onSampleChange?: (key: string, value: string) => void;
-  onPreview?: () => void;
   isOpen: boolean;
   onToggle: () => void;
   isMobile?: boolean;
+  /** Controlled tab (e.g. the phone action bar opens AI help directly) */
+  activeTab?: RightTabType;
+  onTabChange?: (tab: RightTabType) => void;
 }
 
 export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
@@ -32,20 +30,18 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
   templateId,
   editor,
   fields,
-  onAddField,
   designSettings,
-  onDesignChange,
-  onAutoStyle,
   onApplyChatAction,
   onUndoChatAction,
-  sampleValues,
-  onSampleChange,
-  onPreview,
   isOpen,
   onToggle,
   isMobile = false,
+  activeTab: controlledTab,
+  onTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<RightTabType>('chat');
+  const [ownTab, setOwnTab] = useState<RightTabType>('chat');
+  const activeTab = controlledTab ?? ownTab;
+  const setActiveTab = (tab: RightTabType) => (onTabChange ? onTabChange(tab) : setOwnTab(tab));
 
   if (!isOpen) {
     if (isMobile) return null;
@@ -97,31 +93,7 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>AI Chat</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('fields')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition ${
-              activeTab === 'fields'
-                ? 'bg-white text-brand-600 shadow-sm border border-slate-200/80'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Tag className="w-3.5 h-3.5" />
-            <span>Fields</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('design')}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition ${
-              activeTab === 'design'
-                ? 'bg-white text-brand-600 shadow-sm border border-slate-200/80'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Palette className="w-3.5 h-3.5" />
-            <span>Design</span>
+            <span>AI help</span>
           </button>
 
           <button
@@ -184,29 +156,6 @@ export const RightTabsPanel: React.FC<RightTabsPanelProps> = ({
             />
           </EditorErrorBoundary>
         </div>
-
-        {activeTab === 'fields' && (
-          <EditorErrorBoundary title="Fields Panel Error">
-            <FieldsPanel
-              fields={fields}
-              onAddField={onAddField}
-              editor={editor}
-              sampleValues={sampleValues}
-              onSampleChange={onSampleChange}
-              onPreview={onPreview}
-            />
-          </EditorErrorBoundary>
-        )}
-
-        {activeTab === 'design' && (
-          <EditorErrorBoundary title="Design Panel Error">
-            <DesignPanel
-              settings={designSettings}
-              onChange={onDesignChange}
-              onAutoStyle={onAutoStyle}
-            />
-          </EditorErrorBoundary>
-        )}
 
         {activeTab === 'checks' && (
           <EditorErrorBoundary title="Checks Panel Error">

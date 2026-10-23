@@ -42,6 +42,11 @@ interface PalettePanelProps {
   onSampleChange?: (key: string, value: string) => void;
   onPreview?: () => void;
   initialTab?: LeftSidebarTab;
+  /** Controlled tab (the phone action bar opens Blocks, Fields or Design directly) */
+  activeTab?: LeftSidebarTab;
+  onTabChange?: (tab: LeftSidebarTab) => void;
+  /** Called after a block is inserted, so phones can close the sheet and show the page */
+  onBlockInserted?: () => void;
 }
 
 export const PalettePanel: React.FC<PalettePanelProps> = ({
@@ -57,8 +62,13 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
   onSampleChange,
   onPreview,
   initialTab = 'blocks',
+  activeTab: controlledTab,
+  onTabChange,
+  onBlockInserted,
 }) => {
-  const [activeTab, setActiveTab] = useState<LeftSidebarTab>(initialTab);
+  const [ownTab, setOwnTab] = useState<LeftSidebarTab>(initialTab);
+  const activeTab = controlledTab ?? ownTab;
+  const setActiveTab = (tab: LeftSidebarTab) => (onTabChange ? onTabChange(tab) : setOwnTab(tab));
 
   const handleDragStart = (e: React.DragEvent, blockType: string, customPayload?: any) => {
     e.dataTransfer.setData('text/plain', blockType);
@@ -188,7 +198,12 @@ export const PalettePanel: React.FC<PalettePanelProps> = ({
       {/* Tab Contents */}
       <div className="flex-1 overflow-hidden relative">
         {activeTab === 'blocks' && (
-          <div className="h-full overflow-y-auto p-3 space-y-4 text-xs bg-slate-50/50">
+          <div
+            className="h-full overflow-y-auto p-3 space-y-4 text-xs bg-slate-50/50"
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest('button')) onBlockInserted?.();
+            }}
+          >
             {/* Typography */}
             <div>
               <div className="text-[11px] font-bold text-slate-400 mb-1.5 px-1 uppercase tracking-wider">

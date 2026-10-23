@@ -207,6 +207,30 @@ export const PageBreak = Node.create({
 export function safeInsertBlock(editor: any, nodeJSON: any, position?: number) {
   if (!editor) return false;
 
+  // Tables, signature grids, images and page breaks never go inside a table cell (a table in a
+  // table breaks the layout and the Word output): put them after that top-level block instead.
+  // This applies to clicks (cursor position) and drops (explicit position) alike.
+  const structural = ['table', 'imageBlock', 'image', 'pageBreak'].includes(nodeJSON?.type);
+  if (structural) {
+    const doc = editor.state.doc;
+    const $at =
+      typeof position === 'number' && Number.isFinite(position)
+        ? doc.resolve(Math.max(0, Math.min(position, doc.content.size)))
+        : editor.state.selection.$from;
+    let insideTable = false;
+    for (let d = $at.depth; d > 0; d--) {
+      if ($at.node(d).type.name === 'table') insideTable = true;
+    }
+    if (insideTable) {
+      try {
+        editor.chain().focus().insertContentAt($at.after(1), nodeJSON).run();
+        return true;
+      } catch {
+        // fall through to the general paths below
+      }
+    }
+  }
+
   // A drop supplies an explicit document position.  Try that position first
   // so a palette block is inserted where the pointer was released rather than
   // wherever the editor happened to retain focus.

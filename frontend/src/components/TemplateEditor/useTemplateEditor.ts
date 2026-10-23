@@ -115,6 +115,9 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
           const sensitive = attrs.sensitive || false;
 
           view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+          // One pop-up at a time: a chip's settings replace any open field/block picker
+          setInlinePicker(null);
+          setShowSlashMenu(false);
           setChipPopover({
             top: Math.min(rect.bottom + 8, window.innerHeight - 300),
             left: Math.min(Math.max(rect.left, 20), window.innerWidth - 320),
@@ -180,6 +183,10 @@ export function useTemplateEditor({ onDocChange, clubId }: UseTemplateEditorOpti
       const { $from } = selection;
       const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc');
 
+      if (textBefore.endsWith('{{') || textBefore === '/' || textBefore.endsWith(' /')) {
+        setChipPopover(null);
+        setSelectedImageBlock(null);
+      }
       if (textBefore.endsWith('{{')) {
         try {
           const coords = currentEditor.view.coordsAtPos(selection.from);

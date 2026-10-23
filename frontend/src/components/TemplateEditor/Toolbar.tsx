@@ -119,12 +119,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-1.5 flex items-center justify-between shadow-xs select-none">
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-1.5 flex flex-wrap lg:flex-nowrap items-center justify-between gap-y-1 shadow-xs select-none">
       {/* Left: Navigation and Template Identity */}
-      <div className="flex items-center gap-2.5 shrink-0">
+      <div className="order-1 flex items-center gap-2.5 min-w-0 shrink">
         <button
           onClick={onBack}
-          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          className="p-2.5 lg:p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           title="Back to templates (Esc)"
           aria-label="Back to templates"
         >
@@ -149,13 +149,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       {/* Center: Comprehensive Editor Toolbar */}
-      <div className="flex items-center gap-0.5 overflow-x-auto py-0.5 px-1 max-w-full">
+      <div className="order-3 lg:order-2 w-full lg:w-auto flex items-center gap-0.5 overflow-x-auto py-0.5 px-1 max-w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* Group 1: Undo / Redo */}
         <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           <button
             onClick={() => editor?.chain().focus().undo().run()}
             disabled={!canUndo}
-            className="p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent transition focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="p-2.5 lg:p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent transition focus:outline-none focus:ring-1 focus:ring-brand-500"
             title="Undo (Ctrl+Z)"
             aria-label="Undo"
           >
@@ -164,7 +164,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={() => editor?.chain().focus().redo().run()}
             disabled={!canRedo}
-            className="p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent transition focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="p-2.5 lg:p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent transition focus:outline-none focus:ring-1 focus:ring-brand-500"
             title="Redo (Ctrl+Y)"
             aria-label="Redo"
           >
@@ -178,7 +178,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           <button
             onClick={() => editor?.chain().focus().setParagraph().run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive('paragraph') && !editor?.isActive('heading')
                 ? 'bg-white text-brand-700 shadow-xs font-bold'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-white'
@@ -190,7 +190,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive('heading', { level: 1 })
                 ? 'bg-white text-brand-700 shadow-xs font-bold'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-white'
@@ -202,7 +202,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive('heading', { level: 2 })
                 ? 'bg-white text-brand-700 shadow-xs font-bold'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-white'
@@ -216,18 +216,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
         <div className="w-px h-4 bg-slate-200 mx-0.5 shrink-0" />
 
-        {/* Group 3: Font Family + Size */}
-        <div className="hidden md:flex items-center">
+        {/* Group 3: Font Family + Size (wide screens; the Design tab has the same settings) */}
+        <div className="hidden 2xl:flex items-center">
           <FontControls variant="toolbar" editor={editor} />
         </div>
 
-        <div className="w-px h-4 bg-slate-200 mx-0.5 shrink-0" />
+        <div className="hidden 2xl:block w-px h-4 bg-slate-200 mx-0.5 shrink-0" />
 
         {/* Group 4: B / I / U */}
         <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           <button
             onClick={() => editor?.chain().focus().toggleBold().run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive('bold') ? 'bg-white text-brand-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
             title="Bold (Ctrl+B)"
@@ -237,7 +237,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor?.chain().focus().toggleItalic().run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive('italic') ? 'bg-white text-brand-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
             title="Italic (Ctrl+I)"
@@ -247,7 +247,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor?.chain().focus().toggleUnderline().run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive('underline') ? 'bg-white text-brand-700 shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
             title="Underline (Ctrl+U)"
@@ -260,10 +260,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <div className="w-px h-4 bg-slate-200 mx-0.5 shrink-0" />
 
         {/* Group 5: Align */}
-        <div className="hidden sm:flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+        <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           <button
             onClick={() => editor?.chain().focus().setTextAlign('left').run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive({ textAlign: 'left' }) ? 'bg-white text-brand-700 shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
             title="Align Left (Ctrl+Shift+L)"
@@ -273,7 +273,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor?.chain().focus().setTextAlign('center').run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive({ textAlign: 'center' }) ? 'bg-white text-brand-700 shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
             title="Align Center (Ctrl+Shift+E)"
@@ -283,7 +283,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor?.chain().focus().setTextAlign('right').run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive({ textAlign: 'right' }) ? 'bg-white text-brand-700 shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
             title="Align Right (Ctrl+Shift+R)"
@@ -293,7 +293,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor?.chain().focus().setTextAlign('justify').run()}
-            className={`p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
+            className={`p-2.5 lg:p-1.5 rounded transition focus:outline-none focus:ring-1 focus:ring-brand-500 ${
               editor?.isActive({ textAlign: 'justify' }) ? 'bg-white text-brand-700 shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-white'
             }`}
             title="Justify (Ctrl+Shift+J)"
@@ -305,8 +305,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
         <div className="w-px h-4 bg-slate-200 mx-0.5 shrink-0" />
 
-        {/* Group 6: Insert (Field, Table, Image, Signature, Divider) */}
-        <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+        {/* Group 6: Insert (Field, Table, Image, Signature, Page break); phones use the Add sheet */}
+        <div className="hidden lg:flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           <button
             onClick={onOpenAddField}
             className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold text-brand-700 hover:bg-white hover:shadow-xs transition focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -318,7 +318,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor && insertInfoTable(editor)}
-            className="p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="p-2.5 lg:p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition focus:outline-none focus:ring-1 focus:ring-brand-500"
             title="Insert Table"
             aria-label="Insert table"
           >
@@ -326,7 +326,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor && insertImageBlock(editor, { imageType: 'custom', alt: 'Image' })}
-            className="p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="p-2.5 lg:p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition focus:outline-none focus:ring-1 focus:ring-brand-500"
             title="Insert Image"
             aria-label="Insert image"
           >
@@ -334,7 +334,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor && insertSignatureGrid(editor, 2)}
-            className="p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="p-2.5 lg:p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition focus:outline-none focus:ring-1 focus:ring-brand-500"
             title="Insert Signature Box"
             aria-label="Insert signature box"
           >
@@ -342,9 +342,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => editor && safeInsertBlock(editor, { type: 'pageBreak' })}
-            className="p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition focus:outline-none focus:ring-1 focus:ring-brand-500"
-            title="Insert Divider / Page Break"
-            aria-label="Insert divider"
+            className="p-2.5 lg:p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white transition focus:outline-none focus:ring-1 focus:ring-brand-500"
+            title="Insert page break (start a new page)"
+            aria-label="Insert page break"
           >
             <Minus className="w-3.5 h-3.5 text-slate-500" />
           </button>
@@ -353,11 +353,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <div className="w-px h-4 bg-slate-200 mx-0.5 shrink-0" />
 
         {/* Group 7: Zoom */}
-        <div className="hidden lg:flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+        <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           <button
             onClick={handleZoomOut}
             disabled={zoom <= 0.6}
-            className="p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 transition focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="p-2.5 lg:p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 transition focus:outline-none focus:ring-1 focus:ring-brand-500"
             title="Zoom out"
             aria-label="Zoom out"
           >
@@ -369,7 +369,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={handleZoomIn}
             disabled={zoom >= 1.5}
-            className="p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 transition focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="p-2.5 lg:p-1.5 rounded text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 transition focus:outline-none focus:ring-1 focus:ring-brand-500"
             title="Zoom in"
             aria-label="Zoom in"
           >
@@ -382,7 +382,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           {onOpenFindReplace && (
             <button
               onClick={onOpenFindReplace}
-              className="p-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
+              className="p-2.5 lg:p-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
               title="Find and replace (Ctrl+F)"
               aria-label="Find and replace"
             >
@@ -393,7 +393,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           {onOpenShortcuts && (
             <button
               onClick={onOpenShortcuts}
-              className="p-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
+              className="p-2.5 lg:p-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
               title="Keyboard shortcuts (?)"
               aria-label="Keyboard shortcuts"
             >
@@ -407,7 +407,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 onClick={toggleTranslateMenu}
                 onMouseDown={(e) => e.stopPropagation()}
                 disabled={translating}
-                className="p-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 transition"
+                className="p-2.5 lg:p-1.5 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 transition"
                 title="Translate template"
                 aria-label="Translate template"
                 aria-haspopup="menu"
@@ -448,7 +448,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       {/* Right: Autosave Status, Preview, & Done / Use Template */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="order-2 lg:order-3 flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
         {/* Autosave Status Pill */}
         <div
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition ${
@@ -492,12 +492,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <button
           onClick={onPreview}
           disabled={previewLoading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs transition focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          className="inline-flex items-center gap-1.5 px-3 py-2.5 lg:py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs transition focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           title="Live Preview (Ctrl+P)"
           aria-label="Preview document"
         >
           <Eye className="w-3.5 h-3.5 text-brand-600" />
-          <span>Preview</span>
+          <span className="hidden sm:inline">Preview</span>
         </button>
 
         {/* Primary Action Button: Done / Use template / Publish */}
@@ -505,7 +505,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             onClick={onCreateDocument}
             title="Fill this template and generate official DOCX/PDF"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 lg:py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
           >
             <FilePlus2 className="w-3.5 h-3.5" />
             <span>Use template</span>
@@ -513,8 +513,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         ) : (
           <button
             onClick={onPublish}
-            title={unreviewedAiCount > 0 ? 'Review unreviewed AI blocks' : 'Publish and finish template'}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white shadow-xs transition focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            title={unreviewedAiCount > 0 ? 'Review the AI suggestions before publishing' : 'Publish so the club can use this template'}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 lg:py-1.5 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white shadow-xs transition focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           >
             {unreviewedAiCount > 0 ? (
               <>
@@ -522,7 +522,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 <span>Review ({unreviewedAiCount})</span>
               </>
             ) : (
-              <span>Done</span>
+              <span>Publish</span>
             )}
           </button>
         )}
