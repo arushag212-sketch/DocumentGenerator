@@ -249,7 +249,7 @@ def approve(db: Session, doc: Document, user: User, role_label: str, comment: Op
     base_url = str(settings.APP_BASE_URL).rstrip("/")
     _stamp_pdf(pdf_path, signed_path, [
         f"Electronically approved by {user.name} ({role_label}) on {when}.",
-        f"Verification code {code} — verify this copy at {base_url}/verify",
+        f"Verification code {code} - verify this copy at {base_url}/verify",
     ])
     digest = hashlib.sha256(signed_path.read_bytes()).hexdigest()
     ver.pdf_key = str(signed_path)
