@@ -22,8 +22,8 @@ class EmailSender(ABC):
         pass
 
     @abstractmethod
-    def send_invitation(self, to_email: str, club_name: str, invite_link: str) -> None:
-        """Send member invitation link."""
+    def send_invitation(self, to_email: str, club_name: str, invite_link: str, details: Optional[str] = None) -> None:
+        """Send member invitation link. ``details`` (who invited, role, expiry) goes above the link."""
         pass
 
     @abstractmethod
@@ -78,12 +78,13 @@ class ConsoleEmailSender(EmailSender):
             "=======================================================================\n"
         )
 
-    def send_invitation(self, to_email: str, club_name: str, invite_link: str) -> None:
+    def send_invitation(self, to_email: str, club_name: str, invite_link: str, details: Optional[str] = None) -> None:
         msg = {
             "type": "invitation",
             "to_email": to_email,
             "club_name": club_name,
             "link": invite_link,
+            "details": details or "",
         }
         self.sent_messages.append(msg)
         logger.info(
@@ -195,11 +196,13 @@ class SMTPEmailSender(EmailSender):
         )
         self._send(to_email, subject, text)
 
-    def send_invitation(self, to_email: str, club_name: str, invite_link: str) -> None:
+    def send_invitation(self, to_email: str, club_name: str, invite_link: str, details: Optional[str] = None) -> None:
         subject = f"You are invited to join {club_name} on SVNIT ClubDocs"
         text = (
             f"Hello,\n\n"
-            f"You have been invited to join {club_name}. Accept your invitation here:\n"
+            f"You have been invited to join {club_name} on SVNIT ClubDocs.\n"
+            + (f"{details}\n" if details else "")
+            + f"\nAccept your invitation here (sign in with this email address):\n"
             f"{invite_link}\n\n"
             f"Regards,\nSVNIT ClubDocs"
         )

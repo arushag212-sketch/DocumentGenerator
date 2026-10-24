@@ -263,6 +263,9 @@ export interface Invite {
   accepted_at?: string;
   invite_link: string;
   created_at: string;
+  /** Set when the invite was for an email address: whether it was emailed, and why not */
+  emailed?: boolean | null;
+  email_error?: string | null;
 }
 
 export interface Venue {

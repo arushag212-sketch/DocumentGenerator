@@ -324,7 +324,7 @@ export const api = {
     revealSensitive: (clubId: string | number, personId: string | number) =>
       apiFetch<{ field: string; value: string | null }>(`/clubs/${clubId}/people/${personId}/sensitive`),
     getInvites: (clubId: string | number) => apiFetch<Invite[]>(`/clubs/${clubId}/invites`),
-    createInvite: (clubId: string | number, data: { role: string; max_uses?: number; expiry_days?: number }) =>
+    createInvite: (clubId: string | number, data: { role: string; max_uses?: number; expiry_days?: number; email?: string }) =>
       apiFetch<Invite>(`/clubs/${clubId}/invites`, {
         method: 'POST',
         body: JSON.stringify(data),

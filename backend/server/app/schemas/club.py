@@ -142,6 +142,9 @@ class InviteOut(BaseModel):
     accepted_at: Optional[datetime] = None
     invite_link: str
     created_at: datetime
+    # Set when the invite was for an email address: whether the email went out, and why not if it didn't
+    emailed: Optional[bool] = None
+    email_error: Optional[str] = None
 
 
 class InvitePreview(BaseModel):

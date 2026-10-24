@@ -17,6 +17,7 @@ import {
   AlertCircle,
   UserCheck,
   Wand2,
+  Mail,
 } from 'lucide-react';
 
 interface MembersTabProps {
@@ -42,10 +43,18 @@ export const MembersTab: React.FC<MembersTabProps> = ({
   // Invites state
   const [invites, setInvites] = useState<Invite[]>([]);
   const [inviteRole, setInviteRole] = useState('editor');
+  const [inviteEmail, setInviteEmail] = useState('');
   const [inviteMaxUses, setInviteMaxUses] = useState(1);
   const [inviteExpiryDays, setInviteExpiryDays] = useState(7);
   const [creatingInvite, setCreatingInvite] = useState(false);
-  const [createdInvite, setCreatedInvite] = useState<{ code: string; role: string; max_uses: number } | null>(null);
+  const [createdInvite, setCreatedInvite] = useState<{
+    code: string;
+    role: string;
+    max_uses: number;
+    email?: string;
+    emailed?: boolean | null;
+    email_error?: string | null;
+  } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const canEdit = permissions?.can_edit_members || permissions?.is_platform_admin || permissions?.role === 'admin' || permissions?.role === 'owner';
@@ -96,12 +105,23 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     setCreatingInvite(true);
 
     try {
+      const email = inviteEmail.trim();
       const newInv = await api.clubs.createInvite(clubId, {
         role: inviteRole,
-        max_uses: Number(inviteMaxUses),
+        // An emailed invite only works for that address, so one use is enough
+        max_uses: email ? 1 : Number(inviteMaxUses),
         expiry_days: Number(inviteExpiryDays),
+        email: email || undefined,
       });
-      setCreatedInvite({ code: newInv.code, role: newInv.role, max_uses: newInv.max_uses });
+      setCreatedInvite({
+        code: newInv.code,
+        role: newInv.role,
+        max_uses: newInv.max_uses,
+        email: email || undefined,
+        emailed: newInv.emailed,
+        email_error: newInv.email_error,
+      });
+      if (newInv.emailed) setInviteEmail('');
       await fetchInvites();
     } catch (err: any) {
       setError(err.message || 'Failed to create invite');
@@ -200,8 +220,23 @@ export const MembersTab: React.FC<MembersTabProps> = ({
           <div className="min-w-0">
             <p className="text-sm text-slate-600">
               Invite created for a <span className="font-medium text-slate-900">{createdInvite.role}</span>, usable {createdInvite.max_uses}{' '}
-              {createdInvite.max_uses === 1 ? 'time' : 'times'}. Share the code or the link.
+              {createdInvite.max_uses === 1 ? 'time' : 'times'}
+              {createdInvite.email ? (
+                <>
+                  {' '}by <span className="font-medium text-slate-900">{createdInvite.email}</span> only.
+                </>
+              ) : (
+                '. Share the code or the link.'
+              )}
             </p>
+            {createdInvite.emailed && (
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-emerald-700">
+                <Mail className="w-4 h-4" /> Emailed the link to {createdInvite.email}.
+              </p>
+            )}
+            {createdInvite.email && !createdInvite.emailed && createdInvite.email_error && (
+              <p className="mt-1 text-sm text-amber-700">{createdInvite.email_error}</p>
+            )}
             <code className="mt-1.5 inline-block font-mono text-base font-semibold text-slate-900 bg-slate-100 border border-slate-200 rounded px-2 py-1 select-all break-all">
               {createdInvite.code}
             </code>
@@ -426,6 +461,20 @@ export const MembersTab: React.FC<MembersTabProps> = ({
 
               <form onSubmit={handleCreateInvite} className="space-y-3 text-xs">
                 <div>
+                  <label className="block font-medium text-slate-700 mb-1">Email it to (optional)</label>
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="rollno@dept.svnit.ac.in"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-700"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    We email them the link, and only this address can use it. Leave empty to just copy a link.
+                  </p>
+                </div>
+
+                <div>
                   <label className="block font-medium text-slate-700 mb-1">Assigned Role</label>
                   <select
                     value={inviteRole}
@@ -450,7 +499,8 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                       min={1}
                       max={100}
                       required
-                      value={inviteMaxUses}
+                      value={inviteEmail.trim() ? 1 : inviteMaxUses}
+                      disabled={Boolean(inviteEmail.trim())}
                       onChange={(e) => setInviteMaxUses(Number(e.target.value))}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-700"
                     />
@@ -474,7 +524,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                   disabled={creatingInvite}
                   className="w-full mt-2 bg-brand-700 hover:bg-[#162a4a] text-white font-semibold text-xs py-2.5 px-4 rounded-lg transition-colors shadow-sm disabled:opacity-50"
                 >
-                  {creatingInvite ? 'Generating Invite...' : 'Generate Invite Link'}
+                  {creatingInvite ? 'Creating invite…' : inviteEmail.trim() ? 'Create & email invite' : 'Generate Invite Link'}
                 </button>
               </form>
             </div>

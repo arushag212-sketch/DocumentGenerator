@@ -2129,6 +2129,10 @@ def create_club_invite(
         ip=client_ip,
     )
 
+    emailed, email_error = (None, None)
+    if target_email:
+        emailed, email_error = _email_invite(target_email, ctx, invite, raw_code)
+
     return InviteOut(
         id=invite.id,
         club_id=invite.club_id,
@@ -2142,7 +2146,32 @@ def create_club_invite(
         accepted_at=invite.accepted_at,
         invite_link=f"/?invite={raw_code}",
         created_at=invite.created_at,
+        emailed=emailed,
+        email_error=email_error,
     )
+
+
+def _email_invite(to_email: str, ctx: ClubContext, invite: Invite, raw_code: str) -> tuple[bool, Optional[str]]:
+    """Email the invite link to the invited address. Best effort: the invite exists either way."""
+    import logging
+    import os
+    from urllib.parse import quote
+
+    from server.app.core.email import email_delivery_configured, get_email_sender
+
+    if not email_delivery_configured():
+        return False, "Email is not set up on this server, so copy the link and send it yourself."
+    base = os.environ.get("APP_BASE_URL", "http://localhost:5173").rstrip("/")
+    link = f"{base}/login?invite={quote(raw_code)}"
+    inviter = ctx.user.name or ctx.user.email
+    expires = invite.expires_at.strftime("%d/%m/%Y") if invite.expires_at else None
+    details = f"{inviter} invited you as {invite.role}." + (f" The link works until {expires}." if expires else "")
+    try:
+        get_email_sender().send_invitation(to_email, ctx.club.name, link, details)
+        return True, None
+    except Exception as exc:
+        logging.getLogger("clubdocs.invites").warning("Invite email to %s failed: %s", to_email, exc)
+        return False, "The email could not be sent, so copy the link and send it yourself."
 
 
 @router.get("/{club_id}/invites", response_model=list[InviteOut])
