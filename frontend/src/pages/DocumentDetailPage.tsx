@@ -53,6 +53,14 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/** Detail values as people read them: year-first dates (2026-11-04) become 04/11/2026. */
+function showValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const text = String(value);
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : text;
+}
+
 function formatDate(value: string) {
   const d = new Date(value);
   return isNaN(d.getTime()) ? value : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -512,7 +520,7 @@ export const DocumentDetailPage: React.FC = () => {
                   {fields.map((f) => (
                     <div key={f.key} className="grid grid-cols-[7.5rem_1fr] gap-2">
                       <dt className="text-slate-500 truncate" title={f.label}>{f.label}</dt>
-                      <dd className="text-slate-900 break-words whitespace-pre-line">{String(f.value || '—')}</dd>
+                      <dd className="text-slate-900 break-words whitespace-pre-line">{showValue(f.value)}</dd>
                     </div>
                   ))}
                 </dl>

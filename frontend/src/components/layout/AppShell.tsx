@@ -209,9 +209,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     <div className="flex flex-col h-full">
       <div className="px-3 pt-4 pb-3 space-y-3">
         <Link to="/dashboard" className="flex items-center gap-2.5 px-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 ring-1 ring-slate-200">
-            <img src="/brand/svnit_crest.png" alt="" className="h-full w-full object-contain" />
-          </span>
+          <img src="/brand/clubdocs_logo.svg" alt="" className="h-8 w-8 rounded-lg" />
           <span className="leading-tight">
             <span className="block text-sm font-semibold text-slate-900">ClubDocs</span>
             <span className="block text-[11px] text-slate-400">SVNIT Surat</span>
@@ -243,11 +241,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       aria-current={active ? 'page' : undefined}
                       className={`group flex items-center gap-2.5 px-2.5 py-2.5 lg:py-2 min-h-[44px] lg:min-h-0 rounded-lg text-sm transition-colors ${
                         active
-                          ? 'bg-brand-50 text-brand-800 font-semibold shadow-[inset_3px_0_0_#1b365d]'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          ? 'bg-slate-100 text-slate-900 font-medium'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 transition-colors ${active ? 'text-brand-700' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                      <Icon className={`w-[18px] h-[18px] transition-colors ${active ? 'text-brand-700' : 'text-slate-400 group-hover:text-slate-600'}`} />
                       <span className="flex-1">{item.label}</span>
                       {!!item.badge && (
                         <span className="min-w-[1.25rem] px-1.5 text-center text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
