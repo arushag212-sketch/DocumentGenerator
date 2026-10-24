@@ -512,8 +512,12 @@ html.dark .border-slate-300:not(.keep-light, .keep-light *) { border-color: #343
 html.dark :is(.divide-slate-100, .divide-slate-200) > :not([hidden]) ~ :not([hidden]):not(.keep-light *) { border-color: #23252a; }
 
 /* Accent tints */
-html.dark :is(.bg-brand-50, .bg-brand-50\/40, .bg-brand-100):not(.keep-light, .keep-light *) { background-color: rgba(94, 106, 210, 0.14); }
-html.dark :is(.text-brand-700, .text-brand-800, .text-brand-900):not(.keep-light, .keep-light *) { color: #aeb5f0; }
+html.dark .bg-brand-50:not(.keep-light, .keep-light *) { background-color: rgba(94, 106, 210, 0.14); }
+html.dark .bg-brand-50\/40:not(.keep-light, .keep-light *) { background-color: rgba(94, 106, 210, 0.14); }
+html.dark .bg-brand-100:not(.keep-light, .keep-light *) { background-color: rgba(94, 106, 210, 0.14); }
+html.dark .text-brand-700:not(.keep-light, .keep-light *) { color: #aeb5f0; }
+html.dark .text-brand-800:not(.keep-light, .keep-light *) { color: #aeb5f0; }
+html.dark .text-brand-900:not(.keep-light, .keep-light *) { color: #aeb5f0; }
 html.dark :is(.border-brand-200, .border-brand-300):not(.keep-light, .keep-light *) { border-color: #3c4590; }
 
 /* Status tints: same hues, dimmed for a dark surface */
