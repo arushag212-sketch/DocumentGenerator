@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Trash2,
   Ban,
+  CopyPlus,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -237,6 +238,21 @@ export const DocumentDetailPage: React.FC = () => {
   const versions = [...(doc.versions || [])].sort((a, b) => b.version_no - a.version_no);
   const base = `/api/v1/clubs/${clubId}/documents/${doc.id}`;
 
+  // Same filled-in details, a new event and a fresh reference number
+  const duplicate = async () => {
+    setBusy('duplicate');
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await api.documents.duplicate(clubId, doc.id);
+      navigate(`/documents/${res.id}`);
+    } catch (e: any) {
+      setError(e?.detail?.message || (typeof e?.detail === 'string' ? e.detail : null) || e?.message || 'Could not duplicate the document.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-8 py-8">
       <Link to="/documents" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 mb-4">
@@ -263,6 +279,17 @@ export const DocumentDetailPage: React.FC = () => {
           {doc.can_edit && (
             <button type="button" className="btn-secondary" onClick={() => setEmailOpen(true)}>
               <Mail className="w-4 h-4" /> Email
+            </button>
+          )}
+          {doc.can_edit && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={duplicate}
+              disabled={!!busy}
+              title="Copy this document into a new event with a new reference number"
+            >
+              <CopyPlus className="w-4 h-4" /> {busy === 'duplicate' ? 'Duplicating…' : 'Duplicate'}
             </button>
           )}
           {doc.can_edit && isDeletable(doc.status) && (
@@ -299,7 +326,7 @@ export const DocumentDetailPage: React.FC = () => {
               key={src}
               src={src}
               alt={`Page ${i + 1} of ${doc.page_images.length}`}
-              className="w-full bg-white border border-slate-200 rounded-lg shadow-sm"
+              className="keep-light w-full bg-white border border-slate-200 rounded-lg shadow-sm"
               loading={i === 0 ? 'eager' : 'lazy'}
             />
           ))}
