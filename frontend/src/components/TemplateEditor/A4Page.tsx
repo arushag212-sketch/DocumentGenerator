@@ -100,7 +100,7 @@ export const A4Page: React.FC<A4PageProps> = ({
     >
       <div
         ref={sheetRef}
-        className={`relative shadow-2xl rounded-sm ${marginMap[margins]} transition-[width,padding] duration-150 ${
+        className={`keep-light relative shadow-2xl rounded-sm ${marginMap[margins]} transition-[width,padding] duration-150 ${
           layout === 'certificate' ? 'cd-certificate' : ''
         }`}
         style={{

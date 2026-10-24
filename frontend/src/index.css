@@ -554,6 +554,16 @@ html.dark .hover\:border-brand-300:hover:not(.keep-light, .keep-light *) { borde
 html.dark .hover\:border-brand-400:hover:not(.keep-light, .keep-light *) { border-color: var(--d-accent-line); }
 html.dark .hover\:border-brand-500:hover:not(.keep-light, .keep-light *) { border-color: #5b8ad6; }
 html.dark nav a[aria-current="page"] { box-shadow: inset 3px 0 0 #6f9be0; }
+/* Light tinted gradient panels (e.g. "Ask AI to change details") become a flat accent tint */
+html.dark .from-brand-50\/70:not(.keep-light, .keep-light *) { background-image: none; background-color: var(--d-accent-tint); }
+html.dark .bg-brand-50\/5:not(.keep-light, .keep-light *) { background-color: rgba(111, 155, 224, 0.05); }
+html.dark .border-brand-200\/80:not(.keep-light, .keep-light *) { border-color: rgba(111, 155, 224, 0.3); }
+html.dark .border-brand-300\/30:not(.keep-light, .keep-light *) { border-color: rgba(111, 155, 224, 0.2); }
+html.dark .focus\:border-brand-700:focus:not(.keep-light, .keep-light *) { border-color: #5b8ad6; }
+html.dark .text-brand-900\/70:not(.keep-light, .keep-light *) { color: rgba(169, 196, 239, 0.75); }
+html.dark .text-brand-900\/90:not(.keep-light, .keep-light *) { color: rgba(169, 196, 239, 0.9); }
+html.dark .hover\:text-brand-900:hover:not(.keep-light, .keep-light *) { color: #c4d6f4; }
+html.dark .group:hover .group-hover\:text-brand-700:not(.keep-light, .keep-light *) { color: #c4d6f4; }
 
 /* Status tints: same hues, softened for a dark surface */
 html.dark .bg-amber-50:not(.keep-light, .keep-light *) { background-color: rgba(245, 158, 11, 0.12); }
@@ -601,6 +611,26 @@ html.dark .text-emerald-900:not(.keep-light, .keep-light *) { color: #6ee7b7; }
 html.dark .border-emerald-100:not(.keep-light, .keep-light *) { border-color: rgba(16, 185, 129, 0.25); }
 html.dark .border-emerald-200:not(.keep-light, .keep-light *) { border-color: rgba(16, 185, 129, 0.3); }
 html.dark .border-emerald-300:not(.keep-light, .keep-light *) { border-color: rgba(16, 185, 129, 0.4); }
+/* Tinted boxes that float over content (tips, toasts, popovers) stay solid: tint painted over the panel */
+html.dark .fixed.bg-amber-50:not(.keep-light *) { background-color: var(--d-panel); background-image: linear-gradient(rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.12)); }
+html.dark .absolute.bg-amber-50:not(.keep-light *) { background-color: var(--d-panel); background-image: linear-gradient(rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.12)); }
+html.dark .fixed.bg-red-50:not(.keep-light *) { background-color: var(--d-panel); background-image: linear-gradient(rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.12)); }
+html.dark .absolute.bg-red-50:not(.keep-light *) { background-color: var(--d-panel); background-image: linear-gradient(rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.12)); }
+html.dark .fixed.bg-emerald-50:not(.keep-light *) { background-color: var(--d-panel); background-image: linear-gradient(rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.12)); }
+html.dark .absolute.bg-emerald-50:not(.keep-light *) { background-color: var(--d-panel); background-image: linear-gradient(rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.12)); }
+html.dark .fixed.bg-brand-50:not(.keep-light *) { background-color: var(--d-panel); background-image: linear-gradient(rgba(111, 155, 224, 0.13), rgba(111, 155, 224, 0.13)); }
+html.dark .absolute.bg-brand-50:not(.keep-light *) { background-color: var(--d-panel); background-image: linear-gradient(rgba(111, 155, 224, 0.13), rgba(111, 155, 224, 0.13)); }
+html.dark .bg-gray-50:not(.keep-light, .keep-light *) { background-color: var(--d-page); }
+html.dark .text-gray-500:not(.keep-light, .keep-light *) { color: var(--d-text-3); }
+html.dark .border-gray-400:not(.keep-light, .keep-light *) { border-color: #3a4a66; }
+html.dark .bg-amber-200:not(.keep-light, .keep-light *) { background-color: rgba(245, 158, 11, 0.28); }
+html.dark .bg-emerald-200:not(.keep-light, .keep-light *) { background-color: rgba(16, 185, 129, 0.28); }
+html.dark .text-emerald-950:not(.keep-light, .keep-light *) { color: #a7f3d0; }
+html.dark .hover\:bg-red-200:hover:not(.keep-light, .keep-light *) { background-color: rgba(239, 68, 68, 0.24); }
+html.dark .hover\:border-red-200:hover:not(.keep-light, .keep-light *) { border-color: rgba(239, 68, 68, 0.4); }
+html.dark .hover\:text-red-700:hover:not(.keep-light, .keep-light *) { color: #fca5a5; }
+html.dark .hover\:text-red-800:hover:not(.keep-light, .keep-light *) { color: #fca5a5; }
+html.dark .hover\:text-rose-700:hover:not(.keep-light, .keep-light *) { color: #fda4af; }
 html.dark .bg-purple-50:not(.keep-light, .keep-light *) { background-color: rgba(168, 85, 247, 0.12); }
 html.dark .text-purple-800:not(.keep-light, .keep-light *) { color: #d8b4fe; }
 html.dark .border-purple-200:not(.keep-light, .keep-light *) { border-color: rgba(168, 85, 247, 0.3); }
