@@ -26,6 +26,7 @@ docxtpl==0.20.2
 python-docx==1.2.0
 PyMuPDF==1.28.2
 Pillow==11.3.0
+segno==1.6.6
 num2words==0.5.14
 dateparser==1.4.3
 PyYAML==6.0.3
