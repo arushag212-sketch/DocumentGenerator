@@ -28,6 +28,15 @@ from server.app.core.text_improver import (
     strip_pii_for_llm,
 )
 from server.app.core.document_checker import audit_document, calculate_contrast
+from server.app.core import template_wizard, text_improver
+from docgen.llm import DummyLLMClient
+
+
+@pytest.fixture(autouse=True)
+def offline_ai(monkeypatch):
+    """These tests cover the offline fallback: never reach the real AI from a developer's .env keys."""
+    monkeypatch.setattr(text_improver, "get_llm_client", lambda: DummyLLMClient())
+    monkeypatch.setattr(template_wizard, "get_llm_client", lambda: DummyLLMClient())
 
 
 def test_wizard_questions():
