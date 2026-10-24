@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { notify } from '../common/Toaster';
 import {
   FileText,
@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Plus,
   SlidersHorizontal,
+  CopyPlus,
 } from 'lucide-react';
 import { StatusBadge } from '../../pages/DocumentDetailPage';
 import { api } from '../../api/client';
@@ -57,6 +58,16 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
   const [toDelete, setToDelete] = useState<any[] | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const duplicate = async (doc: any) => {
+    try {
+      const res = await api.documents.duplicate(clubId, doc.id);
+      notify('Copy created. Change the date and details for the new event.', 'success');
+      navigate(`/documents/${res.id}`);
+    } catch (err: any) {
+      notify(err.message || 'Could not duplicate the document.', 'error');
+    }
+  };
   const [showFilters, setShowFilters] = useState(false);
 
   // Filters & Search
@@ -242,6 +253,9 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
           <a role="menuitem" className={menuItem} href={doc.docx_url} download onClick={() => setMenuFor(null)}>
             <Download className="w-4 h-4 text-slate-400" /> Download Word
           </a>
+          <button type="button" role="menuitem" className={menuItem} onClick={() => { setMenuFor(null); duplicate(doc); }}>
+            <CopyPlus className="w-4 h-4 text-slate-400" /> Duplicate for next event
+          </button>
           {isDeletable(doc.status) && (
             <>
               <div className="my-1 border-t border-slate-100" />

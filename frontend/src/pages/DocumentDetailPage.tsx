@@ -17,9 +17,11 @@ import {
   ExternalLink,
   Trash2,
   Ban,
+  CopyPlus,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
+import { notify } from '../components/common/Toaster';
 import { DocumentActivity, EditableField, GeneratedDocument } from '../types';
 import { CancelDocDialog, DeleteDocsDialog, isDeletable } from '../components/documents/DocumentTrash';
 
@@ -278,6 +280,28 @@ export const DocumentDetailPage: React.FC = () => {
           {doc.can_edit && (
             <button type="button" className="btn-secondary" onClick={() => setEmailOpen(true)}>
               <Mail className="w-4 h-4" /> Email
+            </button>
+          )}
+          {doc.can_edit && (
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={busy === 'duplicate'}
+              title="Copy this document for another event (new reference number)"
+              onClick={async () => {
+                setBusy('duplicate');
+                try {
+                  const res = await api.documents.duplicate(clubId, doc.id);
+                  notify('Copy created. Change the date and details for the new event.', 'success');
+                  navigate(`/documents/${res.id}`);
+                } catch (err: any) {
+                  setError(err.message || 'Could not duplicate the document.');
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            >
+              <CopyPlus className="w-4 h-4" /> {busy === 'duplicate' ? 'Copying…' : 'Duplicate'}
             </button>
           )}
           {doc.can_edit && isDeletable(doc.status) && (

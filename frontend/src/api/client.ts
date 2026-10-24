@@ -429,6 +429,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ reason }),
       }),
+    duplicate: (clubId: string | number, docId: string) =>
+      apiFetch<{ id: string; duplicated_from: string }>(`/clubs/${clubId}/documents/${docId}/duplicate`, { method: 'POST' }),
     getTemplateSchema: (clubId: string | number, templateId: string) =>
       apiFetch<TemplateDetail>(`/clubs/${clubId}/documents/templates/${templateId}/schema`),
     extract: (clubId: string | number, text: string) =>
