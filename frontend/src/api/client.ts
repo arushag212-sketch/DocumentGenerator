@@ -1,4 +1,4 @@
-import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse, HomeCreateResponse, HomeGeneratedDoc, ClubAnalytics, VerificationResult, TrashItem } from '../types';
+import { User, Club, ClubMember, Person, AuditLog, ClubPermissions, TemplateDetail, GeneratedDocument, ExtractResult, Invite, Venue, NumberingSeries, Asset, RoleHeld, ClubSearchResult, JoinRequest, HomeUnderstandResponse, HomeGenerateResponse, HomeCreateResponse, HomeGeneratedDoc, ClubAnalytics, VerificationResult, TrashItem, AppNotification } from '../types';
 
 function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`;
@@ -412,6 +412,11 @@ export const api = {
       }),
   },
 
+  notifications: {
+    list: () => apiFetch<{ unread: number; items: AppNotification[] }>('/notifications'),
+    markRead: (id: string) => apiFetch<AppNotification>(`/notifications/${id}/read`, { method: 'POST' }),
+    markAllRead: () => apiFetch<{ marked: number }>('/notifications/read-all', { method: 'POST' }),
+  },
   documents: {
     // Trash: deleted documents can be restored for 30 days; approved ones are cancelled instead
     remove: (clubId: string | number, docId: string) =>

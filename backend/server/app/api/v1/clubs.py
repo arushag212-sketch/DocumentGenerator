@@ -657,6 +657,14 @@ def create_join_request(
         meta={"position": jr.position, "requested_role": jr.requested_role},
         ip=client_ip,
     )
+    from server.app.core.notifications import club_admin_ids, notify
+
+    notify(
+        db, club_admin_ids(db, club.id), club_id=club.id, kind="join_request",
+        title=f"New join request: {current_user.name}",
+        body=f"{current_user.name} ({current_user.email}) asked to join {club.name} as {jr.position or 'a member'}.",
+        link="/join-requests",
+    )
 
     db.commit()
     db.refresh(jr)

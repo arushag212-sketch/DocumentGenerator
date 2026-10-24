@@ -20,6 +20,7 @@ import {
   Monitor,
 } from 'lucide-react';
 import { WelcomeTour } from '../onboarding/WelcomeTour';
+import { NotificationBell } from './NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, type ThemePreference } from '../../context/ThemeContext';
 import { api } from '../../api/client';
@@ -216,6 +217,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const sidebar = (
     <div className="flex flex-col h-full">
       <div className="px-3 pt-4 pb-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
         <Link to="/dashboard" className="flex items-center gap-2.5 px-2">
           <img src="/brand/clubdocs_logo.svg" alt="" className="h-8 w-8 rounded-lg" />
           <span className="leading-tight">
@@ -223,6 +225,10 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <span className="block text-[11px] text-ink-400">SVNIT Surat</span>
           </span>
         </Link>
+        <span className="hidden lg:block">
+          <NotificationBell tone="dark" />
+        </span>
+        </div>
         <div className="rounded-lg border border-ink-700 bg-ink-850 p-1">
           <ClubSwitcher />
         </div>
@@ -353,6 +359,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <Menu className="w-6 h-6 text-slate-700" />
           </button>
           <span className="flex-1 text-sm font-semibold text-slate-900 truncate">{activeClub?.name || 'ClubDocs'}</span>
+          <NotificationBell />
           <Link
             to="/profile"
             aria-label="Your profile"
