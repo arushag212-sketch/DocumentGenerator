@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
+import { notify } from '../components/common/Toaster';
 import { Lock, Mail, User, KeyRound, ShieldAlert, CheckCircle2, ArrowRight, Sparkles, FileCheck2, ShieldCheck } from 'lucide-react';
 import { DocPreviewArt } from '../components/brand/DocPreviewArt';
 import { PasswordInput } from '../components/auth/PasswordInput';
@@ -27,7 +28,7 @@ const AuthInput: React.FC<{
 );
 
 export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ initialTab }) => {
-  const { login } = useAuth();
+  const { login, user, loading: authLoading, refreshClubs, setActiveClubId } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from || '/dashboard';
@@ -42,6 +43,36 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
   };
 
   const initialInvite = getInviteParam();
+
+  // Already signed in and opened an invite link: join straight away instead of showing the sign-in form
+  // (only for someone signed in when the page opened; signing in here accepts the invite in the form handlers)
+  const [joiningInvite, setJoiningInvite] = useState(false);
+  const signedInOnOpen = React.useRef<boolean | null>(null);
+  useEffect(() => {
+    if (authLoading) return;
+    if (signedInOnOpen.current === null) signedInOnOpen.current = Boolean(user);
+    if (!signedInOnOpen.current || !user || !initialInvite) return;
+    let cancelled = false;
+    setJoiningInvite(true);
+    api.invites
+      .accept(initialInvite)
+      .then(async (res) => {
+        await refreshClubs();
+        if (cancelled) return;
+        if (res?.club_id) setActiveClubId(res.club_id);
+        notify(res?.message || 'You have joined the club.', 'success');
+        navigate('/dashboard', { replace: true });
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        notify(err?.detail?.message || err?.message || 'This invite link could not be used.', 'error');
+        navigate('/dashboard', { replace: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user?.id, initialInvite]);
   // Password-reset emails link to /login?reset_token=...
   const initialResetToken = new URLSearchParams(location.search || window.location.search).get('reset_token') || '';
   const [tab, setTab] = useState<'login' | 'register' | 'forgot' | 'reset'>(
@@ -225,6 +256,17 @@ export const AuthPage: React.FC<{ initialTab?: 'login' | 'register' }> = ({ init
     forgot: { title: 'Reset your password', sub: 'We will email you a link that works for 30 minutes.' },
     reset: { title: 'Choose a new password', sub: 'Paste the code from the email, then pick a new password.' },
   }[tab];
+
+  if (joiningInvite) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex items-center gap-3 text-sm text-slate-600" role="status">
+          <div className="h-5 w-5 border-2 border-brand-700 border-t-transparent rounded-full animate-spin" />
+          Joining the club from your invite…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
