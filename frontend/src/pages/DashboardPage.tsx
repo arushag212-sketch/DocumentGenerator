@@ -184,14 +184,14 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8">
-      <section className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-600 px-6 py-7 text-white sm:px-8">
-        <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-white/5" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-24 right-24 h-56 w-56 rounded-full bg-svnit-gold/10" aria-hidden="true" />
+      <section className="relative mb-6 overflow-hidden rounded-xl border border-ink-700 bg-ink-900 px-6 py-7 text-ink-200 sm:px-8">
+        {/* Linear-style faint top-edge highlight on the dark panel */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" aria-hidden="true" />
         <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-brand-100">{greeting()}{firstName ? ',' : ''}</p>
-            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight sm:text-3xl">{firstName || 'Welcome'}</h1>
-            <p className="mt-1.5 text-sm text-brand-100">
+            <p className="text-sm text-ink-400">{greeting()}{firstName ? ',' : ''}</p>
+            <h1 className="mt-0.5 text-2xl font-semibold tracking-[-0.03em] text-ink-200 sm:text-3xl">{firstName || 'Welcome'}</h1>
+            <p className="mt-1.5 text-sm text-ink-400">
               {activeClub?.name}
               {stats && stats.awaiting_review > 0 ? ` · ${stats.awaiting_review} waiting for review` : ''}
             </p>
@@ -199,14 +199,14 @@ export const DashboardPage: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <Link
               to="/home"
-              className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-brand-800 shadow-sm transition-colors hover:bg-brand-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-700 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600"
             >
               <FilePlus2 className="w-4 h-4" />
               Create documents
             </Link>
             <Link
               to="/templates"
-              className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20 transition-colors hover:bg-white/20"
+              className="inline-flex items-center gap-2 rounded-lg border border-ink-600 bg-ink-850 px-3.5 py-2 text-sm font-medium text-ink-200 transition-colors hover:bg-ink-800"
             >
               <LayoutTemplate className="w-4 h-4" />
               Templates

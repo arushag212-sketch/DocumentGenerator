@@ -18,7 +18,7 @@
 @layer components {
   /* Surfaces */
   .surface-card {
-    @apply bg-white border border-slate-200/80 rounded-xl shadow-card;
+    @apply bg-white border border-slate-200 rounded-xl shadow-card;
   }
   .surface-card-hover {
     @apply transition-shadow hover:shadow-raised hover:border-slate-300/80;
@@ -29,13 +29,13 @@
     @apply flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-6;
   }
   .page-title {
-    @apply text-2xl font-semibold text-slate-900 tracking-tight;
+    @apply text-2xl font-semibold text-slate-900 tracking-[-0.02em];
   }
   .page-subtitle {
     @apply text-sm text-slate-500 mt-1;
   }
   .section-title {
-    @apply text-sm font-semibold text-slate-900;
+    @apply text-sm font-semibold text-slate-900 tracking-[-0.01em];
   }
   .eyebrow {
     @apply text-[11px] font-semibold uppercase tracking-wider text-slate-400;
@@ -478,3 +478,63 @@ body {
 .cd-certificate .ProseMirror .cd-signature-grid {
   margin-top: 4.5rem;
 }
+
+/* ===================================================================
+   Dark mode (Linear surface ladder). The app uses Tailwind's slate greys
+   and white surfaces everywhere, so instead of a dark: variant on every
+   element, those few utilities are re-mapped here. Anything inside
+   .keep-light (document pages, the template editor) stays paper-white.
+   =================================================================== */
+html.dark { color-scheme: dark; }
+html.dark body { background-color: #08090a; color: #f7f8f8; }
+
+/* Surfaces */
+html.dark :is(.bg-white, .bg-white\/95, .bg-white\/90, .bg-white\/80):not(.keep-light, .keep-light *) { background-color: #0f1011; }
+html.dark :is(.bg-slate-50, .bg-slate-50\/50, .bg-slate-50\/60, .bg-slate-50\/70, .bg-slate-50\/80):not(.keep-light, .keep-light *) { background-color: #141516; }
+html.dark .bg-slate-100:not(.keep-light, .keep-light *) { background-color: #18191a; }
+html.dark .bg-slate-200:not(.keep-light, .keep-light *),
+html.dark .bg-slate-200\/70:not(.keep-light, .keep-light *) { background-color: #23252a; }
+html.dark :is(.hover\:bg-slate-50, .hover\:bg-slate-50\/60, .hover\:bg-slate-50\/70):hover:not(.keep-light, .keep-light *) { background-color: #18191a; }
+html.dark :is(.hover\:bg-slate-100, .hover\:bg-slate-200):hover:not(.keep-light, .keep-light *) { background-color: #1f2023; }
+html.dark .shadow-card:not(.keep-light, .keep-light *) { box-shadow: none; }
+
+/* Text */
+html.dark :is(.text-slate-900, .text-slate-800):not(.keep-light, .keep-light *) { color: #f7f8f8; }
+html.dark .text-slate-700:not(.keep-light, .keep-light *) { color: #d0d6e0; }
+html.dark .text-slate-600:not(.keep-light, .keep-light *) { color: #b4bac4; }
+html.dark .text-slate-500:not(.keep-light, .keep-light *) { color: #8a8f98; }
+html.dark :is(.text-slate-400, .text-slate-300):not(.keep-light, .keep-light *) { color: #62666d; }
+html.dark :is(.hover\:text-slate-900, .hover\:text-slate-800):hover:not(.keep-light, .keep-light *) { color: #f7f8f8; }
+
+/* Borders and dividers */
+html.dark :is(.border-slate-100, .border-slate-200, .border-slate-200\/80):not(.keep-light, .keep-light *) { border-color: #23252a; }
+html.dark .border-slate-300:not(.keep-light, .keep-light *) { border-color: #34343a; }
+html.dark :is(.divide-slate-100, .divide-slate-200) > :not([hidden]) ~ :not([hidden]):not(.keep-light *) { border-color: #23252a; }
+
+/* Accent tints */
+html.dark :is(.bg-brand-50, .bg-brand-50\/40, .bg-brand-100):not(.keep-light, .keep-light *) { background-color: rgba(94, 106, 210, 0.14); }
+html.dark :is(.text-brand-700, .text-brand-800, .text-brand-900):not(.keep-light, .keep-light *) { color: #aeb5f0; }
+html.dark :is(.border-brand-200, .border-brand-300):not(.keep-light, .keep-light *) { border-color: #3c4590; }
+
+/* Status tints: same hues, dimmed for a dark surface */
+html.dark :is(.bg-amber-50):not(.keep-light, .keep-light *) { background-color: rgba(245, 158, 11, 0.12); }
+html.dark :is(.text-amber-800, .text-amber-900, .text-amber-700):not(.keep-light, .keep-light *) { color: #fcd34d; }
+html.dark .border-amber-200:not(.keep-light, .keep-light *) { border-color: rgba(245, 158, 11, 0.3); }
+html.dark :is(.bg-red-50, .bg-red-50\/60):not(.keep-light, .keep-light *) { background-color: rgba(239, 68, 68, 0.12); }
+html.dark :is(.text-red-700, .text-red-800, .text-red-900, .text-red-600):not(.keep-light, .keep-light *) { color: #fca5a5; }
+html.dark :is(.border-red-100, .border-red-200):not(.keep-light, .keep-light *) { border-color: rgba(239, 68, 68, 0.3); }
+html.dark .bg-emerald-50:not(.keep-light, .keep-light *) { background-color: rgba(16, 185, 129, 0.12); }
+html.dark :is(.text-emerald-700, .text-emerald-800, .text-emerald-900):not(.keep-light, .keep-light *) { color: #6ee7b7; }
+html.dark :is(.border-emerald-100, .border-emerald-200):not(.keep-light, .keep-light *) { border-color: rgba(16, 185, 129, 0.3); }
+html.dark .bg-sky-50:not(.keep-light, .keep-light *) { background-color: rgba(14, 165, 233, 0.12); }
+html.dark .text-sky-700:not(.keep-light, .keep-light *) { color: #7dd3fc; }
+html.dark .border-sky-200:not(.keep-light, .keep-light *) { border-color: rgba(14, 165, 233, 0.3); }
+
+/* Form controls */
+html.dark .input-field:not(.keep-light *) { background-color: #0f1011; border-color: #34343a; color: #f7f8f8; }
+html.dark .input-field::placeholder { color: #62666d; }
+html.dark .btn-secondary:not(.keep-light *) { background-color: #141516; border-color: #34343a; color: #d0d6e0; }
+html.dark .btn-secondary:hover:not(.keep-light *) { background-color: #1f2023; color: #f7f8f8; }
+html.dark :is(.btn-ghost, .btn-icon):hover:not(.keep-light *) { background-color: #1f2023; }
+html.dark .skeleton { background-color: #23252a; }
+html.dark .skeleton::after { background-image: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.06), transparent); }

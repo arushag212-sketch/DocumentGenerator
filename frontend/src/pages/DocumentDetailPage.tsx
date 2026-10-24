@@ -314,7 +314,7 @@ export const DocumentDetailPage: React.FC = () => {
               key={src}
               src={src}
               alt={`Page ${i + 1} of ${doc.page_images.length}`}
-              className="w-full bg-white border border-slate-200 rounded-lg shadow-sm"
+              className="keep-light w-full bg-white border border-slate-200 rounded-lg shadow-sm"
               loading={i === 0 ? 'eager' : 'lazy'}
             />
           ))}

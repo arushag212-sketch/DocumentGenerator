@@ -508,7 +508,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-slate-100 text-slate-900 font-sans">
+    <div className="keep-light flex flex-col h-screen overflow-hidden bg-slate-100 text-slate-900 font-sans">
       <Toolbar
         templateName={template?.name}
         category={template?.category}
