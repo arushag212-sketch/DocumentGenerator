@@ -480,65 +480,137 @@ body {
 }
 
 /* ===================================================================
-   Dark mode (Linear surface ladder). The app uses Tailwind's slate greys
-   and white surfaces everywhere, so instead of a dark: variant on every
-   element, those few utilities are re-mapped here. Anything inside
-   .keep-light (document pages, the template editor) stays paper-white.
+   Dark mode: an elevation ladder (sidebar < page < cards < raised), not one flat black.
+   The app styles with Tailwind's slate greys and white surfaces, so those few utilities are
+   re-mapped to the variables below. Anything inside .keep-light (document pages, the
+   template editor) stays paper-white. The light theme is untouched.
    =================================================================== */
-html.dark { color-scheme: dark; }
-html.dark body { background-color: #08090a; color: #f7f8f8; }
+html.dark {
+  color-scheme: dark;
+  scrollbar-color: #34383f transparent;
+  --d-sidebar: #08090b;
+  --d-page: #0d0e11;
+  --d-card: #15171b;
+  --d-raised: #1c1f24;
+  --d-input: #101215;
+  --d-line: #262930;
+  --d-line-strong: #343842;
+  --d-text: #eceef1;
+  --d-text-2: #c3c8d0;
+  --d-text-3: #a3a9b3;
+  --d-text-4: #6b717b;
+  --d-accent-tint: rgba(117, 128, 230, 0.16);
+  --d-accent-text: #b4bbf5;
+}
+html.dark body { background-color: var(--d-page); color: var(--d-text); }
 
 /* Surfaces */
-html.dark :is(.bg-white, .bg-white\/95, .bg-white\/90, .bg-white\/80):not(.keep-light, .keep-light *) { background-color: #0f1011; }
-html.dark :is(.bg-slate-50, .bg-slate-50\/50, .bg-slate-50\/60, .bg-slate-50\/70, .bg-slate-50\/80):not(.keep-light, .keep-light *) { background-color: #141516; }
-html.dark .bg-slate-100:not(.keep-light, .keep-light *) { background-color: #18191a; }
-html.dark .bg-slate-200:not(.keep-light, .keep-light *),
-html.dark .bg-slate-200\/70:not(.keep-light, .keep-light *) { background-color: #23252a; }
-html.dark :is(.hover\:bg-slate-50, .hover\:bg-slate-50\/60, .hover\:bg-slate-50\/70):hover:not(.keep-light, .keep-light *) { background-color: #18191a; }
-html.dark :is(.hover\:bg-slate-100, .hover\:bg-slate-200):hover:not(.keep-light, .keep-light *) { background-color: #1f2023; }
-html.dark .shadow-card:not(.keep-light, .keep-light *) { box-shadow: none; }
+html.dark .bg-white:not(.keep-light, .keep-light *) { background-color: var(--d-card); }
+html.dark .bg-white\/95:not(.keep-light, .keep-light *) { background-color: rgba(21, 23, 27, 0.95); }
+html.dark .bg-white\/90:not(.keep-light, .keep-light *) { background-color: rgba(21, 23, 27, 0.9); }
+html.dark .bg-white\/80:not(.keep-light, .keep-light *) { background-color: rgba(21, 23, 27, 0.8); }
+html.dark .bg-slate-50:not(.keep-light, .keep-light *) { background-color: var(--d-page); }
+html.dark .bg-slate-50\/50:not(.keep-light, .keep-light *) { background-color: rgba(255, 255, 255, 0.025); }
+html.dark .bg-slate-50\/60:not(.keep-light, .keep-light *) { background-color: rgba(255, 255, 255, 0.025); }
+html.dark .bg-slate-50\/70:not(.keep-light, .keep-light *) { background-color: rgba(255, 255, 255, 0.025); }
+html.dark .bg-slate-50\/80:not(.keep-light, .keep-light *) { background-color: rgba(255, 255, 255, 0.025); }
+html.dark .bg-slate-100:not(.keep-light, .keep-light *) { background-color: var(--d-raised); }
+html.dark .bg-slate-200:not(.keep-light, .keep-light *) { background-color: var(--d-line-strong); }
+html.dark .bg-slate-200\/70:not(.keep-light, .keep-light *) { background-color: var(--d-line-strong); }
+html.dark .hover\:bg-slate-50:hover:not(.keep-light, .keep-light *) { background-color: rgba(255, 255, 255, 0.04); }
+html.dark .hover\:bg-slate-50\/60:hover:not(.keep-light, .keep-light *) { background-color: rgba(255, 255, 255, 0.04); }
+html.dark .hover\:bg-slate-50\/70:hover:not(.keep-light, .keep-light *) { background-color: rgba(255, 255, 255, 0.04); }
+html.dark .hover\:bg-slate-100:hover:not(.keep-light, .keep-light *) { background-color: var(--d-raised); }
+html.dark .hover\:bg-slate-200:hover:not(.keep-light, .keep-light *) { background-color: var(--d-raised); }
+
+/* Cards: lifted panel with a faint top highlight instead of a shadow */
+html.dark .surface-card:not(.keep-light *) {
+  background-color: var(--d-card);
+  border-color: var(--d-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+html.dark .shadow-popover:not(.keep-light *) { box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--d-line); }
+html.dark .shadow-raised:not(.keep-light *) { box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--d-line); }
+
+/* Sidebar sits lowest, separated by a hairline */
+html.dark aside.bg-ink-900 { background-color: var(--d-sidebar); border-color: var(--d-line); }
 
 /* Text */
-html.dark :is(.text-slate-900, .text-slate-800):not(.keep-light, .keep-light *) { color: #f7f8f8; }
-html.dark .text-slate-700:not(.keep-light, .keep-light *) { color: #d0d6e0; }
-html.dark .text-slate-600:not(.keep-light, .keep-light *) { color: #b4bac4; }
-html.dark .text-slate-500:not(.keep-light, .keep-light *) { color: #8a8f98; }
-html.dark :is(.text-slate-400, .text-slate-300):not(.keep-light, .keep-light *) { color: #62666d; }
-html.dark :is(.hover\:text-slate-900, .hover\:text-slate-800):hover:not(.keep-light, .keep-light *) { color: #f7f8f8; }
+html.dark .text-slate-900:not(.keep-light, .keep-light *) { color: var(--d-text); }
+html.dark .text-slate-800:not(.keep-light, .keep-light *) { color: var(--d-text); }
+html.dark .text-slate-700:not(.keep-light, .keep-light *) { color: var(--d-text-2); }
+html.dark .text-slate-600:not(.keep-light, .keep-light *) { color: var(--d-text-3); }
+html.dark .text-slate-500:not(.keep-light, .keep-light *) { color: var(--d-text-3); }
+html.dark .text-slate-400:not(.keep-light, .keep-light *) { color: var(--d-text-4); }
+html.dark .text-slate-300:not(.keep-light, .keep-light *) { color: var(--d-text-4); }
+html.dark .hover\:text-slate-900:hover:not(.keep-light, .keep-light *) { color: var(--d-text); }
+html.dark .hover\:text-slate-800:hover:not(.keep-light, .keep-light *) { color: var(--d-text); }
 
 /* Borders and dividers */
-html.dark :is(.border-slate-100, .border-slate-200, .border-slate-200\/80):not(.keep-light, .keep-light *) { border-color: #23252a; }
-html.dark .border-slate-300:not(.keep-light, .keep-light *) { border-color: #34343a; }
-html.dark :is(.divide-slate-100, .divide-slate-200) > :not([hidden]) ~ :not([hidden]):not(.keep-light *) { border-color: #23252a; }
+html.dark .border-slate-100:not(.keep-light, .keep-light *) { border-color: var(--d-line); }
+html.dark .border-slate-200:not(.keep-light, .keep-light *) { border-color: var(--d-line); }
+html.dark .border-slate-200\/80:not(.keep-light, .keep-light *) { border-color: var(--d-line); }
+html.dark .border-slate-300:not(.keep-light, .keep-light *) { border-color: var(--d-line-strong); }
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]):not(.keep-light *) { border-color: var(--d-line); }
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]):not(.keep-light *) { border-color: var(--d-line); }
+html.dark .data-table thead th:not(.keep-light *) { background-color: rgba(255, 255, 255, 0.02); color: var(--d-text-4); border-color: var(--d-line); }
+html.dark .data-table tbody td:not(.keep-light *) { border-color: var(--d-line); }
 
 /* Accent tints */
-html.dark .bg-brand-50:not(.keep-light, .keep-light *) { background-color: rgba(94, 106, 210, 0.14); }
-html.dark .bg-brand-50\/40:not(.keep-light, .keep-light *) { background-color: rgba(94, 106, 210, 0.14); }
-html.dark .bg-brand-100:not(.keep-light, .keep-light *) { background-color: rgba(94, 106, 210, 0.14); }
-html.dark .text-brand-700:not(.keep-light, .keep-light *) { color: #aeb5f0; }
-html.dark .text-brand-800:not(.keep-light, .keep-light *) { color: #aeb5f0; }
-html.dark .text-brand-900:not(.keep-light, .keep-light *) { color: #aeb5f0; }
-html.dark :is(.border-brand-200, .border-brand-300):not(.keep-light, .keep-light *) { border-color: #3c4590; }
+html.dark .bg-brand-50:not(.keep-light, .keep-light *) { background-color: var(--d-accent-tint); }
+html.dark .bg-brand-50\/40:not(.keep-light, .keep-light *) { background-color: var(--d-accent-tint); }
+html.dark .bg-brand-100:not(.keep-light, .keep-light *) { background-color: var(--d-accent-tint); }
+html.dark .text-brand-700:not(.keep-light, .keep-light *) { color: var(--d-accent-text); }
+html.dark .text-brand-800:not(.keep-light, .keep-light *) { color: var(--d-accent-text); }
+html.dark .text-brand-900:not(.keep-light, .keep-light *) { color: var(--d-accent-text); }
+html.dark .border-brand-200:not(.keep-light, .keep-light *) { border-color: rgba(117, 128, 230, 0.35); }
+html.dark .border-brand-300:not(.keep-light, .keep-light *) { border-color: rgba(117, 128, 230, 0.5); }
+html.dark .border-brand-700:not(.keep-light, .keep-light *) { border-color: #7681dd; }
 
-/* Status tints: same hues, dimmed for a dark surface */
-html.dark :is(.bg-amber-50):not(.keep-light, .keep-light *) { background-color: rgba(245, 158, 11, 0.12); }
-html.dark :is(.text-amber-800, .text-amber-900, .text-amber-700):not(.keep-light, .keep-light *) { color: #fcd34d; }
+/* Status tints: same hues, softened for a dark surface */
+html.dark .bg-amber-50:not(.keep-light, .keep-light *) { background-color: rgba(245, 158, 11, 0.13); }
+html.dark .text-amber-700:not(.keep-light, .keep-light *) { color: #fbbf24; }
+html.dark .text-amber-800:not(.keep-light, .keep-light *) { color: #fbbf24; }
+html.dark .text-amber-900:not(.keep-light, .keep-light *) { color: #fbbf24; }
 html.dark .border-amber-200:not(.keep-light, .keep-light *) { border-color: rgba(245, 158, 11, 0.3); }
-html.dark :is(.bg-red-50, .bg-red-50\/60):not(.keep-light, .keep-light *) { background-color: rgba(239, 68, 68, 0.12); }
-html.dark :is(.text-red-700, .text-red-800, .text-red-900, .text-red-600):not(.keep-light, .keep-light *) { color: #fca5a5; }
-html.dark :is(.border-red-100, .border-red-200):not(.keep-light, .keep-light *) { border-color: rgba(239, 68, 68, 0.3); }
-html.dark .bg-emerald-50:not(.keep-light, .keep-light *) { background-color: rgba(16, 185, 129, 0.12); }
-html.dark :is(.text-emerald-700, .text-emerald-800, .text-emerald-900):not(.keep-light, .keep-light *) { color: #6ee7b7; }
-html.dark :is(.border-emerald-100, .border-emerald-200):not(.keep-light, .keep-light *) { border-color: rgba(16, 185, 129, 0.3); }
-html.dark .bg-sky-50:not(.keep-light, .keep-light *) { background-color: rgba(14, 165, 233, 0.12); }
-html.dark .text-sky-700:not(.keep-light, .keep-light *) { color: #7dd3fc; }
+html.dark .bg-red-50:not(.keep-light, .keep-light *) { background-color: rgba(239, 68, 68, 0.13); }
+html.dark .bg-red-50\/60:not(.keep-light, .keep-light *) { background-color: rgba(239, 68, 68, 0.13); }
+html.dark .text-red-600:not(.keep-light, .keep-light *) { color: #f87171; }
+html.dark .text-red-700:not(.keep-light, .keep-light *) { color: #f87171; }
+html.dark .text-red-800:not(.keep-light, .keep-light *) { color: #f87171; }
+html.dark .border-red-100:not(.keep-light, .keep-light *) { border-color: rgba(239, 68, 68, 0.3); }
+html.dark .border-red-200:not(.keep-light, .keep-light *) { border-color: rgba(239, 68, 68, 0.3); }
+html.dark .bg-emerald-50:not(.keep-light, .keep-light *) { background-color: rgba(16, 185, 129, 0.13); }
+html.dark .text-emerald-600:not(.keep-light, .keep-light *) { color: #34d399; }
+html.dark .text-emerald-700:not(.keep-light, .keep-light *) { color: #34d399; }
+html.dark .text-emerald-800:not(.keep-light, .keep-light *) { color: #34d399; }
+html.dark .border-emerald-100:not(.keep-light, .keep-light *) { border-color: rgba(16, 185, 129, 0.3); }
+html.dark .border-emerald-200:not(.keep-light, .keep-light *) { border-color: rgba(16, 185, 129, 0.3); }
+html.dark .bg-sky-50:not(.keep-light, .keep-light *) { background-color: rgba(14, 165, 233, 0.13); }
+html.dark .text-sky-700:not(.keep-light, .keep-light *) { color: #38bdf8; }
 html.dark .border-sky-200:not(.keep-light, .keep-light *) { border-color: rgba(14, 165, 233, 0.3); }
 
-/* Form controls */
-html.dark .input-field:not(.keep-light *) { background-color: #0f1011; border-color: #34343a; color: #f7f8f8; }
-html.dark .input-field::placeholder { color: #62666d; }
-html.dark .btn-secondary:not(.keep-light *) { background-color: #141516; border-color: #34343a; color: #d0d6e0; }
-html.dark .btn-secondary:hover:not(.keep-light *) { background-color: #1f2023; color: #f7f8f8; }
-html.dark :is(.btn-ghost, .btn-icon):hover:not(.keep-light *) { background-color: #1f2023; }
-html.dark .skeleton { background-color: #23252a; }
-html.dark .skeleton::after { background-image: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.06), transparent); }
+/* Form controls and buttons */
+html.dark .input-field:not(.keep-light *) { background-color: var(--d-input); border-color: var(--d-line-strong); color: var(--d-text); box-shadow: none; }
+html.dark .input-field:focus:not(.keep-light *) { border-color: #7681dd; box-shadow: 0 0 0 3px rgba(117, 128, 230, 0.25); }
+html.dark .input-field::placeholder { color: var(--d-text-4); }
+html.dark select.input-field option { background-color: var(--d-card); color: var(--d-text); }
+html.dark .btn-secondary:not(.keep-light *) { background-color: var(--d-raised); border-color: var(--d-line-strong); color: var(--d-text-2); box-shadow: none; }
+html.dark .btn-secondary:hover:not(.keep-light *) { background-color: #23262c; color: var(--d-text); }
+html.dark .btn-ghost:not(.keep-light *) { color: var(--d-text-3); }
+html.dark .btn-icon:not(.keep-light *) { color: var(--d-text-3); }
+html.dark .btn-ghost:hover:not(.keep-light *) { background-color: var(--d-raised); color: var(--d-text); }
+html.dark .btn-icon:hover:not(.keep-light *) { background-color: var(--d-raised); color: var(--d-text); }
+html.dark .btn-primary:not(.keep-light *) { background-color: #6b76d8; }
+html.dark .btn-primary:hover:not(.keep-light *) { background-color: #7c86e0; }
+html.dark .btn-danger:not(.keep-light *) { background-color: transparent; border-color: rgba(239, 68, 68, 0.35); color: #f87171; }
+html.dark input[type='checkbox']:not(.keep-light *) { background-color: var(--d-input); border-color: var(--d-line-strong); }
+html.dark .skeleton { background-color: var(--d-raised); }
+html.dark .skeleton::after { background-image: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.05), transparent); }
+html.dark ::selection { background-color: rgba(117, 128, 230, 0.4); color: #fff; }
+
+/* Dashboard welcome panel: the one place a faint accent wash is used, so it reads as the page header */
+html.dark section.bg-ink-900 {
+  background: radial-gradient(120% 140% at 0% 0%, rgba(117, 128, 230, 0.18), transparent 55%), var(--d-card);
+  border-color: var(--d-line);
+}
