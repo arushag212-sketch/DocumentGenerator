@@ -337,8 +337,11 @@ def check_ai() -> list[CheckResult]:
 
     results: list[CheckResult] = []
 
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key or not api_key.strip():
+    from docgen.llm import api_keys
+
+    gemini_keys = api_keys("GEMINI_API_KEY")
+    api_key = gemini_keys[0] if gemini_keys else ""
+    if not api_key:
         results.append(
             CheckResult(
                 name="Google Gemini AI Integration",
@@ -367,7 +370,8 @@ def check_ai() -> list[CheckResult]:
                         name="Google Gemini AI Integration",
                         passed=True,
                         message=(
-                            f"Gemini API connected. Discovered flash models: [{models_str}]. "
+                            f"Gemini API connected ({len(gemini_keys)} key(s); first key checked). "
+                            f"Discovered flash models: [{models_str}]. "
                             f"Selected model for docgen: '{chosen_model}'."
                         ),
                     )
@@ -383,14 +387,14 @@ def check_ai() -> list[CheckResult]:
             )
 
     # Groq AI Fallback
-    groq_key = os.environ.get("GROQ_API_KEY")
-    if groq_key and groq_key.strip():
+    groq_keys = api_keys("GROQ_API_KEY")
+    if groq_keys:
         groq_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
         results.append(
             CheckResult(
                 name="Groq AI Integration (Fallback)",
                 passed=True,
-                message=f"Groq configured (model: {groq_model}). Automatic fallback active when Gemini quota is exceeded.",
+                message=f"Groq configured ({len(groq_keys)} key(s), model: {groq_model}). Automatic fallback active when Gemini quota is exceeded.",
             )
         )
     else:

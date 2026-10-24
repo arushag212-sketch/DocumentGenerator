@@ -81,6 +81,8 @@ ClubDocs uses Google Gemini (`GEMINI_API_KEY`) as its primary AI engine for temp
 
 To handle free-tier Gemini quota and rate limits without failing user requests, configure Groq (`GROQ_API_KEY`) as an automatic fallback. When Gemini returns HTTP 429, timeout, or service errors, ClubDocs automatically retries on Groq (`openai/gpt-oss-120b`). If both keys are set, Gemini is tried first and Groq seamlessly takes over on quota errors.
 
+**More keys, more quota.** Each variable can hold several keys separated by commas, or you can add `GEMINI_API_KEY_2` … `GEMINI_API_KEY_9` and `GROQ_API_KEY_2` … `GROQ_API_KEY_9`. Every key is tried in order (all Gemini keys, then all Groq keys): when one is rate-limited, times out or is rejected, the next one answers. If every key fails, the first key's error is shown.
+
 ## 5. Email (optional)
 
 Without email settings, emails (password resets, sending documents) are only written to the Render log.

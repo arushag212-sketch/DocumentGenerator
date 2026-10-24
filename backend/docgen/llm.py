@@ -84,7 +84,7 @@ def discover_gemini_models(api_key: Optional[str] = None, force_refresh: bool = 
     if not force_refresh and _CACHED_MODELS and (now - _CACHE_TIMESTAMP < MODEL_CACHE_TTL):
         return list(_CACHED_MODELS)
 
-    key = api_key or os.environ.get("GEMINI_API_KEY")
+    key = api_key or next(iter(api_keys("GEMINI_API_KEY")), None)
     fallback_candidates = [
         "gemini-3.5-flash",
         "gemini-3.5-flash-lite",
@@ -170,7 +170,7 @@ def discover_groq_models(api_key: Optional[str] = None, force_refresh: bool = Fa
         "openai/gpt-oss-20b",
     ]
 
-    key = api_key or os.environ.get("GROQ_API_KEY")
+    key = api_key or next(iter(api_keys("GROQ_API_KEY")), None)
     if not key or not key.strip():
         _CACHED_GROQ_MODELS = fallback_candidates
         _GROQ_CACHE_TIMESTAMP = now
@@ -401,7 +401,7 @@ class GeminiLLMClient(LLMClient):
         model: Optional[str] = None,
         temperature: Optional[float] = None,
     ):
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.api_key = api_key or next(iter(api_keys("GEMINI_API_KEY")), None)
         if model:
             self.model = model
         else:
@@ -695,7 +695,7 @@ class GroqLLMClient(LLMClient):
         model: Optional[str] = None,
         temperature: Optional[float] = None,
     ):
-        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
+        self.api_key = api_key or next(iter(api_keys("GROQ_API_KEY")), None)
         self.model = model or os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
         if temperature is not None:
             self._temperature = float(temperature)
@@ -909,11 +909,17 @@ class GroqLLMClient(LLMClient):
 
 
 class FallbackLLMClient(LLMClient):
-    """Attempts requests on Gemini first; on quota/rate-limit (429), timeout, or 5xx/network errors, retries once on Groq."""
+    """Attempts requests on the primary client; on quota/rate-limit (429), timeout, or 5xx/network errors,
+    retries once on the secondary (which may itself be a FallbackLLMClient, forming a chain of keys).
 
-    def __init__(self, primary: LLMClient, secondary: LLMClient):
+    An invalid key is raised straight away so the owner sees the config problem, unless
+    ``fallback_on_auth_error`` is set (used between several keys, so one bad key doesn't stop the rest).
+    """
+
+    def __init__(self, primary: LLMClient, secondary: LLMClient, fallback_on_auth_error: bool = False):
         self.primary = primary
         self.secondary = secondary
+        self.fallback_on_auth_error = fallback_on_auth_error
         self._last_active_model: Optional[str] = None
         self.last_usage_metadata = None
 
@@ -931,89 +937,59 @@ class FallbackLLMClient(LLMClient):
     def is_available(self) -> bool:
         return self.primary.is_available() or self.secondary.is_available()
 
-    def generate_json(self, prompt: str, schema: dict[str, Any], club_id: Optional[str] = None) -> dict[str, Any]:
+    def _call(self, client: LLMClient, method: str, args: tuple, club_id: Optional[str]) -> Any:
+        try:
+            res = getattr(client, method)(*args, club_id=club_id)
+        except TypeError:
+            res = getattr(client, method)(*args)
+        self._last_active_model = client.model_name
+        self.last_usage_metadata = client.last_usage_metadata
+        return res
+
+    def _run(self, method: str, args: tuple, club_id: Optional[str], what: str) -> Any:
         import logging
         logger = logging.getLogger(__name__)
 
         try:
-            try:
-                res = self.primary.generate_json(prompt, schema, club_id=club_id)
-            except TypeError:
-                res = self.primary.generate_json(prompt, schema)
-            self._last_active_model = self.primary.model_name
-            self.last_usage_metadata = self.primary.last_usage_metadata
+            res = self._call(self.primary, method, args, club_id)
             logger.info("AI request answered by primary provider (%s)", self.primary.model_name)
             return res
-        except (AIAuthenticationError, AIBadResponseError):
-            # Don't fall back on invalid-key errors from Gemini (raise them so the owner sees the config problem),
-            # and don't fall back on invalid-data errors.
+        except AIBadResponseError:
+            # Don't fall back on invalid-data errors.
             raise
-        except (AIQuotaError, AITimeoutError, AIServiceError) as gemini_err:
-            logger.warning(
-                "Primary provider (%s) failed with %s (%s). Retrying request once on fallback provider (%s)...",
-                self.primary.model_name,
-                type(gemini_err).__name__,
-                str(gemini_err),
+        except AIAuthenticationError as err:
+            if not self.fallback_on_auth_error:
+                raise
+            primary_err: AIServiceError = err
+        except (AIQuotaError, AITimeoutError, AIServiceError) as err:
+            primary_err = err
+
+        logger.warning(
+            "Primary provider (%s) failed with %s (%s). Retrying %s once on fallback provider (%s)...",
+            self.primary.model_name,
+            type(primary_err).__name__,
+            str(primary_err),
+            what,
+            self.secondary.model_name,
+        )
+        try:
+            res = self._call(self.secondary, method, args, club_id)
+            logger.info("AI request answered by fallback provider (%s)", self.secondary.model_name)
+            return res
+        except Exception as secondary_err:
+            logger.error(
+                "Fallback provider (%s) failed with %s. Raising original primary error: %s",
                 self.secondary.model_name,
+                str(secondary_err),
+                str(primary_err),
             )
-            try:
-                try:
-                    res = self.secondary.generate_json(prompt, schema, club_id=club_id)
-                except TypeError:
-                    res = self.secondary.generate_json(prompt, schema)
-                self._last_active_model = self.secondary.model_name
-                self.last_usage_metadata = self.secondary.last_usage_metadata
-                logger.info("AI request answered by fallback provider (%s)", self.secondary.model_name)
-                return res
-            except Exception as secondary_err:
-                logger.error(
-                    "Fallback provider (%s) failed with %s. Raising original primary error: %s",
-                    self.secondary.model_name,
-                    str(secondary_err),
-                    str(gemini_err),
-                )
-                raise gemini_err
+            raise primary_err
+
+    def generate_json(self, prompt: str, schema: dict[str, Any], club_id: Optional[str] = None) -> dict[str, Any]:
+        return self._run("generate_json", (prompt, schema), club_id, "request")
 
     def draft_text(self, prompt: str, context: dict[str, Any], club_id: Optional[str] = None) -> str:
-        import logging
-        logger = logging.getLogger(__name__)
-
-        try:
-            try:
-                res = self.primary.draft_text(prompt, context, club_id=club_id)
-            except TypeError:
-                res = self.primary.draft_text(prompt, context)
-            self._last_active_model = self.primary.model_name
-            self.last_usage_metadata = self.primary.last_usage_metadata
-            logger.info("AI request answered by primary provider (%s)", self.primary.model_name)
-            return res
-        except (AIAuthenticationError, AIBadResponseError):
-            raise
-        except (AIQuotaError, AITimeoutError, AIServiceError) as gemini_err:
-            logger.warning(
-                "Primary provider (%s) failed with %s (%s). Retrying draft request once on fallback provider (%s)...",
-                self.primary.model_name,
-                type(gemini_err).__name__,
-                str(gemini_err),
-                self.secondary.model_name,
-            )
-            try:
-                try:
-                    res = self.secondary.draft_text(prompt, context, club_id=club_id)
-                except TypeError:
-                    res = self.secondary.draft_text(prompt, context)
-                self._last_active_model = self.secondary.model_name
-                self.last_usage_metadata = self.secondary.last_usage_metadata
-                logger.info("AI request answered by fallback provider (%s)", self.secondary.model_name)
-                return res
-            except Exception as secondary_err:
-                logger.error(
-                    "Fallback provider (%s) failed with %s. Raising original primary error: %s",
-                    self.secondary.model_name,
-                    str(secondary_err),
-                    str(gemini_err),
-                )
-                raise gemini_err
+        return self._run("draft_text", (prompt, context), club_id, "draft request")
 
 
 class CachedLLMClient(LLMClient):
@@ -1237,40 +1213,43 @@ def set_llm_client(client: Optional[LLMClient]) -> None:
     _current_llm_client = client
 
 
+def api_keys(env_name: str) -> list[str]:
+    """All keys for a provider, in order: NAME (several may be separated by commas or new lines),
+    then NAME_2, NAME_3 ... NAME_9. Blanks and repeats are dropped."""
+    raw = [os.environ.get(env_name, "")] + [os.environ.get(f"{env_name}_{i}", "") for i in range(2, 10)]
+    keys: list[str] = []
+    for value in raw:
+        for key in re.split(r"[,\s]+", value or ""):
+            key = key.strip().strip('"').strip("'")
+            if key and key not in keys:
+                keys.append(key)
+    return keys
+
+
 def get_llm_client() -> LLMClient:
     """Retrieve the configured LLM client.
 
-    Uses FallbackLLMClient when both GEMINI_API_KEY and GROQ_API_KEY are set,
-    only Gemini when just Gemini is set, only Groq when just Groq is set,
-    and DummyLLMClient when neither is set.
+    Every configured key is used, in a fallback chain: all Gemini keys first, then all Groq keys
+    (see ``api_keys`` for how to give several). DummyLLMClient when no key is set.
     Wraps with CachedLLMClient when AI_CACHE_ENABLED is true.
     """
     global _current_llm_client
     if _current_llm_client is not None:
         return _current_llm_client
 
-    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-
-    gemini_client: Optional[GeminiLLMClient] = None
-    if gemini_key:
-        gemini_model = os.environ.get("GEMINI_MODEL")
-        gemini_client = GeminiLLMClient(api_key=gemini_key, model=gemini_model)
-
-    groq_client: Optional[GroqLLMClient] = None
-    if groq_key:
-        groq_model = os.environ.get("GROQ_MODEL")
-        groq_client = GroqLLMClient(api_key=groq_key, model=groq_model)
-
-    base: LLMClient
-    if gemini_client and groq_client:
-        base = FallbackLLMClient(primary=gemini_client, secondary=groq_client)
-    elif gemini_client:
-        base = gemini_client
-    elif groq_client:
-        base = groq_client
-    else:
+    gemini_model = os.environ.get("GEMINI_MODEL")
+    groq_model = os.environ.get("GROQ_MODEL")
+    clients: list[LLMClient] = [GeminiLLMClient(api_key=k, model=gemini_model) for k in api_keys("GEMINI_API_KEY")]
+    clients += [GroqLLMClient(api_key=k, model=groq_model) for k in api_keys("GROQ_API_KEY")]
+    if not clients:
         return DummyLLMClient()
+
+    # Chain: each key falls back to the next (all Gemini keys first, then Groq). With several keys a
+    # rejected key moves on too; with one key per provider an invalid key is still raised at once.
+    several_keys = len(clients) > 2
+    base: LLMClient = clients[-1]
+    for client in reversed(clients[:-1]):
+        base = FallbackLLMClient(primary=client, secondary=base, fallback_on_auth_error=several_keys)
 
     cache_enabled = os.environ.get("AI_CACHE_ENABLED", "true").strip().lower() in ("true", "1", "yes", "on")
     if cache_enabled:
