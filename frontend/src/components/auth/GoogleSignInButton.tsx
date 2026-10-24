@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { User } from '../../types';
 
 declare global {
@@ -85,6 +86,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   onError,
 }) => {
   const { loginWithGoogle } = useAuth();
+  const { resolved } = useTheme();
   const buttonContainerRef = useRef<HTMLDivElement>(null);
   const [scriptReady, setScriptReady] = useState(false);
 
@@ -182,14 +184,15 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
     const buttonWidth = Math.min(Math.max(parentWidth, 240), 400);
 
     window.google.accounts.id.renderButton(slot, {
-      theme: 'outline',
+      // Google draws this button itself; pick its dark version in dark mode
+      theme: resolved === 'dark' ? 'filled_black' : 'outline',
       size: 'large',
       text: 'signin_with',
       shape: 'pill',
       width: buttonWidth,
     });
     return () => slot.remove();
-  }, [scriptReady, clientId]);
+  }, [scriptReady, clientId, resolved]);
 
   if (!clientId) return null;
 
