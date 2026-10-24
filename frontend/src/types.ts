@@ -436,14 +436,3 @@ export interface HomeCreateResponse extends HomeGenerateResponse {
   notice?: string | null;
 }
 
-
-export interface AppNotification {
-  id: string;
-  kind: 'review_requested' | 'approved' | 'changes_requested' | 'join_request' | string;
-  title: string;
-  body?: string | null;
-  link?: string | null;
-  club_id?: string | null;
-  read: boolean;
-  created_at: string;
-}

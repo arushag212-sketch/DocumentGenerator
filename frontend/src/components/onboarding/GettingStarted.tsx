@@ -154,11 +154,11 @@ export const GettingStarted: React.FC<{ stats: ClubAnalytics | null }> = ({ stat
           </p>
         </div>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={openWelcomeTour} className="btn-ghost btn-sm">
+          <button type="button" onClick={openWelcomeTour} className="btn-ghost !py-1.5 text-xs">
             <PlayCircle className="h-4 w-4" />
             Take the tour
           </button>
-          <button type="button" onClick={hide} className="btn-icon" aria-label="Hide getting started" title="Hide">
+          <button type="button" onClick={hide} className="btn-ghost !p-1.5" aria-label="Hide getting started" title="Hide">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -166,29 +166,24 @@ export const GettingStarted: React.FC<{ stats: ClubAnalytics | null }> = ({ stat
       <div className="h-1 bg-slate-100" aria-hidden="true">
         <div className="h-1 bg-brand-600 transition-all" style={{ width: `${(doneCount / steps.length) * 100}%` }} />
       </div>
-      {/* Only the steps still to do; finished ones are summed up in the count above */}
       <ol className="divide-y divide-slate-100">
-        {steps
-          .filter((s) => !s.done)
-          .map((s) => (
-            <li key={s.key}>
-              <Link to={s.to} className="group flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
+        {steps.map((s) => (
+          <li key={s.key}>
+            <Link to={s.to} className="group flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
+              {s.done ? (
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-label="Done" />
+              ) : (
                 <Circle className="h-5 w-5 shrink-0 text-slate-300" aria-label="Not done" />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-slate-900">{s.label}</span>
-                  <span className="block text-xs text-slate-500">{s.hint}</span>
-                </span>
-                <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition-colors group-hover:text-brand-700" />
-              </Link>
-            </li>
-          ))}
+              )}
+              <span className="min-w-0 flex-1">
+                <span className={`block text-sm font-medium ${s.done ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{s.label}</span>
+                {!s.done && <span className="block text-xs text-slate-500">{s.hint}</span>}
+              </span>
+              {!s.done && <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition-colors group-hover:text-brand-700" />}
+            </Link>
+          </li>
+        ))}
       </ol>
-      {doneCount > 0 && (
-        <p className="flex items-center gap-1.5 border-t border-slate-100 px-5 py-2.5 text-xs text-slate-500">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
-          Done: {steps.filter((s) => s.done).map((s) => s.label).join(' · ')}
-        </p>
-      )}
     </section>
   );
 };

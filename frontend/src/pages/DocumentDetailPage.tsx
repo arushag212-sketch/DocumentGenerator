@@ -17,23 +17,19 @@ import {
   ExternalLink,
   Trash2,
   Ban,
-  CopyPlus,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
-import { notify } from '../components/common/Toaster';
 import { DocumentActivity, EditableField, GeneratedDocument } from '../types';
 import { CancelDocDialog, DeleteDocsDialog, isDeletable } from '../components/documents/DocumentTrash';
 
-// Status pills: colour carries the state (grey ready, amber waiting, red needs work, green done)
-const STATUS: Record<string, { label: string; className: string; dot: string }> = {
-  draft: { label: 'Draft', className: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400' },
-  ready: { label: 'Ready', className: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
-  generated: { label: 'Ready', className: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
-  submitted: { label: 'Awaiting review', className: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
-  changes_requested: { label: 'Changes requested', className: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
-  approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-  cancelled: { label: 'Cancelled', className: 'bg-slate-100 text-slate-500 border-slate-200 line-through decoration-slate-400/60', dot: 'bg-slate-400' },
+const STATUS: Record<string, { label: string; className: string }> = {
+  ready: { label: 'Ready', className: 'bg-slate-100 text-slate-700 border-slate-200' },
+  generated: { label: 'Ready', className: 'bg-slate-100 text-slate-700 border-slate-200' },
+  submitted: { label: 'Awaiting review', className: 'bg-amber-50 text-amber-800 border-amber-200' },
+  changes_requested: { label: 'Changes requested', className: 'bg-red-50 text-red-700 border-red-200' },
+  approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  cancelled: { label: 'Cancelled', className: 'bg-amber-50 text-amber-800 border-amber-200' },
 };
 
 const ACTION_TEXT: Record<DocumentActivity['action'], string> = {
@@ -46,21 +42,8 @@ const ACTION_TEXT: Record<DocumentActivity['action'], string> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const s = STATUS[status] || { label: status, className: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400' };
-  return (
-    <span className={`badge ${s.className}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden="true" />
-      {s.label}
-    </span>
-  );
-}
-
-/** Detail values as people read them: year-first dates (2026-11-04) become 04/11/2026. */
-function showValue(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
-  const text = String(value);
-  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : text;
+  const s = STATUS[status] || { label: status, className: 'bg-slate-100 text-slate-700 border-slate-200' };
+  return <span className={`badge ${s.className}`}>{s.label}</span>;
 }
 
 function formatDate(value: string) {
@@ -282,28 +265,6 @@ export const DocumentDetailPage: React.FC = () => {
               <Mail className="w-4 h-4" /> Email
             </button>
           )}
-          {doc.can_edit && (
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={busy === 'duplicate'}
-              title="Copy this document for another event (new reference number)"
-              onClick={async () => {
-                setBusy('duplicate');
-                try {
-                  const res = await api.documents.duplicate(clubId, doc.id);
-                  notify('Copy created. Change the date and details for the new event.', 'success');
-                  navigate(`/documents/${res.id}`);
-                } catch (err: any) {
-                  setError(err.message || 'Could not duplicate the document.');
-                } finally {
-                  setBusy(null);
-                }
-              }}
-            >
-              <CopyPlus className="w-4 h-4" /> {busy === 'duplicate' ? 'Copying…' : 'Duplicate'}
-            </button>
-          )}
           {doc.can_edit && isDeletable(doc.status) && (
             <button
               type="button"
@@ -338,7 +299,7 @@ export const DocumentDetailPage: React.FC = () => {
               key={src}
               src={src}
               alt={`Page ${i + 1} of ${doc.page_images.length}`}
-              className="keep-light w-full bg-white border border-slate-200 rounded-lg shadow-sm"
+              className="w-full bg-white border border-slate-200 rounded-lg shadow-sm"
               loading={i === 0 ? 'eager' : 'lazy'}
             />
           ))}
@@ -544,7 +505,7 @@ export const DocumentDetailPage: React.FC = () => {
                   {fields.map((f) => (
                     <div key={f.key} className="grid grid-cols-[7.5rem_1fr] gap-2">
                       <dt className="text-slate-500 truncate" title={f.label}>{f.label}</dt>
-                      <dd className="text-slate-900 break-words whitespace-pre-line">{showValue(f.value)}</dd>
+                      <dd className="text-slate-900 break-words whitespace-pre-line">{String(f.value || '—')}</dd>
                     </div>
                   ))}
                 </dl>

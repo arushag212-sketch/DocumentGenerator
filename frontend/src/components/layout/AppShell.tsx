@@ -15,14 +15,9 @@ import {
   X,
   Plus,
   LifeBuoy,
-  Sun,
-  Moon,
-  Monitor,
 } from 'lucide-react';
 import { WelcomeTour } from '../onboarding/WelcomeTour';
-import { NotificationBell } from './NotificationBell';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme, type ThemePreference } from '../../context/ThemeContext';
 import { api } from '../../api/client';
 
 type NavItem = { to: string; label: string; icon: React.ElementType; badge?: number; match?: string[] };
@@ -37,7 +32,7 @@ function ClubMark({ clubId, name, size = 32 }: { clubId?: string | number; name?
         src={`/api/v1/clubs/${clubId}/public-logo`}
         alt=""
         onError={() => setFailed(true)}
-        className="rounded-md bg-white object-contain"
+        className="rounded-md bg-white object-contain border border-slate-200"
         style={{ width: size, height: size }}
       />
     );
@@ -72,16 +67,16 @@ function ClubSwitcher() {
         onClick={() => setOpen(!open)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-white/5 text-left transition-colors"
+        className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-slate-100 text-left transition-colors"
       >
         <ClubMark clubId={activeClub?.id} name={activeClub?.name} />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium text-ink-200 truncate">{activeClub?.short_name || activeClub?.name || 'Choose a club'}</span>
-          <span className="block text-xs text-ink-400 truncate capitalize">
+          <span className="block text-sm font-semibold text-slate-900 truncate">{activeClub?.short_name || activeClub?.name || 'Choose a club'}</span>
+          <span className="block text-xs text-slate-500 truncate capitalize">
             {user?.is_platform_admin ? 'Platform admin' : activeClub?.my_role || 'Pending approval'}
           </span>
         </span>
-        <ChevronsUpDown className="w-4 h-4 text-ink-500 flex-shrink-0" />
+        <ChevronsUpDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
       </button>
 
       {open && (
@@ -126,10 +121,6 @@ function ClubSwitcher() {
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, activeClub, logout } = useAuth();
-  const { preference, setPreference } = useTheme();
-  const nextTheme: Record<ThemePreference, ThemePreference> = { system: 'light', light: 'dark', dark: 'system' };
-  const themeLabel: Record<ThemePreference, string> = { system: 'Theme: match device', light: 'Theme: light', dark: 'Theme: dark' };
-  const ThemeIcon = preference === 'dark' ? Moon : preference === 'light' ? Sun : Monitor;
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
@@ -217,19 +208,16 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const sidebar = (
     <div className="flex flex-col h-full">
       <div className="px-3 pt-4 pb-3 space-y-3">
-        <div className="flex items-center justify-between gap-2">
         <Link to="/dashboard" className="flex items-center gap-2.5 px-2">
-          <img src="/brand/clubdocs_logo.svg" alt="" className="h-8 w-8 rounded-lg" />
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 ring-1 ring-slate-200">
+            <img src="/brand/svnit_crest.png" alt="" className="h-full w-full object-contain" />
+          </span>
           <span className="leading-tight">
-            <span className="block text-sm font-semibold text-ink-200 tracking-[-0.01em]">ClubDocs</span>
-            <span className="block text-[11px] text-ink-400">SVNIT Surat</span>
+            <span className="block text-sm font-semibold text-slate-900">ClubDocs</span>
+            <span className="block text-[11px] text-slate-400">SVNIT Surat</span>
           </span>
         </Link>
-        <span className="hidden lg:block">
-          <NotificationBell tone="dark" />
-        </span>
-        </div>
-        <div className="rounded-lg border border-ink-700 bg-ink-850 p-1">
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-1">
           <ClubSwitcher />
         </div>
         {hasClubAccess && canCreate && (
@@ -243,7 +231,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       <nav className="flex-1 overflow-y-auto px-3 pb-3 space-y-5" aria-label="Main">
         {groups.map((group, gi) => (
           <div key={gi}>
-            {group.label && <p className="px-2.5 mb-1.5 text-[11px] font-medium uppercase tracking-wider text-ink-500">{group.label}</p>}
+            {group.label && <p className="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group.label}</p>}
             <ul className="space-y-1 lg:space-y-0.5">
               {group.items.map((item) => {
                 const active = isActive(item);
@@ -255,14 +243,14 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       aria-current={active ? 'page' : undefined}
                       className={`group flex items-center gap-2.5 px-2.5 py-2.5 lg:py-2 min-h-[44px] lg:min-h-0 rounded-lg text-sm transition-colors ${
                         active
-                          ? 'bg-ink-750 text-ink-200 font-medium'
-                          : 'text-ink-400 hover:bg-white/5 hover:text-ink-200'
+                          ? 'bg-brand-50 text-brand-800 font-semibold shadow-[inset_3px_0_0_#1b365d]'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       }`}
                     >
-                      <Icon className={`w-[18px] h-[18px] transition-colors ${active ? 'text-brand-400' : 'text-ink-500 group-hover:text-ink-300'}`} />
+                      <Icon className={`w-4 h-4 transition-colors ${active ? 'text-brand-700' : 'text-slate-400 group-hover:text-slate-600'}`} />
                       <span className="flex-1">{item.label}</span>
                       {!!item.badge && (
-                        <span className="min-w-[1.25rem] px-1.5 text-center text-xs font-semibold rounded-full bg-brand-700 text-white">
+                        <span className="min-w-[1.25rem] px-1.5 text-center text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
                           {item.badge}
                         </span>
                       )}
@@ -275,36 +263,27 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         ))}
       </nav>
 
-      <div className="border-t border-ink-700 p-3">
+      <div className="border-t border-slate-200 p-3">
         <div className="flex items-center gap-1">
           <NavLink
             to="/profile"
             title="Your profile"
             className={({ isActive: onProfile }) =>
-              `flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2 lg:py-1.5 min-h-[44px] lg:min-h-0 transition-colors ${onProfile ? 'bg-ink-750' : 'hover:bg-white/5'}`
+              `flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2 lg:py-1.5 min-h-[44px] lg:min-h-0 transition-colors ${onProfile ? 'bg-brand-50' : 'hover:bg-slate-100'}`
             }
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-700 text-xs font-semibold text-white">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-xs font-semibold text-white">
               {initials}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium text-ink-200 truncate">{user?.name}</span>
-              <span className="block text-xs text-ink-400 truncate">View profile</span>
+              <span className="block text-sm font-medium text-slate-800 truncate">{user?.name}</span>
+              <span className="block text-xs text-slate-500 truncate">View profile</span>
             </span>
           </NavLink>
           <button
             type="button"
-            onClick={() => setPreference(nextTheme[preference])}
-            className="flex h-10 w-10 lg:h-9 lg:w-9 items-center justify-center rounded-lg text-ink-400 hover:bg-white/5 hover:text-ink-200 transition-colors"
-            title={`${themeLabel[preference]} (click to change)`}
-            aria-label={`${themeLabel[preference]}. Change theme`}
-          >
-            <ThemeIcon className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
             onClick={logout}
-            className="flex h-10 w-10 lg:h-9 lg:w-9 items-center justify-center rounded-lg text-ink-400 hover:bg-white/5 hover:text-ink-200 transition-colors"
+            className="btn-ghost !p-0 min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:!p-2 flex items-center justify-center rounded-lg"
             title="Sign out"
             aria-label="Sign out"
           >
@@ -318,7 +297,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   return (
     <div className="min-h-screen flex bg-slate-50">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:block w-64 flex-shrink-0 border-r border-ink-700 bg-ink-900 sticky top-0 h-screen">
+      <aside className="hidden lg:block w-64 flex-shrink-0 border-r border-slate-200 bg-white sticky top-0 h-screen">
         {sidebar}
       </aside>
 
@@ -334,14 +313,14 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative w-72 max-w-[calc(100vw-3rem)] bg-ink-900 h-full shadow-2xl flex flex-col">
+          <aside className="relative w-72 max-w-[calc(100vw-3rem)] bg-white h-full shadow-2xl flex flex-col">
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="absolute top-2 right-2 z-10 flex h-11 w-11 items-center justify-center rounded-lg text-ink-400 hover:bg-white/5"
+              className="absolute top-2 right-2 z-10 btn-ghost !p-0 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg"
               aria-label="Close menu"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 text-slate-500" />
             </button>
             {sidebar}
           </aside>
@@ -359,7 +338,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <Menu className="w-6 h-6 text-slate-700" />
           </button>
           <span className="flex-1 text-sm font-semibold text-slate-900 truncate">{activeClub?.name || 'ClubDocs'}</span>
-          <NotificationBell />
           <Link
             to="/profile"
             aria-label="Your profile"

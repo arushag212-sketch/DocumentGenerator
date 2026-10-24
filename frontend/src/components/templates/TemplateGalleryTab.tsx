@@ -264,20 +264,9 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
 
   if (loading) {
     return (
-      <div aria-busy="true" aria-label="Loading templates">
-        <div className="skeleton mb-2 h-7 w-40" />
-        <div className="skeleton mb-6 h-4 w-72" />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="surface-card overflow-hidden">
-              <div className="skeleton h-40 rounded-none" />
-              <div className="space-y-2 p-4">
-                <div className="skeleton h-4 w-1/2" />
-                <div className="skeleton h-3 w-3/4" />
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
+        <Loader2 className="w-8 h-8 text-brand-700 animate-spin mx-auto mb-3" />
+        <p className="text-slate-600 text-sm font-medium">Loading Template Gallery...</p>
       </div>
     );
   }
@@ -285,15 +274,15 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div className="min-w-0">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
           <h1 className="page-title">Templates</h1>
           <p className="page-subtitle max-w-2xl">
-            {templates.length} templates. Built-in ones are read-only; customise a copy, or create your own.
+            {templates.length} templates. Built-in templates are read-only; make a club copy to change one, or create your own.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap xl:shrink-0">
+        <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
           {canManage && onOpenEditor && (
             <>
               <button
@@ -320,7 +309,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
                 type="button"
                 data-testid="new-blank-template-btn"
                 onClick={() => setActionModal({ type: 'blank', value: '' })}
-                className="btn-primary"
+                className="btn-secondary"
               >
                 <PlusCircle className="w-4 h-4" />
                 Blank template
@@ -330,7 +319,7 @@ export const TemplateGalleryTab: React.FC<TemplateGalleryTabProps> = ({
 
           <button
             onClick={fetchTemplates}
-            className="btn-icon"
+            className="btn-ghost"
             title="Refresh"
             aria-label="Refresh"
           >
