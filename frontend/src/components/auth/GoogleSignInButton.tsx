@@ -198,7 +198,8 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
   return (
     <div className="w-full flex justify-center py-1">
-      <div ref={buttonContainerRef} className="min-h-[44px] flex items-center justify-center w-full" />
+      {/* Google's frame is a light page: matching its colour scheme keeps the browser from painting a white box behind it in dark mode */}
+      <div ref={buttonContainerRef} style={{ colorScheme: 'light' }} className="min-h-[44px] flex items-center justify-center w-full" />
     </div>
   );
 };
