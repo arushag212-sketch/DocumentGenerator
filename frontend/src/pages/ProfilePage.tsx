@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { KeyRound, LogOut, MonitorSmartphone, PlayCircle, ShieldCheck, Users, UserRound, Check } from 'lucide-react';
+import { KeyRound, LogOut, MonitorSmartphone, PlayCircle, ShieldCheck, Users, UserRound, Check, Palette, Sun, Moon, Monitor } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { api } from '../api/client';
 import { PageHeader } from '../components/layout/AppShell';
 import { notify } from '../components/common/Toaster';
@@ -27,6 +28,40 @@ const Section: React.FC<{ icon: React.ElementType; title: string; description?: 
     <div className="px-5 py-5">{children}</div>
   </section>
 );
+
+/** Light, dark or follow the device. */
+const AppearanceSection: React.FC = () => {
+  const { preference, setPreference } = useTheme();
+  const options: { value: ThemePreference; label: string; icon: React.ElementType }[] = [
+    { value: 'light', label: 'Light', icon: Sun },
+    { value: 'dark', label: 'Dark', icon: Moon },
+    { value: 'system', label: 'Match device', icon: Monitor },
+  ];
+  return (
+    <Section icon={Palette} title="Appearance" description="Documents always print on white paper, whatever you pick here.">
+      <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Theme">
+        {options.map(({ value, label, icon: Icon }) => {
+          const active = preference === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => setPreference(value)}
+              className={`flex flex-col items-center gap-1.5 rounded-lg border px-3 py-3 text-sm font-medium transition-colors ${
+                active ? 'border-brand-700 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </Section>
+  );
+};
 
 /** Rough strength hint shown while typing a new password (the server enforces the real rules). */
 function strength(pw: string): { label: string; width: string; color: string } {
@@ -153,6 +188,8 @@ export const ProfilePage: React.FC = () => {
             </div>
           </form>
         </Section>
+
+        <AppearanceSection />
 
         <Section
           icon={KeyRound}

@@ -42,6 +42,10 @@ class EmailSender(ABC):
         """Send a generated document. ``attachments`` are (filename, data, mime type)."""
         raise NotImplementedError
 
+    def send_notification(self, to_email: str, subject: str, text: str) -> None:
+        """Send a plain-text notice (review requests, approvals, join requests)."""
+        raise NotImplementedError
+
 
 class ConsoleEmailSender(EmailSender):
     """Development and test email sender that prints visible links to logger/console."""
@@ -53,6 +57,10 @@ class ConsoleEmailSender(EmailSender):
         names = ", ".join(f"{name} ({len(data)} bytes)" for name, data, _ in attachments)
         logger.info("[DEV EMAIL] To: %s | Subject: %s | Attachments: %s", ", ".join(to_emails), subject, names)
         self.sent_messages.append({"to": ", ".join(to_emails), "subject": subject, "body": body, "attachments": names})
+
+    def send_notification(self, to_email: str, subject: str, text: str) -> None:
+        self.sent_messages.append({"type": "notification", "to_email": to_email, "subject": subject, "body": text})
+        logger.info("[DEV EMAIL] Notification to %s | %s", to_email, subject)
 
     def send_activation(self, to_email: str, club_name: str, activation_link: str) -> None:
         msg = {
@@ -173,6 +181,9 @@ class SMTPEmailSender(EmailSender):
             if self.username and self.password:
                 server.login(self.username, self.password)
             server.sendmail(self.from_email, list(to_emails), msg.as_string())
+
+    def send_notification(self, to_email: str, subject: str, text: str) -> None:
+        self._send(to_email, subject, text)
 
     def send_activation(self, to_email: str, club_name: str, activation_link: str) -> None:
         subject = f"Activate your account for {club_name} - SVNIT ClubDocs"

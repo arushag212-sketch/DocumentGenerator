@@ -407,6 +407,20 @@ class AIRequest(TimestampMixin, Base):
     usage_estimated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
+class Notification(TimestampMixin, Base):
+    """In-app notice for one user (a review request, an approval, a join request); also emailed."""
+
+    __tablename__ = "notifications"
+
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    club_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    link: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class AuditLog(TimestampMixin, Base):
     __tablename__ = "audit_log"
 

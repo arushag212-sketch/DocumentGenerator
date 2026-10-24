@@ -125,3 +125,16 @@ def test_outsider_cannot_delete(client, setup):
     h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
     assert client.delete(f"{s['base']}/{s['doc']}", headers=h).status_code in (403, 404)
     assert s["doc"] in _list_ids(client, s)
+
+
+def test_duplicate_makes_a_new_document_with_new_reference(client, setup):
+    s = setup
+    original = client.get(f"{s['base']}/{s['doc']}", headers=s["h"]).json()
+    res = client.post(f"{s['base']}/{s['doc']}/duplicate", headers=s["h"])
+    assert res.status_code == 200, res.text
+    copy_id = res.json()["id"]
+    assert copy_id != s["doc"]
+    copy = client.get(f"{s['base']}/{copy_id}", headers=s["h"]).json()
+    assert copy["ref_no"] != original["ref_no"]
+    assert copy["verification_code"] != original["verification_code"]
+    assert copy["template_name"] == original["template_name"]

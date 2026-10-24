@@ -702,7 +702,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                 previewMode === 'image' ? (
                   activeDoc.page_images && activeDoc.page_images.length > 0 ? (
                     activeDoc.page_images.map((pageSrc, idx) => (
-                      <div key={pageSrc + idx} className="w-full max-w-[620px] bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden">
+                      <div key={pageSrc + idx} className="keep-light w-full max-w-[620px] bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden">
                         <img
                           src={pageSrc}
                           alt={`${activeDoc.title} page ${idx + 1}`}
@@ -712,7 +712,7 @@ export const ResultPage: React.FC<ResultPageProps> = ({
                       </div>
                     ))
                   ) : (
-                    <div className="w-full max-w-[620px] bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden">
+                    <div className="keep-light w-full max-w-[620px] bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden">
                       <img
                         src={activeDoc.preview_url}
                         alt={activeDoc.title}

@@ -1,4 +1,4 @@
-"""Document Trash: delete (recoverable for 30 days), restore, bulk delete, and cancel approved documents.
+"""Document actions: Trash (delete, restore, bulk delete, purge), cancel approved documents, duplicate.
 
 Approved documents are never deleted: they may already be printed and verified, so they are cancelled
 instead and the public verify page says so. Reference numbers are never reused, because numbering
@@ -185,3 +185,44 @@ def cancel_document(doc_id: str, payload: CancelRequest, request: Request,
               ip=request.client.host if request.client else None)
     db.commit()
     return {"cancelled": doc.id}
+
+
+@router.post("/{doc_id}/duplicate")
+def duplicate_document(doc_id: str, request: Request,
+                       ctx: ClubContext = Depends(require_club_access(Role.EDITOR)), db: Session = Depends(get_db)):
+    """Make a copy for the next event: same template and details, a new event, a new reference number.
+    The copy starts as a fresh draft, so dates and other details can be changed before it is used."""
+    import server.app.core.document_workflow as workflow
+    from server.app.core.batch_generator import BatchGenerator
+    from server.app.models import Event, Template
+
+    doc = _find(db, ctx, doc_id)
+    tmpl = db.query(Template).filter(Template.id == doc.template_id).first()
+    if tmpl is None:
+        raise HTTPException(status_code=409, detail="The template of this document no longer exists.")
+    data = dict(workflow.latest_version(db, doc).record_snapshot or {})
+    # A copy never reuses the original's reference number or its verification code
+    for key in [k for k in data if k == "ref_no" or k.endswith("_ref_no") or k == "verification_code"]:
+        data.pop(key, None)
+    event = ScopedRepository(db, Event, club_id=ctx.club.id).get(doc.event_id) if doc.event_id else None
+    base_title = (event.title if event else None) or data.get("event_name") or doc.title
+
+    result = BatchGenerator.generate_batch(
+        club_id=ctx.club.id,
+        user_id=ctx.user.id,
+        selected_template_ids=[tmpl.slug or tmpl.id],
+        event_data=data,
+        event_id=None,
+        event_title=f"{base_title} (copy)",
+        allow_blanks=True,
+        db=db,
+    )
+    created = result.get("documents") or []
+    if not created:
+        raise HTTPException(status_code=422, detail="The copy could not be created. Please try again.")
+    new_id = created[0].get("id") or created[0].get("document_id")
+    log_audit(db=db, action="document_duplicated", entity_type="document", entity_id=new_id, club_id=ctx.club.id,
+              user_id=ctx.user.id, meta={"from": doc.id, "title": doc.title},
+              ip=request.client.host if request.client else None)
+    db.commit()
+    return {"id": new_id, "duplicated_from": doc.id}

@@ -15,9 +15,14 @@ import {
   X,
   Plus,
   LifeBuoy,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
 import { WelcomeTour } from '../onboarding/WelcomeTour';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme, type ThemePreference } from '../../context/ThemeContext';
+import { NotificationBell } from './NotificationBell';
 import { api } from '../../api/client';
 
 type NavItem = { to: string; label: string; icon: React.ElementType; badge?: number; match?: string[] };
@@ -121,6 +126,7 @@ function ClubSwitcher() {
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, activeClub, logout } = useAuth();
+  const { preference, setPreference } = useTheme();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
@@ -203,20 +209,28 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  const nextTheme: Record<ThemePreference, ThemePreference> = { light: 'dark', dark: 'system', system: 'light' };
+  const themeLabel = { light: 'Light theme', dark: 'Dark theme', system: 'Theme matches your device' }[preference];
+  const ThemeIcon = { light: Sun, dark: Moon, system: Monitor }[preference];
   const canCreate = Boolean(user?.is_platform_admin || (activeClub?.my_role && activeClub.my_role !== 'viewer'));
 
   const sidebar = (
     <div className="flex flex-col h-full">
       <div className="px-3 pt-4 pb-3 space-y-3">
-        <Link to="/dashboard" className="flex items-center gap-2.5 px-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 ring-1 ring-slate-200">
-            <img src="/brand/svnit_crest.png" alt="" className="h-full w-full object-contain" />
+        <div className="flex items-center justify-between gap-2">
+          <Link to="/dashboard" className="flex items-center gap-2.5 px-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 ring-1 ring-slate-200">
+              <img src="/brand/svnit_crest.png" alt="" className="h-full w-full object-contain" />
+            </span>
+            <span className="leading-tight">
+              <span className="block text-sm font-semibold text-slate-900">ClubDocs</span>
+              <span className="block text-[11px] text-slate-400">SVNIT Surat</span>
+            </span>
+          </Link>
+          <span className="hidden lg:block">
+            <NotificationBell />
           </span>
-          <span className="leading-tight">
-            <span className="block text-sm font-semibold text-slate-900">ClubDocs</span>
-            <span className="block text-[11px] text-slate-400">SVNIT Surat</span>
-          </span>
-        </Link>
+        </div>
         <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-1">
           <ClubSwitcher />
         </div>
@@ -282,6 +296,15 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           </NavLink>
           <button
             type="button"
+            onClick={() => setPreference(nextTheme[preference])}
+            className="btn-ghost !p-0 min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:!p-2 flex items-center justify-center rounded-lg"
+            title={`${themeLabel} (click to change)`}
+            aria-label={`${themeLabel}. Change theme`}
+          >
+            <ThemeIcon className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
             onClick={logout}
             className="btn-ghost !p-0 min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:!p-2 flex items-center justify-center rounded-lg"
             title="Sign out"
@@ -338,6 +361,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <Menu className="w-6 h-6 text-slate-700" />
           </button>
           <span className="flex-1 text-sm font-semibold text-slate-900 truncate">{activeClub?.name || 'ClubDocs'}</span>
+          <NotificationBell />
           <Link
             to="/profile"
             aria-label="Your profile"

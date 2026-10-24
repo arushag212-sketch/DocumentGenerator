@@ -65,6 +65,20 @@ def safe_render_docx(tpl: DocxTemplate, context: dict[str, Any], timeout: float 
 
 
 
+def _qr_png(url: str) -> Optional[bytes]:
+    """Small black-on-white QR code (PNG) for a verify link; None if it can't be made."""
+    try:
+        import io
+
+        import segno
+
+        buf = io.BytesIO()
+        segno.make(url, error="m").save(buf, kind="png", scale=6, border=1)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
 class RenderResult:
     """Result of rendering a document."""
 
@@ -157,7 +171,8 @@ class Renderer:
         self._apply_club_logo(doc)
         self._repeat_table_headers(doc)
         safe_render_docx(doc, context, timeout=30.0)
-        self._apply_verification_footer_docx(doc, footer_line)
+        qr_png = _qr_png(f"{verify_url}/{code}")
+        self._apply_verification_footer_docx(doc, footer_line, qr_png)
 
         # Output path
         if output_dir is None:
@@ -185,6 +200,8 @@ class Renderer:
                             rect = page.rect
                             box = pymupdf.Rect(36, rect.height - 30, rect.width - 36, rect.height - 10)
                             page.insert_textbox(box, footer_line, fontsize=8, fontname="helv", color=(0.5, 0.5, 0.5), align=1)
+                            if qr_png:
+                                page.insert_image(pymupdf.Rect(36, rect.height - 54, 62, rect.height - 28), stream=qr_png)
                         doc_pdf.save(str(pdf_path), incremental=False, encryption=0)
                     doc_pdf.close()
                 except Exception:
@@ -201,9 +218,12 @@ class Renderer:
             pdf_sha256=pdf_sha256,
         )
 
-    def _apply_verification_footer_docx(self, doc: DocxTemplate, footer_text: str) -> None:
-        """Append 8pt grey centred verification footer to every page/section in DOCX."""
-        from docx.shared import Pt, RGBColor
+    def _apply_verification_footer_docx(self, doc: DocxTemplate, footer_text: str, qr_png: Optional[bytes] = None) -> None:
+        """Append 8pt grey centred verification footer to every page/section in DOCX, with a small QR code
+        that opens this document's verify page when scanned."""
+        import io
+
+        from docx.shared import Mm, Pt, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
 
         sections = doc.docx.sections if hasattr(doc, "docx") and doc.docx else doc.sections
@@ -222,6 +242,12 @@ class Renderer:
                     p.paragraph_format.space_before = Pt(0)
                     p.paragraph_format.space_after = Pt(0)
                     p.paragraph_format.line_spacing = 1.0
+                    if qr_png:
+                        try:
+                            p.add_run().add_picture(io.BytesIO(qr_png), height=Mm(9))
+                            p.add_run("  ")
+                        except Exception:
+                            pass  # the text line alone still identifies the document
                     run = p.add_run(footer_text)
                     run.font.size = Pt(8)
                     run.font.color.rgb = RGBColor(128, 128, 128)

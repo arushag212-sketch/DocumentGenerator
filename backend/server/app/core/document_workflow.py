@@ -200,6 +200,14 @@ def submit_for_review(db: Session, doc: Document, user: User, comment: Optional[
     _require_status(doc, ("ready", "draft", "changes_requested", "needs_info"), "submit")
     doc.status = "submitted"
     _log(db, doc, latest_version(db, doc).version_no, "submitted", user, comment)
+    from server.app.core.notifications import club_admin_ids, notify
+
+    notify(
+        db, club_admin_ids(db, doc.club_id, exclude=user.id), club_id=doc.club_id, kind="review_requested",
+        title=f"Review requested: {doc.title}",
+        body=f"{user.name} sent \"{doc.title}\" for review." + (f" Note: {comment}" if comment else ""),
+        link=f"/documents/{doc.id}?review=1",
+    )
 
 
 def request_changes(db: Session, doc: Document, user: User, comment: str) -> None:
@@ -208,6 +216,15 @@ def request_changes(db: Session, doc: Document, user: User, comment: str) -> Non
         raise HTTPException(status_code=400, detail="Say what needs to change.")
     doc.status = "changes_requested"
     _log(db, doc, latest_version(db, doc).version_no, "changes_requested", user, comment)
+    if doc.created_by and doc.created_by != user.id:
+        from server.app.core.notifications import notify
+
+        notify(
+            db, [doc.created_by], club_id=doc.club_id, kind="changes_requested",
+            title=f"Changes requested: {doc.title}",
+            body=f"{user.name} asked for changes: {comment}",
+            link=f"/documents/{doc.id}",
+        )
 
 
 def _stamp_pdf(pdf_path: Path, out_path: Path, lines: list[str]) -> None:
@@ -256,6 +273,15 @@ def approve(db: Session, doc: Document, user: User, role_label: str, comment: Op
     if not ver.pdf_sha256:
         ver.pdf_sha256 = digest
     doc.status = "approved"
+    if doc.created_by and doc.created_by != user.id:
+        from server.app.core.notifications import notify
+
+        notify(
+            db, [doc.created_by], club_id=doc.club_id, kind="approved",
+            title=f"Approved: {doc.title}",
+            body=f"{user.name} approved \"{doc.title}\". The PDF now carries its verification code.",
+            link=f"/documents/{doc.id}",
+        )
     return _log(db, doc, ver.version_no, "approved", user, comment, verification_code=code, pdf_sha256=digest)
 
 
