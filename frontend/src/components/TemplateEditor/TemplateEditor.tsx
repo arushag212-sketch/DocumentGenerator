@@ -487,7 +487,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
           }));
         }
         markUnsaved();
-        showToast(`Template translated to ${targetLang === 'hi' ? 'Hindi' : 'Gujarati'}.`, 'success');
+        const lang = targetLang === 'hi' ? 'Hindi' : 'Gujarati';
+        const r = res.report;
+        if (r && !r.used_ai) {
+          showToast(`AI is unavailable right now, so only common headings were changed to ${lang}. Try again later.`, 'error');
+        } else if (r && r.translated < r.total) {
+          showToast(`Translated ${r.translated} of ${r.total} parts to ${lang}; the rest stayed in English. Try again for the rest.`, 'error');
+        } else {
+          showToast(`Template translated to ${lang}. Field chips are unchanged.`, 'success');
+        }
       }
     } catch (err: any) {
       showToast(err.message || 'Translation failed', 'error');

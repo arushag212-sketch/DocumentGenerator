@@ -3543,10 +3543,13 @@ def translate_template(
             editor_json = ver.editor_json
 
     target_lang = payload.target_lang if payload.target_lang in ("hi", "gu", "en") else "hi"
-    translated_json, design_update = core_translate_content(editor_json or {}, target_lang=target_lang)
+    report: dict[str, Any] = {}
+    translated_json, design_update = core_translate_content(editor_json or {}, target_lang=target_lang, report=report)
     return {
         "editor_json": translated_json,
         "design_settings": design_update,
         "target_lang": target_lang,
+        # How much changed: {"total", "translated", "used_ai"} so the editor can say if it was partial
+        "report": report,
     }
 

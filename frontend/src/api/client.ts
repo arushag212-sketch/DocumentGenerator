@@ -701,7 +701,12 @@ export const api = {
         }
       ),
     translateTemplate: (clubId: string | number, templateId: string, data: { target_lang: string; editor_json?: any }) =>
-      apiFetch<{ editor_json: any; design_settings: any; target_lang: string }>(
+      apiFetch<{
+        editor_json: any;
+        design_settings: any;
+        target_lang: string;
+        report?: { total: number; translated: number; used_ai: boolean };
+      }>(
         `/clubs/${clubId}/documents/templates/${templateId}/translate`,
         {
           method: 'POST',
